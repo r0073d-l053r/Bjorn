@@ -18,7 +18,7 @@ const CONFIG = {
 
     // GitHub Repository
     repo: "infinition/Bjorn",
-    branch: "wiki",
+    branch: "main", // <-- On cible la branche "main" pour charger le contenu (les .md)
 
     // Theme Settings
     themes: [
@@ -97,7 +97,7 @@ const CONFIG = {
     social: {
         discord: "https://discord.gg/B3ZH9taVfT",
         reddit: "https://www.reddit.com/r/Bjorn_CyberViking/",
-        github: "https://github.com/infinition/Bjorn", // Virgule respectée par le script
+        github: "https://github.com/infinition/Bjorn",
         buyMeACoffee: "https://buymeacoffee.com/infinition"
     },
 
