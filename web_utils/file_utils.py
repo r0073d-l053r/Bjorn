@@ -22,6 +22,18 @@ class FileUtils:
         self.logger = logger
         self.shared_data = shared_data
 
+    def _validate_path(self, path, base_dir=None):
+        """Validate that a path is within the allowed base directory.
+        Uses realpath to resolve symlinks, preventing traversal attacks.
+        Returns the resolved absolute path, or raises ValueError."""
+        if base_dir is None:
+            base_dir = self.shared_data.current_dir
+        resolved_base = os.path.realpath(base_dir)
+        resolved_path = os.path.realpath(path)
+        if not resolved_path.startswith(resolved_base + os.sep) and resolved_path != resolved_base:
+            raise ValueError(f"Access denied: path is outside the allowed directory")
+        return resolved_path
+
     def list_files(self, directory, depth=0, max_depth=3):
         """List files and directories recursively."""
         files = []
@@ -35,10 +47,15 @@ class FileUtils:
                     "children": self.list_files(entry.path, depth+1, max_depth)
                 })
             else:
+                try:
+                    fsize = entry.stat().st_size
+                except OSError:
+                    fsize = 0
                 files.append({
                     "name": entry.name,
                     "is_directory": False,
-                    "path": entry.path
+                    "path": entry.path,
+                    "size": fsize
                 })
         return files
 
@@ -118,7 +135,8 @@ class FileUtils:
             query = handler.path.split('?')[1]
             file_path = unquote(query.split('=')[1])
             full_path = os.path.join(self.shared_data.data_stolen_dir, file_path)
-            
+            self._validate_path(full_path, self.shared_data.data_stolen_dir)
+
             if not os.path.isfile(full_path):
                 raise FileNotFoundError(f"File not found: {file_path}")
             
@@ -149,6 +167,7 @@ class FileUtils:
         try:
             query = unquote(handler.path.split('?path=')[1])
             file_path = os.path.join(self.shared_data.current_dir, query)
+            self._validate_path(file_path)
             if os.path.isfile(file_path):
                 handler.send_response(200)
                 handler.send_header("Content-Disposition", f'attachment; filename="{os.path.basename(file_path)}"')
@@ -168,12 +187,11 @@ class FileUtils:
         """Create a new folder."""
         try:
             folder_path = os.path.join(self.shared_data.current_dir, data['folder_path'])
-
-            if not os.path.abspath(folder_path).startswith(self.shared_data.current_dir):
-                return {'status': 'error', 'message': "Invalid path"}
-
+            self._validate_path(folder_path)
             os.makedirs(folder_path, exist_ok=True)
             return {'status': 'success', 'message': 'Folder created successfully'}
+        except ValueError as e:
+            return {'status': 'error', 'message': str(e)}
         except Exception as e:
             self.logger.error(f"Error creating folder: {e}")
             return {'status': 'error', 'message': str(e)}
@@ -248,18 +266,12 @@ class FileUtils:
     def delete_file(self, data):
         """Delete file or directory."""
         try:
-            import stat
             file_path = data.get('file_path')
             if not file_path:
                 return {"status": "error", "message": "No file path provided"}
 
-            abs_file_path = os.path.abspath(file_path)
-            base_dir = os.path.abspath(self.shared_data.current_dir)
-            
+            abs_file_path = self._validate_path(file_path)
             self.logger.info(f"Deleting: {abs_file_path}")
-
-            if not abs_file_path.startswith(base_dir):
-                return {"status": "error", "message": f"Access denied: {file_path} is outside the allowed directory"}
 
             if not os.path.exists(abs_file_path):
                 return {"status": "error", "message": f"Path not found: {file_path}"}
@@ -285,16 +297,16 @@ class FileUtils:
         try:
             old_path = os.path.join(self.shared_data.current_dir, data['old_path'])
             new_path = os.path.join(self.shared_data.current_dir, data['new_path'])
-
-            if not (os.path.abspath(old_path).startswith(self.shared_data.current_dir) and 
-                    os.path.abspath(new_path).startswith(self.shared_data.current_dir)):
-                return {"status": "error", "message": "Invalid path"}
+            self._validate_path(old_path)
+            self._validate_path(new_path)
 
             os.rename(old_path, new_path)
             return {
                 "status": "success",
                 "message": f"Successfully renamed {old_path} to {new_path}"
             }
+        except ValueError as e:
+            return {"status": "error", "message": str(e)}
         except Exception as e:
             self.logger.error(f"Error renaming file: {str(e)}")
             return {"status": "error", "message": str(e)}
@@ -304,10 +316,8 @@ class FileUtils:
         try:
             source_path = os.path.join(self.shared_data.current_dir, data['source_path'])
             target_path = os.path.join(self.shared_data.current_dir, data['target_path'])
-
-            if not (os.path.abspath(source_path).startswith(self.shared_data.current_dir) and 
-                    os.path.abspath(target_path).startswith(self.shared_data.current_dir)):
-                return {"status": "error", "message": "Invalid path"}
+            self._validate_path(source_path)
+            self._validate_path(target_path)
 
             if os.path.isdir(source_path):
                 shutil.copytree(source_path, target_path)
@@ -327,10 +337,8 @@ class FileUtils:
         try:
             source_path = os.path.join(self.shared_data.current_dir, data['source_path'])
             target_path = os.path.join(self.shared_data.current_dir, data['target_path'])
-
-            if not (os.path.abspath(source_path).startswith(self.shared_data.current_dir) and 
-                    os.path.abspath(target_path).startswith(self.shared_data.current_dir)):
-                return {"status": "error", "message": "Invalid path"}
+            self._validate_path(source_path)
+            self._validate_path(target_path)
 
             target_dir = os.path.dirname(target_path)
             if not os.path.exists(target_dir):

@@ -1,0 +1,217 @@
+/* ==========================================================================
+   pages.css â€” Page-specific styles for all SPA page modules.
+   Each section is scoped under the page's wrapper class to avoid conflicts.
+   ========================================================================== */
+
+/* ===== Page-specific variables (extends global.css tokens) ===== */
+:root {
+  /* Bridge aliases used by multiple pages (Credentials, Loot, Files, Attacks) */
+  --_bg: var(--bg);
+  --_panel: var(--c-panel-2);
+  --_panel-hi: color-mix(in oklab, var(--c-panel-2) 96%, transparent);
+  --_panel-lo: color-mix(in oklab, var(--c-panel-2) 86%, transparent);
+  --_border: var(--c-border);
+  --_ink: var(--ink);
+  --_muted: var(--muted);
+  --_acid: var(--acid);
+  --_acid2: var(--acid-2);
+  --_shadow: var(--shadow);
+
+  /* NetKB chip colors */
+  --kb-hostname-bg: color-mix(in oklab, var(--acid) 16%, transparent);
+  --kb-ip-bg: color-mix(in oklab, var(--acid-2) 18%, transparent);
+  --kb-mac-bg: color-mix(in oklab, var(--muted) 10%, transparent);
+  --kb-vendor-bg: color-mix(in oklab, #b18cff 16%, transparent);
+  --kb-ports-bg: color-mix(in oklab, #5fd1ff 16%, transparent);
+  --kb-essid-bg: color-mix(in oklab, #00e6c3 16%, transparent);
+  --kb-offline-bg: color-mix(in oklab, var(--bg-2) 88%, black 12%);
+  --kb-offline-brd: color-mix(in oklab, var(--c-border-strong) 60%, transparent);
+  --kb-offline-ring: color-mix(in oklab, #ff5b5b 30%, transparent);
+  --kb-badge-shimmer: linear-gradient(90deg, transparent, rgba(255, 255, 255, .22), transparent);
+
+  /* Attacks page */
+  --tile-min: 160px;
+  --ok-glow: rgba(34, 197, 94, .45);
+  --ko-glow: rgba(239, 68, 68, .45);
+}
+
+/* ===== Shared sidebar layout (SPA parity with web_old) ===== */
+.page-with-sidebar {
+  --page-sidebar-w: 280px;
+  position: relative;
+  display: flex;
+  gap: 12px;
+  min-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 24px);
+  align-items: stretch;
+}
+
+.page-with-sidebar .page-sidebar {
+  width: var(--page-sidebar-w);
+  flex: 0 0 var(--page-sidebar-w);
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 24px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--grad-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.page-with-sidebar .page-main {
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-with-sidebar .sidebar-toggle-btn {
+  display: inline-flex;
+  margin-bottom: 0;
+  align-self: auto;
+}
+
+.page-with-sidebar .sidebar-fab {
+  position: fixed;
+  right: 14px;
+  bottom: calc(var(--h-bottombar, 56px) + 14px);
+  z-index: 82;
+  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  font-size: 16px;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--c-panel) 88%, transparent);
+  border: 1px solid var(--c-border-strong);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .28);
+  opacity: .88;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.page-with-sidebar .sidebar-fab:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.page-with-sidebar .sidebar-fab:active {
+  transform: translateY(0);
+}
+
+.page-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--h-topbar, 56px);
+  bottom: var(--h-bottombar, 56px);
+  background: rgba(0, 0, 0, .52);
+  border: 0;
+  z-index: 79;
+}
+
+.page-with-sidebar .sidehead {
+  padding: 10px;
+  border-bottom: 1px dashed var(--c-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--grad-card);
+  flex-shrink: 0;
+}
+
+.page-with-sidebar .sidetitle {
+  font-weight: 800;
+  color: var(--acid);
+  letter-spacing: .05em;
+}
+
+.page-with-sidebar .sidecontent {
+  padding: 10px;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.page-with-sidebar.sidebar-collapsed .page-sidebar {
+  width: 0;
+  flex-basis: 0;
+  padding: 0;
+  border-width: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .page-with-sidebar {
+    min-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 12px);
+  }
+
+  .page-with-sidebar .sidebar-fab {
+    right: 10px;
+    bottom: calc(var(--h-bottombar, 56px) + 10px);
+  }
+
+  .sidebar-fab-unified {
+    position: fixed;
+    z-index: 82;
+    border-radius: 999px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    padding: 0;
+    font-size: 16px;
+    color: var(--ink);
+    background: color-mix(in oklab, var(--c-panel) 88%, transparent);
+    border: 1px solid var(--c-border-strong);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, .28);
+    opacity: .88;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .sidebar-fab-unified:hover {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+
+  .sidebar-fab-unified:active {
+    transform: translateY(0);
+  }
+
+  .page-with-sidebar .page-sidebar {
+    position: fixed;
+    top: var(--h-topbar, 56px);
+    bottom: var(--h-bottombar, 56px);
+    left: 0;
+    z-index: 80;
+    width: min(86vw, 320px);
+    flex-basis: auto;
+    transform: translateX(-105%);
+    transition: transform .2s ease;
+  }
+
+  .page-with-sidebar.sidebar-open .page-sidebar {
+    transform: translateX(0);
+  }
+
+  .page-with-sidebar.sidebar-open .page-sidebar-backdrop {
+    display: block;
+  }
+}
+

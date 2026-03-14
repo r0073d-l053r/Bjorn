@@ -118,20 +118,20 @@ function buildLayout() {
 
   const controls = el('div', { class: 'dbg-controls' });
   const pauseBtn = el('button', { class: 'btn dbg-btn', id: 'dbgPause' }, ['Pause']);
-  pauseBtn.addEventListener('click', () => {
+  tracker.trackEventListener(pauseBtn, 'click', () => {
     isPaused = !isPaused;
     pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
     pauseBtn.classList.toggle('active', isPaused);
   });
   const gcBtn = el('button', { class: 'btn dbg-btn', id: 'dbgGC' }, ['Force GC']);
-  gcBtn.addEventListener('click', async () => {
+  tracker.trackEventListener(gcBtn, 'click', async () => {
     try {
       const r = await api.post('/api/debug/gc/collect', {});
       if (window.toast) window.toast(`GC collected ${r.collected} objects`);
     } catch (e) { if (window.toast) window.toast('GC failed'); }
   });
   const tmBtn = el('button', { class: 'btn dbg-btn', id: 'dbgTracemalloc' }, ['tracemalloc: ?']);
-  tmBtn.addEventListener('click', async () => {
+  tracker.trackEventListener(tmBtn, 'click', async () => {
     const tracing = latestSnapshot?.tracemalloc_active;
     try {
       const r = await api.post('/api/debug/tracemalloc', { action: tracing ? 'stop' : 'start' });

@@ -190,6 +190,13 @@ class SharedData:
                 "ai_exploration_rate": "settings.tooltip.ai_exploration_rate",
                 "ai_sync_interval": "settings.tooltip.ai_sync_interval",
                 "ai_server_max_failures_before_auto": "settings.tooltip.ai_server_max_failures_before_auto",
+                "ai_feature_selection_min_variance": "settings.tooltip.ai_feature_selection_min_variance",
+                "ai_model_history_max": "settings.tooltip.ai_model_history_max",
+                "ai_auto_rollback_window": "settings.tooltip.ai_auto_rollback_window",
+                "ai_cold_start_bootstrap_weight": "settings.tooltip.ai_cold_start_bootstrap_weight",
+                "circuit_breaker_threshold": "settings.tooltip.circuit_breaker_threshold",
+                "manual_mode_auto_scan": "settings.tooltip.manual_mode_auto_scan",
+                "manual_mode_scan_interval": "settings.tooltip.manual_mode_scan_interval",
                 "startup_delay": "settings.tooltip.startup_delay",
                 "web_delay": "settings.tooltip.web_delay",
                 "screen_delay": "settings.tooltip.screen_delay",
@@ -222,7 +229,7 @@ class SharedData:
 
             # Operation modes
             "__title_modes__": "Operation Modes",
-            "manual_mode": True,
+            "manual_mode": False,
             "ai_mode": True,
             "learn_in_auto": False,
             "debug_mode": True,
@@ -252,6 +259,10 @@ class SharedData:
             "ai_consolidation_max_batches": 2,
             "ai_feature_hosts_limit": 512,
             "ai_delete_export_after_upload": True,
+            "ai_feature_selection_min_variance": 0.001,
+            "ai_model_history_max": 3,
+            "ai_auto_rollback_window": 50,
+            "ai_cold_start_bootstrap_weight": 0.6,
             "rl_train_batch_size": 10,
 
             # Global timing / refresh
@@ -426,14 +437,71 @@ class SharedData:
             "bruteforce_exhaustive_symbols": False,
             "bruteforce_exhaustive_symbols_chars": "!@#$%^&*",
             "bruteforce_exhaustive_require_mix": False,
+
+            # Orchestrator improvements
+            "__title_orchestrator__": "Orchestrator",
+            "circuit_breaker_threshold": 3,
+            "manual_mode_auto_scan": True,
+            "manual_mode_scan_interval": 180,
+
+            "__title_sentinel__": "Sentinel Watchdog",
+            "sentinel_enabled": False,
+            "sentinel_interval": 30,
+            "sentinel_discord_webhook": "",
+            "sentinel_webhook_url": "",
+            "sentinel_email_enabled": False,
+
+            # Bifrost (Pwnagotchi Mode)
+            "__title_bifrost__": "Bifrost (Pwnagotchi Mode)",
+            "bifrost_enabled": False,
+            "bifrost_iface": "wlan0mon",
+            "bifrost_bettercap_host": "127.0.0.1",
+            "bifrost_bettercap_port": 8081,
+            "bifrost_bettercap_user": "user",
+            "bifrost_bettercap_pass": "pass",
+            "bifrost_bettercap_handshakes": "/root/bifrost/handshakes",
+            "bifrost_whitelist": "",
+            "bifrost_channels": "",
+            "bifrost_filter": "",
+            "bifrost_personality_deauth": True,
+            "bifrost_personality_associate": True,
+            "bifrost_personality_recon_time": 30,
+            "bifrost_personality_hop_recon_time": 10,
+            "bifrost_personality_min_recon_time": 5,
+            "bifrost_personality_ap_ttl": 120,
+            "bifrost_personality_sta_ttl": 300,
+            "bifrost_personality_min_rssi": -200,
+            "bifrost_personality_max_interactions": 3,
+            "bifrost_personality_max_misses": 8,
+            "bifrost_personality_excited_epochs": 10,
+            "bifrost_personality_bored_epochs": 15,
+            "bifrost_personality_sad_epochs": 25,
+            "bifrost_personality_bond_factor": 20000,
+            "bifrost_plugins_path": "/root/bifrost/plugins",
+            "bifrost_ai_enabled": False,
+
+            # Loki (HID Attack Mode)
+            "__title_loki__": "Loki (HID Attack Mode)",
+            "loki_enabled": False,
+            "loki_default_layout": "us",
+            "loki_typing_speed_min": 0,
+            "loki_typing_speed_max": 0,
+            "loki_scripts_path": "/root/loki/scripts",
+            "loki_auto_run": "",
         }
 
     @property
     def operation_mode(self) -> str:
         """
-        Get current operation mode: 'MANUAL', 'AUTO', or 'AI'.
+        Get current operation mode: 'MANUAL', 'AUTO', 'AI', 'BIFROST', or 'LOKI'.
         Abstracts legacy manual_mode and ai_mode flags.
+        LOKI is the 5th exclusive mode — USB HID attack, Pi acts as keyboard/mouse.
+        BIFROST is the 4th exclusive mode — WiFi monitor mode recon.
         """
+        if self.config.get("loki_enabled", False):
+            return "LOKI"
+        if self.config.get("bifrost_enabled", False):
+            return "BIFROST"
         if getattr(self, "manual_mode", False):
             return "MANUAL"
         if getattr(self, "ai_mode", False):
@@ -470,11 +538,13 @@ class SharedData:
     @operation_mode.setter
     def operation_mode(self, mode: str):
         """
-        Set operation mode: 'MANUAL', 'AUTO', or 'AI'.
+        Set operation mode: 'MANUAL', 'AUTO', 'AI', 'BIFROST', or 'LOKI'.
         Updates legacy flags for backward compatibility.
+        LOKI mode: stops orchestrator, starts loki engine (USB HID attack).
+        BIFROST mode: stops orchestrator, starts bifrost engine (monitor mode WiFi recon).
         """
         mode = str(mode or "").upper().strip()
-        if mode not in ("MANUAL", "AUTO", "AI"):
+        if mode not in ("MANUAL", "AUTO", "AI", "BIFROST", "LOKI"):
             return
 
         # No-op if already in this mode (prevents log spam and redundant work).
@@ -484,26 +554,79 @@ class SharedData:
         except Exception:
             pass
 
-        if mode == "MANUAL":
-            self.config["manual_mode"] = True
-            # ai_mode state doesn't strictly matter in manual, but keep it clean
-            self.manual_mode = True
-            self.ai_mode = False
-        elif mode == "AI":
-            self.config["manual_mode"] = False
-            self.config["ai_mode"] = True
-            self.manual_mode = False
-            self.ai_mode = True # Update attribute if it exists
-        elif mode == "AUTO":
+        # ── Leaving LOKI → stop engine, remove HID gadget ──
+        was_loki = self.config.get("loki_enabled", False)
+        if was_loki and mode != "LOKI":
+            engine = getattr(self, 'loki_engine', None)
+            if engine and hasattr(engine, 'stop'):
+                try:
+                    engine.stop()
+                except Exception as e:
+                    logger.warning("Loki stop error: %s", e)
+            self.config["loki_enabled"] = False
+
+        # ── Leaving BIFROST → stop engine, restore WiFi ──
+        was_bifrost = self.config.get("bifrost_enabled", False)
+        if was_bifrost and mode != "BIFROST":
+            engine = getattr(self, 'bifrost_engine', None)
+            if engine and hasattr(engine, 'stop'):
+                try:
+                    engine.stop()
+                except Exception as e:
+                    logger.warning("Bifrost stop error: %s", e)
+            self.config["bifrost_enabled"] = False
+
+        # ── Set new mode ──
+        if mode == "LOKI":
+            self.config["loki_enabled"] = True
+            self.config["bifrost_enabled"] = False
             self.config["manual_mode"] = False
             self.config["ai_mode"] = False
             self.manual_mode = False
             self.ai_mode = False
-        
-        # Ensure config reflects attributes (two-way sync usually handled by load_config but we do it here for setters)
+            # Start Loki engine
+            engine = getattr(self, 'loki_engine', None)
+            if engine and hasattr(engine, 'start'):
+                try:
+                    engine.start()
+                except Exception as e:
+                    logger.warning("Loki start error: %s", e)
+        elif mode == "BIFROST":
+            self.config["bifrost_enabled"] = True
+            self.config["loki_enabled"] = False
+            self.config["manual_mode"] = False
+            self.config["ai_mode"] = False
+            self.manual_mode = False
+            self.ai_mode = False
+            # Start engine
+            engine = getattr(self, 'bifrost_engine', None)
+            if engine and hasattr(engine, 'start'):
+                try:
+                    engine.start()
+                except Exception as e:
+                    logger.warning("Bifrost start error: %s", e)
+        elif mode == "MANUAL":
+            self.config["loki_enabled"] = False
+            self.config["manual_mode"] = True
+            self.manual_mode = True
+            self.ai_mode = False
+        elif mode == "AI":
+            self.config["loki_enabled"] = False
+            self.config["manual_mode"] = False
+            self.config["ai_mode"] = True
+            self.manual_mode = False
+            self.ai_mode = True
+        elif mode == "AUTO":
+            self.config["loki_enabled"] = False
+            self.config["manual_mode"] = False
+            self.config["ai_mode"] = False
+            self.manual_mode = False
+            self.ai_mode = False
+
+        # Ensure config reflects attributes
         self.config["manual_mode"] = self.manual_mode
         self.config["ai_mode"] = getattr(self, "ai_mode", False)
-        
+
         self.invalidate_config_cache()
         logger.info(f"Operation mode switched to: {mode}")
 
@@ -631,6 +754,7 @@ class SharedData:
         # System state flags
         self.should_exit = False
         self.display_should_exit = False
+        self.display_layout = None  # Initialized by Display module
         self.orchestrator_should_exit = False
         self.webapp_should_exit = False
         

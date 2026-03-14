@@ -27,6 +27,8 @@ let rowLimit = 100;
 let sidebarFilter = '';
 let liveRefresh = false;
 let disposeSidebarLayout = null;
+let searchDebounce = null;
+let loadSequence = 0;
 
 /* ── lifecycle ── */
 export async function mount(container) {
@@ -45,6 +47,8 @@ export async function mount(container) {
 }
 
 export function unmount() {
+  clearTimeout(searchDebounce);
+  searchDebounce = null;
   if (disposeSidebarLayout) { disposeSidebarLayout(); disposeSidebarLayout = null; }
   if (poller) { poller.stop(); poller = null; }
   if (tracker) { tracker.cleanupAll(); tracker = null; }
@@ -52,13 +56,14 @@ export function unmount() {
   dirty = new Map(); selected = new Set();
   sortCol = null; sortDir = 'asc'; searchText = '';
   rowLimit = 100; sidebarFilter = ''; liveRefresh = false;
+  loadSequence = 0;
 }
 
 /* ── shell ── */
 function buildShell() {
   const hideLabel = (() => {
     const v = t('common.hide');
-    return v && v !== 'common.hide' ? v : 'Hide';
+    return v && v !== 'common.hide' ? v : t('common.hide');
   })();
   return el('div', { class: 'db-container page-with-sidebar' }, [
     /* sidebar */
@@ -70,7 +75,7 @@ function buildShell() {
       ]),
       el('div', { class: 'sidecontent' }, [
         el('div', { class: 'tree-head' }, [
-          el('div', { class: 'pill' }, ['Tables']),
+          el('div', { class: 'pill' }, [t('db.tables')]),
           el('div', { class: 'spacer' }),
           el('button', { class: 'btn', type: 'button', onclick: loadCatalog }, [t('common.refresh')]),
         ]),
@@ -86,7 +91,7 @@ function buildShell() {
       el('div', { class: 'db-toolbar', id: 'db-toolbar', style: 'display:none' }, [
         /* search + sort + limit */
         el('input', {
-          type: 'text', class: 'db-search', placeholder: t('db.searchRows'),
+          type: 'text', class: 'db-search-input', placeholder: t('db.searchRows'),
           oninput: onSearch
         }),
         el('select', { class: 'db-limit-select', onchange: onLimitChange }, [
@@ -99,17 +104,17 @@ function buildShell() {
         ]),
       ]),
       el('div', { class: 'db-actions', id: 'db-actions', style: 'display:none' }, [
-        el('button', { class: 'vuln-btn', id: 'db-btn-save', onclick: onSave }, [t('db.saveChanges')]),
-        el('button', { class: 'vuln-btn', id: 'db-btn-discard', onclick: onDiscard }, [t('db.discardChanges')]),
-        el('button', { class: 'vuln-btn', onclick: () => loadTable(activeTable) }, [t('common.refresh')]),
-        el('button', { class: 'vuln-btn', onclick: onAddRow }, ['+Row']),
-        el('button', { class: 'vuln-btn btn-danger', onclick: onDeleteSelected }, [t('db.deleteSelected')]),
-        el('button', { class: 'vuln-btn', onclick: () => exportTable('csv') }, ['CSV']),
-        el('button', { class: 'vuln-btn', onclick: () => exportTable('json') }, ['JSON']),
+        el('button', { class: 'btn', id: 'db-btn-save', onclick: onSave }, [t('db.saveChanges')]),
+        el('button', { class: 'btn', id: 'db-btn-discard', onclick: onDiscard }, [t('db.discardChanges')]),
+        el('button', { class: 'btn', onclick: () => loadTable(activeTable) }, [t('common.refresh')]),
+        el('button', { class: 'btn', onclick: onAddRow }, [t('db.addRowBtn')]),
+        el('button', { class: 'btn btn-danger', onclick: onDeleteSelected }, [t('db.deleteSelected')]),
+        el('button', { class: 'btn', onclick: () => exportTable('csv') }, [t('db.csv')]),
+        el('button', { class: 'btn', onclick: () => exportTable('json') }, [t('db.json')]),
       ]),
       /* table content */
       el('div', { class: 'db-table-wrap', id: 'db-table-wrap' }, [
-        el('div', { style: 'text-align:center;color:var(--ink);opacity:.5;padding:60px 0' }, [
+        el('div', { class: 'db-empty-state' }, [
           el('div', { style: 'font-size:3rem;margin-bottom:12px;opacity:.5' }, ['\u{1F5C4}\uFE0F']),
           t('db.selectTableFromSidebar'),
         ]),
@@ -117,9 +122,9 @@ function buildShell() {
       /* danger zone */
       el('div', { class: 'db-danger', id: 'db-danger', style: 'display:none' }, [
         el('span', { style: 'font-weight:700;color:var(--critical)' }, [t('db.dangerZone')]),
-        el('button', { class: 'vuln-btn btn-danger btn-sm', onclick: onVacuum }, ['VACUUM']),
-        el('button', { class: 'vuln-btn btn-danger btn-sm', onclick: onTruncate }, ['Truncate']),
-        el('button', { class: 'vuln-btn btn-danger btn-sm', onclick: onDrop }, ['Drop']),
+        el('button', { class: 'btn btn-danger btn-sm', onclick: onVacuum }, [t('db.vacuum')]),
+        el('button', { class: 'btn btn-danger btn-sm', onclick: onTruncate }, [t('db.truncate')]),
+        el('button', { class: 'btn btn-danger btn-sm', onclick: onDrop }, [t('db.drop')]),
       ]),
       /* status */
       el('div', { class: 'db-status', id: 'db-status' }),
@@ -172,20 +177,21 @@ function renderTree() {
     tree.appendChild(el('div', { class: 'db-tree-group' }, [
       el('div', { class: 'db-tree-label' }, [`${label} (${filtered.length})`]),
       ...filtered.map(item =>
-        el('div', {
-          class: `tree-item ${item.name === activeTable ? 'active' : ''}`,
+        el('button', {
+          type: 'button',
+          class: `db-tree-item ${item.name === activeTable ? 'active' : ''}`,
           'data-name': item.name,
           onclick: () => selectTable(item.name),
         }, [
           el('span', { class: 'db-tree-icon' }, [item.type === 'view' ? '\u{1F50D}' : '\u{1F4CB}']),
-          item.name,
+          el('span', { class: 'db-tree-item-name' }, [item.name]),
         ])
       ),
     ]));
   };
 
-  renderGroup('Tables', tables);
-  renderGroup('Views', views);
+  renderGroup(t('db.tables'), tables);
+  renderGroup(t('db.views'), views);
 
   if (catalog.length === 0) {
     tree.appendChild(el('div', { style: 'text-align:center;padding:20px;opacity:.5' }, [t('db.noTables')]));
@@ -202,8 +208,11 @@ async function selectTable(name) {
   activeTable = name;
   sortCol = null; sortDir = 'asc';
   searchText = ''; dirty.clear(); selected.clear();
+  const searchInput = $('.db-search-input');
+  if (searchInput) searchInput.value = '';
   renderTree();
   showToolbar(true);
+  closeSidebarOnMobile();
   await loadTable(name);
 }
 
@@ -219,6 +228,7 @@ function showToolbar(show) {
 /* ── load table data ── */
 async function loadTable(name) {
   if (!name) return;
+  const seq = ++loadSequence;
   setStatus(t('common.loading'));
   try {
     const params = new URLSearchParams();
@@ -227,14 +237,16 @@ async function loadTable(name) {
     if (searchText) params.set('search', searchText);
 
     const data = await api.get(`/api/db/table/${encodeURIComponent(name)}?${params}`, { timeout: 10000 });
+    if (seq !== loadSequence) return;
     tableData = data;
     renderTable();
-    setStatus(`${data.rows?.length || 0} of ${data.total ?? '?'} rows`);
+    setStatus(t('db.rowsInfo', { shown: data.rows?.length || 0, total: data.total ?? '?' }));
   } catch (err) {
+    if (seq !== loadSequence) return;
     console.warn(`[${PAGE}]`, err.message);
     setStatus(t('db.failedLoadTable'));
     const wrap = $('#db-table-wrap');
-    if (wrap) { empty(wrap); wrap.appendChild(el('div', { style: 'padding:40px;text-align:center;opacity:.5' }, [t('db.errorLoadingData')])); }
+    if (wrap) { empty(wrap); wrap.appendChild(el('div', { class: 'db-empty-state' }, [t('db.errorLoadingData')])); }
   }
 }
 
@@ -248,7 +260,7 @@ function renderTable() {
   const rows = tableData.rows || [];
 
   if (cols.length === 0) {
-    wrap.appendChild(el('div', { style: 'padding:40px;text-align:center;opacity:.5' }, [t('db.emptyTable')]));
+    wrap.appendChild(el('div', { class: 'db-empty-state' }, [t('db.emptyTable')]));
     return;
   }
 
@@ -325,8 +337,12 @@ function toggleSort(col) {
 
 /* ── search ── */
 function onSearch(e) {
-  searchText = e.target.value;
-  loadTable(activeTable);
+  const nextValue = e.target.value;
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    searchText = nextValue;
+    loadTable(activeTable);
+  }, 220);
 }
 
 /* ── limit ── */
@@ -359,7 +375,7 @@ function onSelectAll(e) {
 
 function toggleRowSelection(pk, checked) {
   if (checked) selected.add(pk); else selected.delete(pk);
-  const tr = document.querySelector(`tr.db-tr[data-pk="${pk}"]`);
+  const tr = document.querySelector(`.db-container tr.db-tr[data-pk="${pk}"]`);
   if (tr) tr.classList.toggle('selected', checked);
 }
 
@@ -485,7 +501,7 @@ async function onDrop() {
     activeTable = null;
     showToolbar(false);
     const wrap = $('#db-table-wrap');
-    if (wrap) { empty(wrap); wrap.appendChild(el('div', { style: 'padding:40px;text-align:center;opacity:.5' }, [t('db.tableDropped')])); }
+    if (wrap) { empty(wrap); wrap.appendChild(el('div', { class: 'db-empty-state' }, [t('db.tableDropped')])); }
     await loadCatalog();
   } catch (err) {
     toast(`${t('db.dropFailed')}: ${err.message}`, 3000, 'error');
@@ -496,4 +512,11 @@ async function onDrop() {
 function setStatus(msg) {
   const el2 = $('#db-status');
   if (el2) el2.textContent = msg || '';
+}
+
+function closeSidebarOnMobile() {
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    const hideBtn = $('#hideSidebar');
+    if (hideBtn) hideBtn.click();
+  }
 }

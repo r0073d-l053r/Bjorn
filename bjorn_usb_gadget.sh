@@ -1,567 +1,430 @@
 #!/bin/bash
 # bjorn_usb_gadget.sh
-# Script to configure USB Gadget for BJORN
-# Usage: ./bjorn_usb_gadget.sh -f
-#        ./bjorn_usb_gadget.sh -u
-#        ./bjorn_usb_gadget.sh -l
-#        ./bjorn_usb_gadget.sh -h
-# Author: Infinition
-# Version: 1.4
-# Description: This script configures and manages USB Gadget for BJORN with duplicate prevention
+# Runtime manager for the BJORN USB composite gadget
+# Usage:
+#   ./bjorn_usb_gadget.sh -u   Bring the gadget up
+#   ./bjorn_usb_gadget.sh -d   Bring the gadget down
+#   ./bjorn_usb_gadget.sh -r   Reset the gadget (down + up)
+#   ./bjorn_usb_gadget.sh -l   Show detailed status
+#   ./bjorn_usb_gadget.sh -h   Show help
+#
+# Notes:
+#   This script no longer installs or removes the USB gadget stack.
+#   Installation is handled by the BJORN installer.
+#   This tool is for runtime diagnostics and recovery only.
 
-# ============================================================
-# Colors for Output
-# ============================================================
+set -u
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-# ============================================================
-# Logging Configuration
-# ============================================================
+SCRIPT_VERSION="2.0"
 LOG_DIR="/var/log/bjorn_install"
 LOG_FILE="$LOG_DIR/bjorn_usb_gadget_$(date +%Y%m%d_%H%M%S).log"
 
-# Ensure log directory exists
-mkdir -p "$LOG_DIR"
+USB_GADGET_SERVICE="usb-gadget.service"
+USB_GADGET_SCRIPT="/usr/local/bin/usb-gadget.sh"
+DNSMASQ_SERVICE="dnsmasq.service"
+DNSMASQ_CONFIG="/etc/dnsmasq.d/usb0"
+MODULES_LOAD_FILE="/etc/modules-load.d/usb-gadget.conf"
+MODULES_FILE="/etc/modules"
+INTERFACES_FILE="/etc/network/interfaces"
 
-# ============================================================
-# Logging Function
-# ============================================================
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+touch "$LOG_FILE" 2>/dev/null || true
+
 log() {
-    local level=$1
+    local level="$1"
     shift
     local message="[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
-    echo -e "$message" | tee -a "$LOG_FILE"
-    case $level in
-        "ERROR") echo -e "${RED}$message${NC}" ;;
-        "SUCCESS") echo -e "${GREEN}$message${NC}" ;;
-        "WARNING") echo -e "${YELLOW}$message${NC}" ;;
-        "INFO") echo -e "${BLUE}$message${NC}" ;;
-        *) echo -e "$message" ;;
+    local color="$NC"
+
+    case "$level" in
+        ERROR) color="$RED" ;;
+        SUCCESS) color="$GREEN" ;;
+        WARNING) color="$YELLOW" ;;
+        INFO) color="$BLUE" ;;
+        SECTION) color="$CYAN" ;;
     esac
+
+    printf '%s\n' "$message" >> "$LOG_FILE" 2>/dev/null || true
+    printf '%b%s%b\n' "$color" "$message" "$NC"
 }
 
-# ============================================================
-# Error Handling
-# ============================================================
-handle_error() {
-    local error_message=$1
-    log "ERROR" "$error_message"
-    exit 1
-}
-
-# ============================================================
-# Function to Check Command Success
-# ============================================================
-check_success() {
-    if [ $? -eq 0 ]; then
-        log "SUCCESS" "$1"
-        return 0
-    else
-        handle_error "$1"
-        return $?
+show_recent_logs() {
+    if command -v journalctl >/dev/null 2>&1 && systemctl list-unit-files --type=service | grep -q "^${USB_GADGET_SERVICE}"; then
+        log "INFO" "Recent ${USB_GADGET_SERVICE} logs:"
+        journalctl -u "$USB_GADGET_SERVICE" -n 20 --no-pager 2>/dev/null || true
     fi
 }
 
-# ============================================================
-# Function to Show Usage
-# ============================================================
+ensure_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        log "ERROR" "This command must be run as root. Please use sudo."
+        exit 1
+    fi
+}
+
+service_exists() {
+    systemctl list-unit-files --type=service 2>/dev/null | grep -q "^$1"
+}
+
+service_active() {
+    systemctl is-active --quiet "$1"
+}
+
+service_enabled() {
+    systemctl is-enabled --quiet "$1"
+}
+
+usb0_exists() {
+    ip link show usb0 >/dev/null 2>&1
+}
+
+print_divider() {
+    printf '%b%s%b\n' "$CYAN" "============================================================" "$NC"
+}
+
+detect_boot_paths() {
+    local cmdline=""
+    local config=""
+
+    if [ -f /boot/firmware/cmdline.txt ]; then
+        cmdline="/boot/firmware/cmdline.txt"
+    elif [ -f /boot/cmdline.txt ]; then
+        cmdline="/boot/cmdline.txt"
+    fi
+
+    if [ -f /boot/firmware/config.txt ]; then
+        config="/boot/firmware/config.txt"
+    elif [ -f /boot/config.txt ]; then
+        config="/boot/config.txt"
+    fi
+
+    printf '%s|%s\n' "$cmdline" "$config"
+}
+
+wait_for_condition() {
+    local description="$1"
+    local attempts="$2"
+    shift 2
+
+    local i=1
+    while [ "$i" -le "$attempts" ]; do
+        if "$@"; then
+            log "SUCCESS" "$description"
+            return 0
+        fi
+        log "INFO" "Waiting for $description ($i/$attempts)..."
+        sleep 1
+        i=$((i + 1))
+    done
+
+    log "WARNING" "$description not reached after ${attempts}s"
+    return 1
+}
 
 show_usage() {
     echo -e "${GREEN}Usage: $0 [OPTIONS]${NC}"
     echo -e "Options:"
-    echo -e "  ${BLUE}-f${NC}    Install USB Gadget"
-    echo -e "  ${BLUE}-u${NC}    Uninstall USB Gadget"
-    echo -e "  ${BLUE}-l${NC}    List USB Gadget Information"
+    echo -e "  ${BLUE}-u${NC}    Bring USB Gadget up"
+    echo -e "  ${BLUE}-d${NC}    Bring USB Gadget down"
+    echo -e "  ${BLUE}-r${NC}    Reset USB Gadget (down + up)"
+    echo -e "  ${BLUE}-l${NC}    List detailed USB Gadget status"
     echo -e "  ${BLUE}-h${NC}    Show this help message"
     echo -e ""
-    echo -e "Example:"
-    echo -e "  $0 -f    Install USB Gadget"
-    echo -e "  $0 -u    Uninstall USB Gadget"
-    echo -e "  $0 -l    List USB Gadget Information"
-    echo -e "  $0 -h    Show help"
+    echo -e "Examples:"
+    echo -e "  $0 -u    Start the BJORN composite gadget"
+    echo -e "  $0 -d    Stop the BJORN composite gadget cleanly"
+    echo -e "  $0 -r    Reinitialize the gadget if RNDIS/HID is stuck"
+    echo -e "  $0 -l    Show services, usb0, /dev/hidg*, and boot config"
     echo -e ""
-    echo -e "${YELLOW}===== RNDIS Configuration Procedure =====${NC}"
-    echo -e "To configure the RNDIS driver and set the IP address, subnet mask, and gateway for the RNDIS network interface card, follow the steps below:"
-    echo -e ""
-    echo -e "1. **Configure IP Address on the Server (Pi):**"
-    echo -e "   - The default IP address is set in the script as follows:"
-    echo -e "     - IP: 172.20.2.1"
-    echo -e "     - Subnet Mask: 255.255.255.0"
-    echo -e "     - Gateway: 172.20.2.1"
-    echo -e ""
-    echo -e "2. **Configure IP Address on the Host Computer:**"
-    echo -e "   - On your host computer (Windows, Linux, etc.), configure the RNDIS network interface to use an IP address in the same subnet. For example:"
-    echo -e "     - IP: 172.20.2.2"
-    echo -e "     - Subnet Mask: 255.255.255.0"
-    echo -e "     - Gateway: 172.20.2.1"
-    echo -e ""
-    echo -e "3. **Restart the Service:**"
-    echo -e "   - After installing the USB gadget, restart the service to apply the changes:"
-    echo -e "     ```bash"
-    echo -e "     sudo systemctl restart usb-gadget.service"
-    echo -e "     ```"
-    echo -e ""
-    echo -e "4. **Verify the Connection:**"
-    echo -e "   - Ensure that the RNDIS network interface is active on both devices."
-    echo -e "   - Test connectivity by pinging the IP address of the other device."
-    echo -e "     - From the Pi: \`ping 172.20.2.2\`"
-    echo -e "     - From the host computer: \`ping 172.20.2.1\`"
-    echo -e ""
-    echo -e "===== End of Procedure =====${NC}"
-    exit 1
+    echo -e "${YELLOW}This script no longer installs or removes USB Gadget.${NC}"
+    echo -e "${YELLOW}That part is handled by the BJORN installer.${NC}"
+    if [ "${1:-exit}" = "return" ]; then
+        return 0
+    fi
+    exit 0
 }
 
-# ============================================================
-# Function to Install USB Gadget with RNDIS
-# ============================================================
-install_usb_gadget() {
-    log "INFO" "Starting USB Gadget installation..."
-
-    # Ensure the script is run as root
-    if [ "$(id -u)" -ne 0 ]; then
-        log "ERROR" "This script must be run as root. Please use 'sudo'."
-        exit 1
-    fi
-
-    # Backup cmdline.txt and config.txt if not already backed up
-    if [ ! -f /boot/firmware/cmdline.txt.bak ]; then
-        cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
-        check_success "Backed up /boot/firmware/cmdline.txt to /boot/firmware/cmdline.txt.bak"
-    else
-        log "INFO" "/boot/firmware/cmdline.txt.bak already exists. Skipping backup."
-    fi
-
-    if [ ! -f /boot/firmware/config.txt.bak ]; then
-        cp /boot/firmware/config.txt /boot/firmware/config.txt.bak
-        check_success "Backed up /boot/firmware/config.txt to /boot/firmware/config.txt.bak"
-    else
-        log "INFO" "/boot/firmware/config.txt.bak already exists. Skipping backup."
-    fi
-
-    # Modify cmdline.txt: Remove existing modules-load entries related to dwc2
-    log "INFO" "Cleaning up existing modules-load entries in /boot/firmware/cmdline.txt"
-    sudo sed -i '/modules-load=dwc2,g_rndis/d' /boot/firmware/cmdline.txt
-    sudo sed -i '/modules-load=dwc2,g_ether/d' /boot/firmware/cmdline.txt
-    check_success "Removed duplicate modules-load entries from /boot/firmware/cmdline.txt"
-
-    # Add a single modules-load=dwc2,g_rndis if not present
-    if ! grep -q "modules-load=dwc2,g_rndis" /boot/firmware/cmdline.txt; then
-        sudo sed -i 's/rootwait/rootwait modules-load=dwc2,g_rndis/' /boot/firmware/cmdline.txt
-        check_success "Added modules-load=dwc2,g_rndis to /boot/firmware/cmdline.txt"
-    else
-        log "INFO" "modules-load=dwc2,g_rndis already present in /boot/firmware/cmdline.txt"
-    fi
-
-    # Add a single modules-load=dwc2,g_ether if not present
-    if ! grep -q "modules-load=dwc2,g_ether" /boot/firmware/cmdline.txt; then
-        sudo sed -i 's/rootwait/rootwait modules-load=dwc2,g_ether/' /boot/firmware/cmdline.txt
-        check_success "Added modules-load=dwc2,g_ether to /boot/firmware/cmdline.txt"
-    else
-        log "INFO" "modules-load=dwc2,g_ether already present in /boot/firmware/cmdline.txt"
-    fi
-
-    # Modify config.txt: Remove duplicate dtoverlay=dwc2 entries
-    log "INFO" "Cleaning up existing dtoverlay=dwc2 entries in /boot/firmware/config.txt"
-    sudo sed -i '/^dtoverlay=dwc2$/d' /boot/firmware/config.txt
-    check_success "Removed duplicate dtoverlay=dwc2 entries from /boot/firmware/config.txt"
-
-    # Append a single dtoverlay=dwc2 if not present
-    if ! grep -q "^dtoverlay=dwc2$" /boot/firmware/config.txt; then
-        echo "dtoverlay=dwc2" | sudo tee -a /boot/firmware/config.txt
-        check_success "Appended dtoverlay=dwc2 to /boot/firmware/config.txt"
-    else
-        log "INFO" "dtoverlay=dwc2 already present in /boot/firmware/config.txt"
-    fi
-
-    # Create USB gadget script
-    if [ ! -f /usr/local/bin/usb-gadget.sh ]; then
-        log "INFO" "Creating USB gadget script at /usr/local/bin/usb-gadget.sh"
-        cat > /usr/local/bin/usb-gadget.sh << 'EOF'
-#!/bin/bash
-set -e
-
-# Enable debug mode for detailed logging
-set -x
-
-modprobe libcomposite
-cd /sys/kernel/config/usb_gadget/
-mkdir -p g1
-cd g1
-
-echo 0x1d6b > idVendor
-echo 0x0104 > idProduct
-echo 0x0100 > bcdDevice
-echo 0x0200 > bcdUSB
-
-mkdir -p strings/0x409
-echo "fedcba9876543210" > strings/0x409/serialnumber
-echo "Raspberry Pi" > strings/0x409/manufacturer
-echo "Pi Zero USB" > strings/0x409/product
-
-mkdir -p configs/c.1/strings/0x409
-echo "Config 1: RNDIS Network" > configs/c.1/strings/0x409/configuration
-echo 250 > configs/c.1/MaxPower
-
-mkdir -p functions/rndis.usb0
-
-# Remove existing symlink if it exists to prevent duplicates
-if [ -L configs/c.1/rndis.usb0 ]; then
-    rm configs/c.1/rndis.usb0
-fi
-ln -s functions/rndis.usb0 configs/c.1/
-
-# Ensure the device is not busy before listing available USB device controllers
-max_retries=10
-retry_count=0
-
-while ! ls /sys/class/udc > UDC 2>/dev/null; do
-    if [ $retry_count -ge $max_retries ]; then
-        echo "Error: Device or resource busy after $max_retries attempts."
-        exit 1
-    fi
-    retry_count=$((retry_count + 1))
-    sleep 1
-done
-
-# Assign the USB Device Controller (UDC)
-UDC_NAME=$(ls /sys/class/udc)
-echo "$UDC_NAME" > UDC
-echo "Assigned UDC: $UDC_NAME"
-
-# Check if the usb0 interface is already configured
-if ! ip addr show usb0 | grep -q "172.20.2.1"; then
-    ifconfig usb0 172.20.2.1 netmask 255.255.255.0
-    echo "Configured usb0 with IP 172.20.2.1"
-else
-    echo "Interface usb0 already configured."
-fi
-EOF
-
-        chmod +x /usr/local/bin/usb-gadget.sh
-        check_success "Created and made USB gadget script executable at /usr/local/bin/usb-gadget.sh"
-    else
-        log "INFO" "USB gadget script /usr/local/bin/usb-gadget.sh already exists. Skipping creation."
-    fi
-
-    # Create USB gadget service
-    if [ ! -f /etc/systemd/system/usb-gadget.service ]; then
-        log "INFO" "Creating USB gadget systemd service at /etc/systemd/system/usb-gadget.service"
-        cat > /etc/systemd/system/usb-gadget.service << EOF
-[Unit]
-Description=USB Gadget Service
-After=network.target
-
-[Service]
-ExecStartPre=/sbin/modprobe libcomposite
-ExecStart=/usr/local/bin/usb-gadget.sh
-Type=simple
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        check_success "Created USB gadget systemd service at /etc/systemd/system/usb-gadget.service"
-    else
-        log "INFO" "USB gadget systemd service /etc/systemd/system/usb-gadget.service already exists. Skipping creation."
-    fi
-
-    # Configure network interface: Remove duplicate entries first
-    log "INFO" "Cleaning up existing network interface configurations for usb0 in /etc/network/interfaces"
-    if grep -q "^allow-hotplug usb0" /etc/network/interfaces; then
-        # Remove all lines starting with allow-hotplug usb0 and the following lines (iface and settings)
-        sudo sed -i '/^allow-hotplug usb0$/,/^$/d' /etc/network/interfaces
-        check_success "Removed existing network interface configurations for usb0 from /etc/network/interfaces"
-    else
-        log "INFO" "No existing network interface configuration for usb0 found in /etc/network/interfaces."
-    fi
-
-    # Append network interface configuration for usb0 if not already present
-    if ! grep -q "^allow-hotplug usb0" /etc/network/interfaces; then
-        log "INFO" "Appending network interface configuration for usb0 to /etc/network/interfaces"
-        cat >> /etc/network/interfaces << EOF
-
-allow-hotplug usb0
-iface usb0 inet static
-    address 172.20.2.1
-    netmask 255.255.255.0
-    gateway 172.20.2.1
-EOF
-        check_success "Appended network interface configuration for usb0 to /etc/network/interfaces"
-    else
-        log "INFO" "Network interface usb0 already configured in /etc/network/interfaces"
-    fi
-
-    # Reload systemd daemon and enable/start services
-    log "INFO" "Reloading systemd daemon"
-    systemctl daemon-reload
-    check_success "Reloaded systemd daemon"
-
-    log "INFO" "Enabling systemd-networkd service"
-    systemctl enable systemd-networkd
-    check_success "Enabled systemd-networkd service"
-
-    log "INFO" "Enabling usb-gadget service"
-    systemctl enable usb-gadget.service
-    check_success "Enabled usb-gadget service"
-
-    log "INFO" "Starting systemd-networkd service"
-    systemctl start systemd-networkd
-    check_success "Started systemd-networkd service"
-
-    log "INFO" "Starting usb-gadget service"
-    systemctl start usb-gadget.service
-    check_success "Started usb-gadget service"
-
-    log "SUCCESS" "USB Gadget installation completed successfully."
-}
-
-# ============================================================
-# Function to Uninstall USB Gadget
-# ============================================================
-uninstall_usb_gadget() {
-    log "INFO" "Starting USB Gadget uninstallation..."
-
-    # Ensure the script is run as root
-    if [ "$(id -u)" -ne 0 ]; then
-        log "ERROR" "This script must be run as root. Please use 'sudo'."
-        exit 1
-    fi
-
-    # Stop and disable USB gadget service
-    if systemctl is-active --quiet usb-gadget.service; then
-        systemctl stop usb-gadget.service
-        check_success "Stopped usb-gadget.service"
-    else
-        log "INFO" "usb-gadget.service is not running."
-    fi
-
-    if systemctl is-enabled --quiet usb-gadget.service; then
-        systemctl disable usb-gadget.service
-        check_success "Disabled usb-gadget.service"
-    else
-        log "INFO" "usb-gadget.service is not enabled."
-    fi
-
-    # Remove USB gadget service file
-    if [ -f /etc/systemd/system/usb-gadget.service ]; then
-        rm /etc/systemd/system/usb-gadget.service
-        check_success "Removed /etc/systemd/system/usb-gadget.service"
-    else
-        log "INFO" "/etc/systemd/system/usb-gadget.service does not exist. Skipping removal."
-    fi
-
-    # Remove USB gadget script
-    if [ -f /usr/local/bin/usb-gadget.sh ]; then
-        rm /usr/local/bin/usb-gadget.sh
-        check_success "Removed /usr/local/bin/usb-gadget.sh"
-    else
-        log "INFO" "/usr/local/bin/usb-gadget.sh does not exist. Skipping removal."
-    fi
-
-    # Restore cmdline.txt and config.txt from backups
-    if [ -f /boot/firmware/cmdline.txt.bak ]; then
-        cp /boot/firmware/cmdline.txt.bak /boot/firmware/cmdline.txt
-        chmod 644 /boot/firmware/cmdline.txt
-        check_success "Restored /boot/firmware/cmdline.txt from backup"
-    else
-        log "WARNING" "Backup /boot/firmware/cmdline.txt.bak not found. Skipping restoration."
-    fi
-
-    if [ -f /boot/firmware/config.txt.bak ]; then
-        cp /boot/firmware/config.txt.bak /boot/firmware/config.txt
-        check_success "Restored /boot/firmware/config.txt from backup"
-    else
-        log "WARNING" "Backup /boot/firmware/config.txt.bak not found. Skipping restoration."
-    fi
-
-    # Remove network interface configuration for usb0: Remove all related lines
-    if grep -q "^allow-hotplug usb0" /etc/network/interfaces; then
-        log "INFO" "Removing network interface configuration for usb0 from /etc/network/interfaces"
-        # Remove lines from allow-hotplug usb0 up to the next empty line
-        sudo sed -i '/^allow-hotplug usb0$/,/^$/d' /etc/network/interfaces
-        check_success "Removed network interface configuration for usb0 from /etc/network/interfaces"
-    else
-        log "INFO" "Network interface usb0 not found in /etc/network/interfaces. Skipping removal."
-    fi
-
-    # Reload systemd daemon
-    log "INFO" "Reloading systemd daemon"
-    systemctl daemon-reload
-    check_success "Reloaded systemd daemon"
-
-    # Disable and stop systemd-networkd service
-    if systemctl is-active --quiet systemd-networkd; then
-        systemctl stop systemd-networkd
-        check_success "Stopped systemd-networkd service"
-    else
-        log "INFO" "systemd-networkd service is not running."
-    fi
-
-    if systemctl is-enabled --quiet systemd-networkd; then
-        systemctl disable systemd-networkd
-        check_success "Disabled systemd-networkd service"
-    else
-        log "INFO" "systemd-networkd service is not enabled."
-    fi
-
-    # Clean up any remaining duplicate entries in cmdline.txt and config.txt
-    log "INFO" "Ensuring no duplicate entries remain in configuration files."
-
-    # Remove any remaining modules-load=dwc2,g_rndis and modules-load=dwc2,g_ether
-    sudo sed -i '/modules-load=dwc2,g_rndis/d' /boot/firmware/cmdline.txt
-    sudo sed -i '/modules-load=dwc2,g_ether/d' /boot/firmware/cmdline.txt
-
-    # Remove any remaining dtoverlay=dwc2
-    sudo sed -i '/^dtoverlay=dwc2$/d' /boot/firmware/config.txt
-
-    log "INFO" "Cleaned up duplicate entries in /boot/firmware/cmdline.txt and /boot/firmware/config.txt"
-
-    log "SUCCESS" "USB Gadget uninstallation completed successfully."
-}
-
-# ============================================================
-# Function to List USB Gadget Information
-# ============================================================
 list_usb_gadget_info() {
-    echo -e "${CYAN}===== USB Gadget Information =====${NC}"
+    local boot_pair
+    local cmdline_file
+    local config_file
 
-    # Check status of usb-gadget service
-    echo -e "\n${YELLOW}Service Status:${NC}"
-    if systemctl list-units --type=service | grep -q usb-gadget.service; then
-        systemctl status usb-gadget.service --no-pager
+    boot_pair="$(detect_boot_paths)"
+    cmdline_file="${boot_pair%%|*}"
+    config_file="${boot_pair##*|}"
+
+    print_divider
+    log "SECTION" "BJORN USB Gadget Status"
+    print_divider
+
+    log "INFO" "Expected layout: RNDIS usb0 + HID keyboard /dev/hidg0 + HID mouse /dev/hidg1"
+    log "INFO" "Script version: ${SCRIPT_VERSION}"
+    log "INFO" "Log file: ${LOG_FILE}"
+
+    print_divider
+    log "SECTION" "Service Status"
+    if service_exists "$USB_GADGET_SERVICE"; then
+        service_active "$USB_GADGET_SERVICE" && log "SUCCESS" "${USB_GADGET_SERVICE} is active" || log "WARNING" "${USB_GADGET_SERVICE} is not active"
+        service_enabled "$USB_GADGET_SERVICE" && log "SUCCESS" "${USB_GADGET_SERVICE} is enabled at boot" || log "WARNING" "${USB_GADGET_SERVICE} is not enabled at boot"
     else
-        echo -e "${RED}usb-gadget.service is not installed.${NC}"
+        log "ERROR" "${USB_GADGET_SERVICE} is not installed on this system"
     fi
 
-    # Check if USB gadget script exists
-    echo -e "\n${YELLOW}USB Gadget Script:${NC}"
-    if [ -f /usr/local/bin/usb-gadget.sh ]; then
-        echo -e "${GREEN}/usr/local/bin/usb-gadget.sh exists.${NC}"
+    if service_exists "$DNSMASQ_SERVICE"; then
+        service_active "$DNSMASQ_SERVICE" && log "SUCCESS" "${DNSMASQ_SERVICE} is active" || log "WARNING" "${DNSMASQ_SERVICE} is not active"
     else
-        echo -e "${RED}/usr/local/bin/usb-gadget.sh does not exist.${NC}"
+        log "WARNING" "${DNSMASQ_SERVICE} is not installed"
     fi
 
-    # Check network interface configuration
-    echo -e "\n${YELLOW}Network Interface Configuration for usb0:${NC}"
-    if grep -q "^allow-hotplug usb0" /etc/network/interfaces; then
-        grep "^allow-hotplug usb0" /etc/network/interfaces -A 4
+    print_divider
+    log "SECTION" "Runtime Files"
+    [ -x "$USB_GADGET_SCRIPT" ] && log "SUCCESS" "${USB_GADGET_SCRIPT} is present and executable" || log "ERROR" "${USB_GADGET_SCRIPT} is missing or not executable"
+    [ -c /dev/hidg0 ] && log "SUCCESS" "/dev/hidg0 (keyboard) is available" || log "WARNING" "/dev/hidg0 (keyboard) is not present"
+    [ -c /dev/hidg1 ] && log "SUCCESS" "/dev/hidg1 (mouse) is available" || log "WARNING" "/dev/hidg1 (mouse) is not present"
+
+    if ip link show usb0 >/dev/null 2>&1; then
+        log "SUCCESS" "usb0 network interface exists"
+        ip -brief addr show usb0 2>/dev/null || true
     else
-        echo -e "${RED}No network interface configuration found for usb0.${NC}"
+        log "WARNING" "usb0 network interface is missing"
     fi
 
-    # Check cmdline.txt
-    echo -e "\n${YELLOW}/boot/firmware/cmdline.txt:${NC}"
-    if grep -q "modules-load=dwc2,g_rndis" /boot/firmware/cmdline.txt && grep -q "modules-load=dwc2,g_ether" /boot/firmware/cmdline.txt; then
-        echo -e "${GREEN}modules-load=dwc2,g_rndis and modules-load=dwc2,g_ether are present.${NC}"
+    if [ -d /sys/kernel/config/usb_gadget/g1 ]; then
+        log "SUCCESS" "Composite gadget directory exists: /sys/kernel/config/usb_gadget/g1"
+        find /sys/kernel/config/usb_gadget/g1/functions -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true
     else
-        echo -e "${RED}modules-load=dwc2,g_rndis and/or modules-load=dwc2,g_ether are not present.${NC}"
+        log "WARNING" "No active gadget directory found under /sys/kernel/config/usb_gadget/g1"
     fi
 
-    # Check config.txt
-    echo -e "\n${YELLOW}/boot/firmware/config.txt:${NC}"
-    if grep -q "^dtoverlay=dwc2" /boot/firmware/config.txt; then
-        echo -e "${GREEN}dtoverlay=dwc2 is present.${NC}"
+    print_divider
+    log "SECTION" "Boot Configuration"
+    if [ -n "$cmdline_file" ] && [ -f "$cmdline_file" ]; then
+        grep -q "modules-load=dwc2" "$cmdline_file" && log "SUCCESS" "dwc2 boot module load is configured in ${cmdline_file}" || log "WARNING" "dwc2 boot module load not found in ${cmdline_file}"
     else
-        echo -e "${RED}dtoverlay=dwc2 is not present.${NC}"
+        log "WARNING" "cmdline.txt not found"
     fi
 
-    # Check if systemd-networkd is enabled
-    echo -e "\n${YELLOW}systemd-networkd Service:${NC}"
-    if systemctl is-enabled --quiet systemd-networkd; then
-        systemctl is-active systemd-networkd && echo -e "${GREEN}systemd-networkd is active.${NC}" || echo -e "${RED}systemd-networkd is inactive.${NC}"
+    if [ -n "$config_file" ] && [ -f "$config_file" ]; then
+        grep -q "^dtoverlay=dwc2" "$config_file" && log "SUCCESS" "dtoverlay=dwc2 is present in ${config_file}" || log "WARNING" "dtoverlay=dwc2 not found in ${config_file}"
     else
-        echo -e "${RED}systemd-networkd is not enabled.${NC}"
+        log "WARNING" "config.txt not found"
     fi
 
-    echo -e "\n===== End of Information ====="
+    [ -f "$DNSMASQ_CONFIG" ] && log "SUCCESS" "${DNSMASQ_CONFIG} exists" || log "WARNING" "${DNSMASQ_CONFIG} is missing"
+    [ -f "$MODULES_LOAD_FILE" ] && log "INFO" "${MODULES_LOAD_FILE} exists (64-bit style module loading)"
+    [ -f "$MODULES_FILE" ] && grep -q "^libcomposite" "$MODULES_FILE" && log "INFO" "libcomposite is referenced in ${MODULES_FILE}"
+    [ -f "$INTERFACES_FILE" ] && grep -q "^allow-hotplug usb0" "$INTERFACES_FILE" && log "INFO" "usb0 legacy interface config detected in ${INTERFACES_FILE}"
+
+    print_divider
+    log "SECTION" "Quick Recovery Hints"
+    log "INFO" "If RNDIS or HID is stuck, run: sudo $0 -r"
+    log "INFO" "If startup still fails, inspect logs with: sudo journalctl -u ${USB_GADGET_SERVICE} -f"
+    log "INFO" "If HID nodes never appear after installer changes, a reboot may still be required"
 }
 
-# ============================================================
-# Function to Display the Main Menu
-# ============================================================
+bring_usb_gadget_down() {
+    ensure_root
+    print_divider
+    log "SECTION" "Bringing USB gadget down"
+    print_divider
+
+    if service_exists "$USB_GADGET_SERVICE"; then
+        if service_active "$USB_GADGET_SERVICE"; then
+            log "INFO" "Stopping ${USB_GADGET_SERVICE}..."
+            if systemctl stop "$USB_GADGET_SERVICE"; then
+                log "SUCCESS" "Stopped ${USB_GADGET_SERVICE}"
+            else
+                log "ERROR" "Failed to stop ${USB_GADGET_SERVICE}"
+                show_recent_logs
+                return 1
+            fi
+        else
+            log "INFO" "${USB_GADGET_SERVICE} is already stopped"
+        fi
+    else
+        log "WARNING" "${USB_GADGET_SERVICE} is not installed, trying direct runtime cleanup"
+        if [ -x "$USB_GADGET_SCRIPT" ]; then
+            "$USB_GADGET_SCRIPT" stop >> "$LOG_FILE" 2>&1 || true
+        fi
+    fi
+
+    if [ -x "$USB_GADGET_SCRIPT" ] && [ -d /sys/kernel/config/usb_gadget/g1 ]; then
+        log "INFO" "Running direct gadget cleanup via ${USB_GADGET_SCRIPT} stop"
+        "$USB_GADGET_SCRIPT" stop >> "$LOG_FILE" 2>&1 || log "WARNING" "Direct cleanup reported a non-fatal issue"
+    fi
+
+    if ip link show usb0 >/dev/null 2>&1; then
+        log "INFO" "Bringing usb0 interface down"
+        ip link set usb0 down >> "$LOG_FILE" 2>&1 || log "WARNING" "usb0 could not be forced down (often harmless)"
+    else
+        log "INFO" "usb0 is already absent"
+    fi
+
+    [ -c /dev/hidg0 ] && log "WARNING" "/dev/hidg0 still exists after stop (may clear on next start/reboot)" || log "SUCCESS" "/dev/hidg0 is no longer exposed"
+    [ -c /dev/hidg1 ] && log "WARNING" "/dev/hidg1 still exists after stop (may clear on next start/reboot)" || log "SUCCESS" "/dev/hidg1 is no longer exposed"
+    ip link show usb0 >/dev/null 2>&1 && log "WARNING" "usb0 still exists after stop" || log "SUCCESS" "usb0 is no longer present"
+}
+
+bring_usb_gadget_up() {
+    ensure_root
+    print_divider
+    log "SECTION" "Bringing USB gadget up"
+    print_divider
+
+    if [ ! -x "$USB_GADGET_SCRIPT" ]; then
+        log "ERROR" "${USB_GADGET_SCRIPT} is missing. The gadget runtime is not installed."
+        return 1
+    fi
+
+    if service_exists "$USB_GADGET_SERVICE"; then
+        log "INFO" "Reloading systemd daemon"
+        systemctl daemon-reload >> "$LOG_FILE" 2>&1 || log "WARNING" "systemd daemon-reload reported an issue"
+
+        log "INFO" "Starting ${USB_GADGET_SERVICE}..."
+        if systemctl start "$USB_GADGET_SERVICE"; then
+            log "SUCCESS" "Start command sent to ${USB_GADGET_SERVICE}"
+        else
+            log "ERROR" "Failed to start ${USB_GADGET_SERVICE}"
+            show_recent_logs
+            return 1
+        fi
+    else
+        log "WARNING" "${USB_GADGET_SERVICE} is not installed, running ${USB_GADGET_SCRIPT} directly"
+        if "$USB_GADGET_SCRIPT" >> "$LOG_FILE" 2>&1; then
+            log "SUCCESS" "Runtime script executed directly"
+        else
+            log "ERROR" "Runtime script failed"
+            return 1
+        fi
+    fi
+
+    wait_for_condition "${USB_GADGET_SERVICE} to become active" 10 service_active "$USB_GADGET_SERVICE" || true
+    wait_for_condition "usb0 to appear" 12 usb0_exists || true
+
+    if service_exists "$DNSMASQ_SERVICE"; then
+        log "INFO" "Restarting ${DNSMASQ_SERVICE} to refresh DHCP on usb0"
+        systemctl restart "$DNSMASQ_SERVICE" >> "$LOG_FILE" 2>&1 || log "WARNING" "Failed to restart ${DNSMASQ_SERVICE}"
+    fi
+
+    [ -c /dev/hidg0 ] && log "SUCCESS" "/dev/hidg0 (keyboard) is ready" || log "WARNING" "/dev/hidg0 not present yet"
+    [ -c /dev/hidg1 ] && log "SUCCESS" "/dev/hidg1 (mouse) is ready" || log "WARNING" "/dev/hidg1 not present yet"
+
+    if ip link show usb0 >/dev/null 2>&1; then
+        log "SUCCESS" "usb0 is present"
+        ip -brief addr show usb0 2>/dev/null || true
+    else
+        log "WARNING" "usb0 is still missing after startup"
+    fi
+
+    log "INFO" "If HID is still missing after a clean start, a reboot can still be required depending on the board/kernel state"
+}
+
+reset_usb_gadget() {
+    ensure_root
+    print_divider
+    log "SECTION" "Resetting USB gadget (down + up)"
+    print_divider
+
+    bring_usb_gadget_down || log "WARNING" "Down phase reported an issue, continuing with recovery"
+    log "INFO" "Waiting 2 seconds before bringing the gadget back up"
+    sleep 2
+    bring_usb_gadget_up
+}
+
 display_main_menu() {
     while true; do
         clear
-        echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║ USB Gadget Manager Menu by Infinition  ║${NC}"
-        echo -e "${BLUE}╠════════════════════════════════════════╣${NC}"
-        echo -e "${BLUE}║${NC} 1. Install USB Gadget                  ${BLUE}║${NC}"
-        echo -e "${BLUE}║${NC} 2. Uninstall USB Gadget                ${BLUE}║${NC}"
-        echo -e "${BLUE}║${NC} 3. List USB Gadget Information         ${BLUE}║${NC}"
-        echo -e "${BLUE}║${NC} 4. Show Help                           ${BLUE}║${NC}"
-        echo -e "${BLUE}║${NC} 5. Exit                                ${BLUE}║${NC}"
-        echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
-        echo -e "Note: Ensure you run this script as root."
-        echo -e "${YELLOW}Usage: $0 [OPTIONS] (use -h for help)${NC}"
-        echo -n -e "${GREEN}Please choose an option (1-5): ${NC}"
-        read choice
+        print_divider
+        echo -e "${CYAN} BJORN USB Gadget Runtime Manager v${SCRIPT_VERSION}${NC}"
+        print_divider
+        echo -e "${BLUE} 1.${NC} Bring USB Gadget up"
+        echo -e "${BLUE} 2.${NC} Bring USB Gadget down"
+        echo -e "${BLUE} 3.${NC} Reset USB Gadget (down + up)"
+        echo -e "${BLUE} 4.${NC} List detailed USB Gadget status"
+        echo -e "${BLUE} 5.${NC} Show help"
+        echo -e "${BLUE} 6.${NC} Exit"
+        echo -e ""
+        echo -e "${YELLOW}Note:${NC} installation/removal is no longer handled here."
+        echo -n -e "${GREEN}Choose an option (1-6): ${NC}"
+        read -r choice
 
-        case $choice in
+        case "$choice" in
             1)
-                install_usb_gadget
+                bring_usb_gadget_up
                 echo ""
-                read -p "Press Enter to return to the menu..."
+                read -r -p "Press Enter to return to the menu..."
                 ;;
             2)
-                uninstall_usb_gadget
+                bring_usb_gadget_down
                 echo ""
-                read -p "Press Enter to return to the menu..."
+                read -r -p "Press Enter to return to the menu..."
                 ;;
             3)
-                list_usb_gadget_info
+                reset_usb_gadget
                 echo ""
-                read -p "Press Enter to return to the menu..."
+                read -r -p "Press Enter to return to the menu..."
                 ;;
             4)
-                show_usage
+                list_usb_gadget_info
+                echo ""
+                read -r -p "Press Enter to return to the menu..."
                 ;;
             5)
-                log "INFO" "Exiting USB Gadget Manager. Goodbye!"
+                show_usage return
+                echo ""
+                read -r -p "Press Enter to return to the menu..."
+                ;;
+            6)
+                log "INFO" "Exiting BJORN USB Gadget Runtime Manager"
                 exit 0
                 ;;
             *)
-                log "ERROR" "Invalid option. Please choose between 1-5."
+                log "ERROR" "Invalid option. Please choose between 1 and 6."
                 sleep 2
                 ;;
         esac
     done
 }
 
-# ============================================================
-# Process Command Line Arguments
-# ============================================================
-while getopts ":fulh" opt; do
-  case $opt in
-    f)
-      install_usb_gadget
-      exit 0
-      ;;
-    u)
-      uninstall_usb_gadget
-      exit 0
-      ;;
-    l)
-      list_usb_gadget_info
-      exit 0
-      ;;
-    h)
-      show_usage
-      ;;
-    \?)
-      echo -e "${RED}Invalid option: -$OPTARG${NC}" >&2
-      show_usage
-      ;;
-  esac
+while getopts ":udrlhf" opt; do
+    case "$opt" in
+        u)
+            bring_usb_gadget_up
+            exit $?
+            ;;
+        d)
+            bring_usb_gadget_down
+            exit $?
+            ;;
+        r)
+            reset_usb_gadget
+            exit $?
+            ;;
+        l)
+            list_usb_gadget_info
+            exit 0
+            ;;
+        h)
+            show_usage
+            ;;
+        f)
+            log "ERROR" "Option -f (install) has been removed. Use -u to bring the gadget up or -r to reset it."
+            show_usage
+            ;;
+        \?)
+            log "ERROR" "Invalid option: -$OPTARG"
+            show_usage
+            ;;
+    esac
 done
 
-# ============================================================
-# Main Execution
-# ============================================================
-# If no arguments are provided, display the menu
 if [ $OPTIND -eq 1 ]; then
     display_main_menu
 fi

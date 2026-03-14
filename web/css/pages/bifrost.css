@@ -1,0 +1,518 @@
+/* ============================================================
+   Bifrost (Pwnagotchi Mode) — SPA page styles
+   ============================================================ */
+
+.bifrost-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+  padding: 15px;
+}
+
+/* ── Header bar ─────────────────────────────────────────── */
+
+.bifrost-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bifrost-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bifrost-title-icon { font-size: 1.5rem; }
+
+.bifrost-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bifrost-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--c-border);
+  background: var(--c-panel);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.bifrost-btn.active {
+  border-color: var(--acid);
+  background: rgba(0, 255, 154, 0.08);
+  color: var(--acid);
+  box-shadow: 0 0 12px rgba(0, 255, 154, 0.15);
+}
+
+.bifrost-btn .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-off, #555);
+  transition: 0.2s;
+}
+
+.bifrost-btn.active .dot {
+  background: var(--acid);
+  box-shadow: 0 0 6px var(--acid);
+  animation: bifrost-pulse 2s infinite;
+}
+
+@keyframes bifrost-pulse {
+  0%, 100% { opacity: 0.7; box-shadow: 0 0 4px var(--acid); }
+  50% { opacity: 1; box-shadow: 0 0 12px var(--acid); }
+}
+
+/* ── Stats bar ──────────────────────────────────────────── */
+
+.bifrost-stats {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.bifrost-stat {
+  flex: 1 1 100px;
+  padding: 10px 14px;
+  background: var(--grad-card);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  text-align: center;
+  min-width: 80px;
+}
+
+.bifrost-stat-val {
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-family: 'Fira Code', monospace;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.bifrost-stat-lbl {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* ── Main grid ──────────────────────────────────────────── */
+
+.bifrost-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Panels ─────────────────────────────────────────────── */
+
+.bifrost-panel {
+  background: var(--grad-card);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.bifrost-panel-head {
+  padding: 10px 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--c-border);
+  background: rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Face display ──────────────────────────────────────── */
+
+.bifrost-live {
+  padding: 0;
+}
+
+.bifrost-face-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px 16px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.bifrost-face {
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 2.8rem;
+  font-weight: 700;
+  color: var(--acid);
+  text-shadow:
+    0 0 10px rgba(0, 255, 154, 0.4),
+    0 0 30px rgba(0, 255, 154, 0.15);
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.2;
+  user-select: none;
+  transition: color 0.4s, text-shadow 0.4s;
+}
+
+/* Mood-specific face colors */
+.bifrost-face.mood-excited {
+  color: #00ff9a;
+  text-shadow: 0 0 15px rgba(0, 255, 154, 0.6), 0 0 40px rgba(0, 255, 154, 0.25);
+}
+.bifrost-face.mood-happy   { color: #00ff9a; }
+.bifrost-face.mood-grateful { color: #00dcff; text-shadow: 0 0 10px rgba(0, 220, 255, 0.4); }
+.bifrost-face.mood-bored   { color: #ffd166; text-shadow: 0 0 10px rgba(255, 209, 102, 0.3); }
+.bifrost-face.mood-sad     { color: #7ba5c9; text-shadow: 0 0 10px rgba(123, 165, 201, 0.3); }
+.bifrost-face.mood-angry   { color: #ff3b3b; text-shadow: 0 0 10px rgba(255, 59, 59, 0.4); }
+.bifrost-face.mood-lonely  { color: #b48cff; text-shadow: 0 0 10px rgba(180, 140, 255, 0.3); }
+.bifrost-face.mood-sleeping { color: var(--muted); text-shadow: none; }
+
+/* Mood badge */
+.bifrost-mood {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 3px 12px;
+  border-radius: 20px;
+}
+
+.mood-badge-excited  { background: rgba(0,255,154,0.15); color: #00ff9a; }
+.mood-badge-happy    { background: rgba(0,255,154,0.12); color: #00ff9a; }
+.mood-badge-grateful { background: rgba(0,220,255,0.15); color: #00dcff; }
+.mood-badge-bored    { background: rgba(255,209,102,0.15); color: #ffd166; }
+.mood-badge-sad      { background: rgba(123,165,201,0.15); color: #7ba5c9; }
+.mood-badge-angry    { background: rgba(255,59,59,0.15); color: #ff3b3b; }
+.mood-badge-lonely   { background: rgba(180,140,255,0.15); color: #b48cff; }
+.mood-badge-sleeping { background: rgba(255,255,255,0.06); color: var(--muted); }
+.mood-badge-starting { background: rgba(255,255,255,0.06); color: var(--muted); }
+.mood-badge-ready    { background: rgba(0,255,154,0.08); color: var(--acid); }
+
+.bifrost-voice {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.4;
+  min-height: 1.4em;
+}
+
+/* ── Info chips ────────────────────────────────────────── */
+
+.bifrost-info-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+
+.bifrost-info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-family: 'Fira Code', monospace;
+}
+
+.bifrost-info-chip.pwnd {
+  background: rgba(0,255,154,0.1);
+  border: 1px solid rgba(0,255,154,0.2);
+}
+
+.bifrost-info-label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.bifrost-info-value {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ── Activity feed ─────────────────────────────────────── */
+
+.bifrost-activity {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bifrost-activity-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 0.73rem;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.bifrost-act-time {
+  color: var(--muted);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+  min-width: 28px;
+}
+
+.bifrost-act-icon {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+
+.bifrost-act-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.bifrost-act-detail {
+  color: var(--muted);
+  font-size: 0.68rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bifrost-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 30px 10px;
+  font-size: 0.8rem;
+}
+
+/* ── Sidebar tabs ──────────────────────────────────────── */
+
+.bifrost-side-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+
+.bifrost-side-tab {
+  flex: 1;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.bifrost-side-tab.active {
+  background: var(--c-panel);
+  color: var(--acid);
+}
+
+.bifrost-sidebar {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Network rows ──────────────────────────────────────── */
+
+.bifrost-net-row {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--c-border);
+  background: color-mix(in oklab, var(--c-panel) 60%, transparent);
+}
+
+.bifrost-net-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bifrost-net-signal {
+  font-size: 0.65rem;
+  color: var(--acid);
+  letter-spacing: -1px;
+  flex-shrink: 0;
+  min-width: 32px;
+}
+
+.bifrost-net-essid {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bifrost-net-enc {
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  background: rgba(0,220,255,0.12);
+  color: #00dcff;
+}
+
+.bifrost-net-meta {
+  font-size: 0.62rem;
+  color: var(--muted);
+  margin-top: 2px;
+  font-family: 'Fira Code', monospace;
+}
+
+/* ── Plugin rows ───────────────────────────────────────── */
+
+.bifrost-plugin-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--c-border);
+  background: color-mix(in oklab, var(--c-panel) 60%, transparent);
+}
+
+.bifrost-plugin-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bifrost-plugin-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+  display: block;
+}
+
+.bifrost-plugin-desc {
+  font-size: 0.65rem;
+  color: var(--muted);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Epoch table ───────────────────────────────────────── */
+
+.bifrost-epoch-table {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.72rem;
+  font-family: 'Fira Code', monospace;
+}
+
+.bifrost-epoch-header,
+.bifrost-epoch-row {
+  display: grid;
+  grid-template-columns: 40px 35px 35px 35px 1fr 50px;
+  gap: 4px;
+  padding: 4px 8px;
+  align-items: center;
+}
+
+.bifrost-epoch-header {
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  border-bottom: 1px solid var(--c-border);
+  position: sticky;
+  top: 0;
+  background: var(--c-panel);
+  z-index: 1;
+}
+
+.bifrost-epoch-row {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--ink);
+}
+
+.bifrost-epoch-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .bifrost-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bifrost-stats {
+    flex-wrap: wrap;
+  }
+
+  .bifrost-stat {
+    flex: 1 1 70px;
+    min-width: 60px;
+    padding: 8px 8px;
+  }
+
+  .bifrost-stat-val { font-size: 1.1rem; }
+
+  .bifrost-page {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .bifrost-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bifrost-face { font-size: 2rem; }
+  .bifrost-face-wrap { padding: 20px 12px 12px; }
+}

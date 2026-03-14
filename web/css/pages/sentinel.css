@@ -1,0 +1,366 @@
+/* ============================================================
+   Sentinel Watchdog — SPA page styles
+   ============================================================ */
+
+.sentinel-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+  padding: 15px;
+}
+
+/* ── Header bar ─────────────────────────────────────────── */
+
+.sentinel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sentinel-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sentinel-title-icon {
+  font-size: 1.5rem;
+}
+
+.sentinel-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sentinel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--c-border);
+  background: var(--c-panel);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.sentinel-toggle.active {
+  border-color: var(--acid);
+  background: rgba(0, 255, 154, 0.08);
+  color: var(--acid);
+  box-shadow: 0 0 12px rgba(0, 255, 154, 0.15);
+}
+
+.sentinel-toggle .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-off);
+  transition: 0.2s;
+}
+
+.sentinel-toggle.active .dot {
+  background: var(--acid);
+  box-shadow: 0 0 6px var(--acid);
+  animation: sentinel-pulse 2s infinite;
+}
+
+@keyframes sentinel-pulse {
+  0%, 100% { opacity: 0.7; box-shadow: 0 0 4px var(--acid); }
+  50% { opacity: 1; box-shadow: 0 0 12px var(--acid); }
+}
+
+/* ── Stats bar ──────────────────────────────────────────── */
+
+.sentinel-stats {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.sentinel-stat {
+  flex: 1 1 120px;
+  padding: 10px 14px;
+  background: var(--grad-card);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  text-align: center;
+  min-width: 100px;
+}
+
+.sentinel-stat-val {
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-family: 'Fira Code', monospace;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.sentinel-stat-lbl {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* ── Main grid ──────────────────────────────────────────── */
+
+.sentinel-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Panels ─────────────────────────────────────────────── */
+
+.sentinel-panel {
+  background: var(--grad-card);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.sentinel-panel-head {
+  padding: 10px 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--c-border);
+  background: rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sentinel-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Event cards ────────────────────────────────────────── */
+
+.sentinel-event {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 3px solid var(--c-border);
+  background: color-mix(in oklab, var(--c-panel) 80%, transparent);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.sentinel-event:hover {
+  background: color-mix(in oklab, var(--c-panel) 100%, transparent);
+}
+
+.sentinel-event.unread {
+  border-left-color: var(--acid);
+}
+
+.sentinel-event.sev-warning {
+  border-left-color: var(--warning);
+}
+
+.sentinel-event.sev-critical {
+  border-left-color: var(--danger);
+}
+
+.sentinel-event-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.sentinel-event-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  flex: 1;
+}
+
+.sentinel-event-time {
+  font-size: 0.65rem;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sentinel-event-body {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.sentinel-event-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+
+.sentinel-event-badge.new_device { background: rgba(0,220,255,0.15); color: #00dcff; }
+.sentinel-event-badge.device_join { background: rgba(0,255,160,0.15); color: #00ffa0; }
+.sentinel-event-badge.device_leave { background: rgba(255,255,255,0.08); color: #888; }
+.sentinel-event-badge.arp_spoof { background: rgba(255,59,59,0.15); color: #ff3b3b; }
+.sentinel-event-badge.port_change { background: rgba(255,209,102,0.15); color: #ffd166; }
+.sentinel-event-badge.mac_flood { background: rgba(255,59,59,0.2); color: #ff3b3b; }
+.sentinel-event-badge.rogue_dhcp { background: rgba(255,100,180,0.15); color: #ff64b4; }
+.sentinel-event-badge.dns_anomaly { background: rgba(180,140,255,0.15); color: #b48cff; }
+
+/* ── Sidebar tabs ───────────────────────────────────────── */
+
+.sentinel-side-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+
+.sentinel-side-tab {
+  flex: 1;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.sentinel-side-tab.active {
+  background: var(--c-panel);
+  color: var(--acid);
+}
+
+/* ── Rules list ─────────────────────────────────────────── */
+
+.sentinel-rule {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--c-border);
+  background: color-mix(in oklab, var(--c-panel) 60%, transparent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sentinel-rule-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sentinel-rule-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.sentinel-rule-type {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.sentinel-rule-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ── Notifiers config ───────────────────────────────────── */
+
+.sentinel-notifier-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--c-border);
+  background: color-mix(in oklab, var(--c-panel) 60%, transparent);
+}
+
+.sentinel-notifier-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sentinel-notifier-input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-family: 'Fira Code', monospace;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .sentinel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sentinel-stats {
+    flex-wrap: wrap;
+  }
+
+  .sentinel-stat {
+    flex: 1 1 80px;
+    min-width: 70px;
+    padding: 8px 10px;
+  }
+
+  .sentinel-stat-val {
+    font-size: 1.1rem;
+  }
+
+  .sentinel-page {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .sentinel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

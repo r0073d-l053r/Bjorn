@@ -737,6 +737,68 @@ class FeatureLogger:
     # FEATURE AGGREGATION & EXPORT
     # ═══════════════════════════════════════════════════════════════════════
     
+    def get_feature_importance(self) -> List[Dict[str, Any]]:
+        """
+        AI-01: Return features sorted by variance from the ml_features_aggregated table.
+        Features with higher variance carry more discriminative information.
+
+        Returns:
+            List of dicts: [{name, variance, sample_count}, ...] sorted by variance descending.
+        """
+        min_variance = float(
+            getattr(self.shared_data, 'ai_feature_selection_min_variance', 0.001)
+        )
+        results = []
+        try:
+            rows = self.db.query(
+                "SELECT feature_vector, total_actions FROM ml_features_aggregated"
+            )
+            if not rows:
+                return results
+
+            # Accumulate per-feature running stats (Welford-style via sum/sq/n)
+            stats = {}  # {feature_name: [sum, sum_sq, count]}
+            for row in rows:
+                try:
+                    vec = json.loads(row.get('feature_vector', '{}'))
+                except Exception:
+                    continue
+                if not isinstance(vec, dict):
+                    continue
+                for name, value in vec.items():
+                    try:
+                        val = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if name not in stats:
+                        stats[name] = [0.0, 0.0, 0]
+                    s = stats[name]
+                    s[0] += val
+                    s[1] += val * val
+                    s[2] += 1
+
+            for name, (s, sq, n) in stats.items():
+                if n < 2:
+                    variance = 0.0
+                else:
+                    mean = s / n
+                    variance = max(0.0, sq / n - mean * mean)
+                results.append({
+                    'name': name,
+                    'variance': round(variance, 6),
+                    'sample_count': n,
+                    'above_threshold': variance >= min_variance,
+                })
+
+            results.sort(key=lambda x: x['variance'], reverse=True)
+            logger.debug(f"Feature importance: {len(results)} features analyzed, "
+                         f"{sum(1 for r in results if r['above_threshold'])} above threshold")
+
+        except Exception as e:
+            logger.error(f"Error computing feature importance: {e}")
+
+        return results
+
     def get_stats(self) -> Dict[str, Any]:
         """Get current feature logging statistics"""
         try:

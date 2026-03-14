@@ -1,0 +1,794 @@
+/* ==========================================================================
+   SCHEDULER
+   ========================================================================== */
+.scheduler-container .toolbar-top {
+  position: sticky;
+  top: calc(var(--h-topbar, 0px) + 5px);
+  z-index: 60;
+}
+
+.scheduler-container .controls {
+  position: sticky;
+  top: 1px;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem .8rem;
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 14px;
+  margin: .6rem .6rem 0 .6rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: saturate(1.05) blur(6px);
+}
+
+.scheduler-container .pill {
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: .45rem .8rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  font-weight: 700;
+  transition: transform .15s ease, box-shadow .2s ease, background .2s ease, color .2s ease;
+  box-shadow: var(--shadow);
+}
+
+.scheduler-container .pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .35);
+}
+
+.scheduler-container .pill.active {
+  background: var(--grad-card, linear-gradient(135deg, color-mix(in oklab, var(--panel) 92%, transparent), color-mix(in oklab, var(--c-panel) 88%, transparent)));
+  box-shadow: inset 0 0 0 1px var(--c-border-strong), 0 6px 24px var(--glow-weak);
+}
+
+.scheduler-container .controls input[type="text"] {
+  flex: 1 1 260px;
+  min-width: 200px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border-strong);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: .5rem .7rem;
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  outline: none;
+}
+
+.scheduler-container .controls input[type="text"]:focus-visible,
+.scheduler-container .pill:focus-visible {
+  outline: 2px solid var(--acid);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--acid) 25%, transparent);
+}
+
+.scheduler-container .stats {
+  flex-basis: 100%;
+  margin-left: 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* Board */
+.scheduler-container .boardWrap {
+  height: calc(100vh - (var(--h-topbar, 0px) + 5px) - 56px - 52px);
+  overflow: auto;
+}
+
+.scheduler-container .board {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  min-width: 960px;
+}
+
+.scheduler-container .lane {
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 16px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+  min-height: 0;
+}
+
+.scheduler-container .laneHeader {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .6rem .75rem;
+  border-bottom: 1px solid var(--c-border-strong);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--panel) 96%, transparent), color-mix(in oklab, var(--panel) 88%, transparent));
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.scheduler-container .laneHeader .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .08) inset;
+}
+
+.scheduler-container .laneHeader .count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: .9rem;
+}
+
+.scheduler-container .laneBody {
+  padding: .6rem;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Status dot colors */
+.scheduler-container .status-upcoming .laneHeader .dot {
+  background: var(--c-upcoming);
+  animation: sched-dotPulse 1.6s ease-in-out infinite;
+}
+
+.scheduler-container .status-pending .laneHeader .dot {
+  background: var(--c-pending);
+}
+
+.scheduler-container .status-running .laneHeader .dot {
+  background: var(--c-running);
+  animation: sched-dotPulse 1.6s ease-in-out infinite;
+}
+
+.scheduler-container .status-success .laneHeader .dot {
+  background: var(--c-success);
+}
+
+.scheduler-container .status-failed .laneHeader .dot {
+  background: var(--c-failed);
+}
+
+.scheduler-container .status-expired .laneHeader .dot {
+  background: var(--c-expired);
+}
+
+.scheduler-container .status-cancelled .laneHeader .dot {
+  background: var(--c-cancel);
+}
+
+@keyframes sched-dotPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 168, 255, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 12px 3px rgba(74, 168, 255, .65);
+  }
+}
+
+/* Cards */
+.scheduler-container .card {
+  position: relative;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 12px;
+  padding: .7rem .75rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  overflow: hidden;
+  transition: transform .15s ease, box-shadow .25s ease, filter .2s ease, background .25s ease;
+  will-change: transform, box-shadow, filter;
+  background: var(--c-panel);
+}
+
+.scheduler-container .card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .4);
+}
+
+.scheduler-container .card .infoBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  line-height: 20px;
+  font-weight: 800;
+  text-align: center;
+  border-radius: 999px;
+  border: 1px solid var(--c-border-strong);
+  background: var(--panel);
+  color: var(--c-upcoming);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.scheduler-container .card .infoBtn:hover {
+  filter: brightness(1.1);
+}
+
+/* Card status backgrounds */
+.scheduler-container .card.status-upcoming {
+  background: color-mix(in oklab, var(--c-upcoming) 12%, var(--c-panel));
+  animation: sched-breathe 2.6s ease-in-out infinite, sched-halo 2.6s ease-in-out infinite;
+}
+
+.scheduler-container .card.status-pending {
+  background: color-mix(in oklab, var(--c-pending) 10%, var(--c-panel));
+  animation: sched-breathe 2.6s ease-in-out infinite, sched-haloGray 2.8s ease-in-out infinite;
+}
+
+.scheduler-container .card.status-running {
+  background: color-mix(in oklab, var(--c-running) 12%, var(--c-panel));
+  animation: sched-pulse 1.8s ease-in-out infinite, sched-haloBlue 2s ease-in-out infinite;
+}
+
+.scheduler-container .card.status-success {
+  background: color-mix(in oklab, var(--c-success) 10%, var(--c-panel));
+}
+
+.scheduler-container .card.status-failed {
+  background: color-mix(in oklab, var(--c-failed) 10%, var(--c-panel));
+}
+
+.scheduler-container .card.status-expired {
+  background: color-mix(in oklab, var(--c-expired) 10%, var(--c-panel));
+}
+
+.scheduler-container .card.status-cancelled {
+  background: color-mix(in oklab, var(--c-cancel) 10%, var(--c-panel));
+}
+
+.scheduler-container .badge {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: .15rem .6rem;
+  font-size: .75rem;
+  font-weight: 800;
+  color: #0a0d10;
+}
+
+.scheduler-container .card.status-upcoming .badge {
+  background: var(--c-upcoming);
+}
+
+.scheduler-container .card.status-pending .badge {
+  background: var(--c-pending);
+}
+
+.scheduler-container .card.status-running .badge {
+  background: var(--c-running);
+}
+
+.scheduler-container .card.status-success .badge {
+  background: var(--c-success);
+}
+
+.scheduler-container .card.status-failed .badge {
+  background: var(--c-failed);
+}
+
+.scheduler-container .card.status-expired .badge {
+  background: var(--c-expired);
+}
+
+.scheduler-container .card.status-cancelled .badge {
+  background: var(--c-cancel);
+}
+
+/* Collapsed */
+.scheduler-container .card.collapsed .kv,
+.scheduler-container .card.collapsed .tags,
+.scheduler-container .card.collapsed .timer,
+.scheduler-container .card.collapsed .meta,
+.scheduler-container .card.collapsed .btns,
+.scheduler-container .card.collapsed .notice {
+  display: none !important;
+}
+
+.scheduler-container .card.collapsed {
+  gap: .25rem;
+  padding: .4rem .5rem;
+}
+
+.scheduler-container .card.collapsed .actionIcon {
+  width: 80px;
+  height: 80px;
+}
+
+.scheduler-container .cardHeader {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.scheduler-container .actionName {
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+
+.scheduler-container .actionIconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+.scheduler-container .actionIcon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--c-border);
+}
+
+.scheduler-container .card.status-running .actionIcon {
+  animation: sched-pulseIcon 1.2s ease-in-out infinite;
+}
+
+.scheduler-container .card.status-pending .actionIcon {
+  animation: sched-swayIcon 1.8s ease-in-out infinite;
+}
+
+.scheduler-container .card.status-upcoming .actionIcon {
+  animation: sched-blinkIcon 2s ease-in-out infinite;
+}
+
+@keyframes sched-pulseIcon {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+@keyframes sched-swayIcon {
+
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  25% {
+    transform: rotate(-5deg);
+  }
+
+  75% {
+    transform: rotate(5deg);
+  }
+}
+
+@keyframes sched-blinkIcon {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .4;
+  }
+}
+
+.scheduler-container .kv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem .8rem;
+  font-size: .9rem;
+}
+
+.scheduler-container .kv .k {
+  color: var(--muted);
+}
+
+.scheduler-container .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.scheduler-container .tag {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--c-border-strong);
+  padding: .15rem .45rem;
+  border-radius: 999px;
+  font-size: .74rem;
+  box-shadow: var(--shadow);
+}
+
+.scheduler-container .meta {
+  color: color-mix(in oklab, var(--ink) 76%, #9aa7b2);
+  font-size: .82rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem .8rem;
+}
+
+.scheduler-container .btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-top: .2rem;
+}
+
+.scheduler-container .btn {
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  color: var(--ink);
+  padding: .35rem .6rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.scheduler-container .btn:hover {
+  filter: brightness(1.08);
+}
+
+.scheduler-container .btn.danger {
+  background: color-mix(in oklab, #9c2b2b 22%, var(--panel));
+  border-color: #4a1515;
+  color: #ffd0d0;
+}
+
+.scheduler-container .btn.warn {
+  background: color-mix(in oklab, #9c6a2b 22%, var(--panel));
+  border-color: #5c2c0c;
+  color: #ffd8a8;
+}
+
+.scheduler-container .empty {
+  color: var(--muted);
+  text-align: center;
+  padding: .6rem;
+}
+
+@keyframes sched-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes sched-breathe {
+
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+
+  50% {
+    filter: brightness(1.07);
+  }
+}
+
+@keyframes sched-halo {
+
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(156, 194, 255, .25);
+  }
+
+  50% {
+    box-shadow: 0 0 22px rgba(156, 194, 255, .45);
+  }
+}
+
+@keyframes sched-haloGray {
+
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(187, 187, 187, .15);
+  }
+
+  50% {
+    box-shadow: 0 0 22px rgba(187, 187, 187, .3);
+  }
+}
+
+@keyframes sched-haloBlue {
+
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(74, 168, 255, .25);
+  }
+
+  50% {
+    box-shadow: 0 0 26px rgba(74, 168, 255, .5);
+  }
+}
+
+/* Timer / Progress */
+.scheduler-container .timer {
+  font-size: .82rem;
+  color: color-mix(in oklab, var(--ink) 80%, #bcd7ff);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.scheduler-container .timer .cd {
+  font-variant-numeric: tabular-nums;
+}
+
+.scheduler-container .progress {
+  height: 6px;
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.scheduler-container .progress .bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--c-running), #00d8ff);
+}
+
+/* More button */
+.scheduler-container .moreWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.scheduler-container .moreBtn {
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: .45rem .8rem;
+  cursor: pointer;
+  transition: transform .15s;
+  margin: .25rem auto 0;
+  box-shadow: var(--shadow);
+}
+
+.scheduler-container .moreBtn:hover {
+  transform: translateY(-1px);
+}
+
+/* Notice */
+.scheduler-container .notice {
+  padding: .6rem .8rem;
+  color: #ffd9d6;
+  background: color-mix(in oklab, #7a3838 55%, var(--panel));
+  border-bottom: 1px solid #7a3838;
+  display: none;
+  border-radius: 12px;
+  margin: .6rem;
+}
+
+/* Chips */
+.scheduler-container .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: .1rem 0 .2rem;
+  justify-content: center;
+}
+
+.scheduler-container .chip {
+  --h: 200;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .25rem .55rem;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: .2px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .06), rgba(0, 0, 0, .12)), hsl(var(--h), 65%, 34%);
+  border: 1px solid hsla(var(--h), 70%, 60%, .35);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .06);
+  transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
+}
+
+.scheduler-container .chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, .28);
+}
+
+.scheduler-container .chip .k {
+  opacity: .85;
+  font-weight: 700;
+}
+
+/* History modal */
+.scheduler-container .modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.scheduler-container .modal {
+  width: min(860px, 92vw);
+  max-height: 80vh;
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 14px;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, .6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scheduler-container .modalHeader {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .6rem .8rem;
+  border-bottom: 1px solid var(--c-border-strong);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--panel) 96%, transparent), color-mix(in oklab, var(--panel) 88%, transparent));
+}
+
+.scheduler-container .modalHeader .title {
+  font-weight: 900;
+}
+
+.scheduler-container .modalHeader .spacer {
+  flex: 1;
+}
+
+.scheduler-container .modalBody {
+  padding: .6rem .8rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+
+.scheduler-container .modalFooter {
+  padding: .5rem .8rem;
+  border-top: 1px solid var(--c-border-strong);
+  display: flex;
+  gap: .5rem;
+  justify-content: flex-end;
+  color: var(--muted);
+}
+
+.scheduler-container .xBtn,
+.scheduler-container .miniToggle {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 8px;
+  padding: .35rem .6rem;
+  cursor: pointer;
+}
+
+.scheduler-container .xBtn:hover,
+.scheduler-container .miniToggle:hover {
+  filter: brightness(1.08);
+}
+
+.scheduler-container #searchBox {
+  width: 100%;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border-strong);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: .5rem .7rem;
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  outline: none;
+}
+
+.scheduler-container .histRow {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .45rem .6rem;
+  border-radius: 10px;
+  border: 1px solid var(--c-border-strong);
+  background: color-mix(in oklab, var(--ink) 2%, var(--panel));
+}
+
+.scheduler-container .histRow .ts {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.scheduler-container .histRow .st {
+  font-weight: 900;
+  margin-left: auto;
+  padding: .1rem .5rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  color: #0a0d10;
+}
+
+.scheduler-container .hist-success {
+  background: color-mix(in oklab, var(--c-success) 8%, var(--panel));
+  border-left: 3px solid var(--c-success);
+}
+
+.scheduler-container .hist-failed {
+  background: color-mix(in oklab, var(--c-failed) 8%, var(--panel));
+  border-left: 3px solid var(--c-failed);
+}
+
+.scheduler-container .hist-running {
+  background: color-mix(in oklab, var(--c-running) 8%, var(--panel));
+  border-left: 3px solid var(--c-running);
+}
+
+.scheduler-container .hist-pending,
+.scheduler-container .hist-scheduled {
+  background: color-mix(in oklab, var(--c-pending) 8%, var(--panel));
+  border-left: 3px solid var(--c-pending);
+}
+
+.scheduler-container .hist-expired {
+  background: color-mix(in oklab, var(--c-expired) 8%, var(--panel));
+  border-left: 3px solid var(--c-expired);
+}
+
+.scheduler-container .hist-cancelled {
+  background: color-mix(in oklab, var(--c-cancel) 8%, var(--panel));
+  border-left: 3px solid var(--c-cancel);
+}
+
+.scheduler-container .hist-superseded {
+  background: color-mix(in oklab, var(--c-super) 8%, var(--panel));
+  border-left: 3px solid var(--c-super);
+}
+
+@media (max-width:920px) {
+  .scheduler-container .board {
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .scheduler-container .lane {
+    width: auto;
+  }
+
+  .scheduler-container .stats {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .scheduler-container .boardWrap {
+    height: auto;
+    min-height: calc(100vh - (var(--h-topbar, 0px) + 5px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .scheduler-container .card,
+  .scheduler-container .laneHeader .dot {
+    animation: none !important;
+  }
+}
+

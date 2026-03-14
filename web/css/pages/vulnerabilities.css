@@ -1,0 +1,698 @@
+/* ==========================================================================
+   VULNERABILITIES
+   ========================================================================== */
+.vuln-container {
+  padding: var(--gap-4);
+  min-height: calc(100vh - var(--h-topbar) - var(--h-bottombar));
+  animation: vuln-fadeIn 0.5s ease-in;
+}
+
+@keyframes vuln-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.vuln-container .stats-header {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gap-4);
+  margin-bottom: var(--gap-3);
+}
+
+.vuln-container .stat-card {
+  background: var(--grad-card);
+  border-radius: var(--radius);
+  padding: var(--gap-4);
+  text-align: center;
+  border: 1px solid var(--c-border);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--elev);
+}
+
+.vuln-container .stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  animation: vuln-pulse 2s infinite;
+}
+
+.vuln-container .stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+
+.vuln-container .stat-number {
+  font-size: 28px;
+  font-weight: bold;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 5px 0;
+}
+
+.vuln-container .stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.vuln-container .control-bar {
+  background: var(--grad-card);
+  border-radius: var(--radius);
+  padding: var(--gap-4);
+  margin-bottom: var(--gap-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-3);
+  align-items: center;
+  border: 1px solid var(--c-border);
+  box-shadow: var(--elev);
+}
+
+.vuln-container .search-box {
+  flex: 1;
+  min-width: 200px;
+  position: relative;
+}
+
+.vuln-container .search-input {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 40px 0 var(--control-pad-x);
+  background: var(--c-panel);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--control-r);
+  color: var(--ink);
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.vuln-container .search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--glow-weak);
+}
+
+.vuln-container .clear-search {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 18px;
+  display: none;
+  transition: color 0.3s ease;
+}
+
+.vuln-container .clear-search:hover {
+  color: var(--acid-2);
+}
+
+.vuln-container .clear-search.show {
+  display: block;
+}
+
+.vuln-container .filter-buttons {
+  display: flex;
+  gap: var(--gap-3);
+}
+
+.vuln-container .filter-btn.active {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-color: var(--accent);
+}
+
+.vuln-container .severity-filter {
+  display: flex;
+  gap: var(--gap-2);
+}
+
+.vuln-container .severity-btn.critical.active {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--white);
+}
+
+.vuln-container .severity-btn.high.active {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: var(--ink-invert);
+}
+
+.vuln-container .severity-btn.medium.active {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: var(--ink-invert);
+}
+
+.vuln-container .severity-btn.low.active {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--ink-invert);
+}
+
+.vuln-container .vuln-grid {
+  display: grid;
+  gap: var(--gap-4);
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+}
+
+.vuln-container .vuln-card {
+  background: var(--grad-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--c-border);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: vuln-slideIn 0.4s ease-out;
+  box-shadow: var(--elev);
+}
+
+@keyframes vuln-slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.vuln-container .vuln-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--accent);
+}
+
+.vuln-container .vuln-card.inactive {
+  opacity: 0.6;
+  border-color: var(--muted-off);
+}
+
+.vuln-container .vuln-header {
+  padding: var(--gap-4);
+  background: var(--grad-quickpanel);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.vuln-container .vuln-title {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-3);
+  flex: 1;
+}
+
+.vuln-container .vuln-id {
+  font-weight: bold;
+  font-size: 14px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.vuln-container .severity-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  animation: vuln-pulse 2s infinite;
+}
+
+@keyframes vuln-pulse {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.vuln-container .severity-critical {
+  background: var(--danger);
+  color: var(--white);
+}
+
+.vuln-container .severity-high {
+  background: var(--warning);
+  color: var(--ink-invert);
+}
+
+.vuln-container .severity-medium {
+  background: var(--accent-2);
+  color: var(--ink-invert);
+}
+
+.vuln-container .severity-low {
+  background: var(--ok);
+  color: var(--ink-invert);
+}
+
+.vuln-container .vuln-meta {
+  display: flex;
+  gap: var(--gap-4);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.vuln-container .meta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+}
+
+.vuln-container .expand-icon {
+  color: var(--muted);
+  transition: transform 0.3s ease;
+  font-size: 18px;
+}
+
+.vuln-container .vuln-card.expanded .expand-icon {
+  transform: rotate(180deg);
+}
+
+.vuln-container .vuln-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.vuln-container .vuln-card.expanded .vuln-content {
+  max-height: 1000px;
+}
+
+.vuln-container .vuln-details {
+  padding: var(--gap-4);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-panel);
+}
+
+.vuln-container .detail-section {
+  margin-bottom: var(--gap-4);
+}
+
+.vuln-container .detail-title {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: var(--gap-2);
+  font-weight: 600;
+}
+
+.vuln-container .detail-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.vuln-container .tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-2);
+}
+
+.vuln-container .tag {
+  padding: 4px 8px;
+  background: var(--c-chip-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--gap-2);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.vuln-container .action-buttons {
+  display: flex;
+  gap: var(--gap-3);
+  padding: var(--gap-4);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-panel-2);
+}
+
+.vuln-container .action-btn {
+  flex: 1;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vuln-container .btn-remediate {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--ink-invert);
+}
+
+.vuln-container .btn-details {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: var(--ink-invert);
+}
+
+.vuln-container .btn-export {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-color: var(--accent);
+  color: var(--white);
+}
+
+/* Host view */
+.vuln-container .host-card {
+  background: var(--grad-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--c-border);
+  margin-bottom: var(--gap-4);
+  overflow: hidden;
+  animation: vuln-slideIn 0.4s ease-out;
+  box-shadow: var(--elev);
+}
+
+.vuln-container .host-header {
+  background: var(--grad-quickpanel);
+  padding: var(--gap-4);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.vuln-container .host-header:hover {
+  background: var(--grad-modal);
+}
+
+.vuln-container .host-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+}
+
+.vuln-container .host-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: var(--gap-3);
+}
+
+.vuln-container .host-details {
+  display: flex;
+  gap: var(--gap-4);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.vuln-container .host-stats {
+  display: flex;
+  gap: var(--gap-3);
+  align-items: center;
+}
+
+.vuln-container .host-stat-badge {
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+}
+
+.vuln-container .host-vulns {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.vuln-container .host-card.expanded .host-vulns {
+  max-height: 2000px;
+}
+
+.vuln-container .host-vuln-list {
+  padding: var(--gap-4);
+  background: var(--c-panel);
+}
+
+.vuln-container .host-vuln-item {
+  background: var(--c-panel-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--control-r);
+  padding: var(--gap-3);
+  margin-bottom: var(--gap-3);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.vuln-container .host-vuln-item:hover {
+  background: var(--grad-card);
+  border-color: var(--accent);
+  transform: translateX(5px);
+}
+
+.vuln-container .host-summary {
+  background: var(--grad-quickpanel);
+  padding: var(--gap-3);
+  border-radius: var(--control-r);
+  margin-bottom: var(--gap-3);
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.vuln-container .host-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+}
+
+.vuln-container .host-summary-value {
+  font-size: 18px;
+  font-weight: bold;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.vuln-container .host-summary-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Badges */
+.vuln-container .badge-kev {
+  background: var(--danger);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  color: var(--white);
+  font-weight: bold;
+}
+
+.vuln-container .badge-exploit {
+  background: linear-gradient(135deg, #9c27b0, #e1bee7);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  color: var(--white);
+  font-weight: bold;
+}
+
+.vuln-container .badge-epss-high {
+  background: linear-gradient(135deg, var(--danger), var(--warning));
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  color: var(--white);
+  font-weight: bold;
+}
+
+.vuln-container .badge-epss-medium {
+  background: linear-gradient(135deg, var(--warning), var(--accent-2));
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  color: var(--white);
+  font-weight: bold;
+}
+
+/* Pagination */
+.vuln-container .pagination {
+  display: flex;
+  justify-content: center;
+  gap: var(--gap-3);
+  margin-top: var(--gap-4);
+  padding: var(--gap-3);
+}
+
+.vuln-container .page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vuln-container .page-btn.active {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-color: var(--accent);
+  color: var(--white);
+}
+
+.vuln-container .page-info {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Modal */
+.vuln-container .modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--glass-8);
+  z-index: 1000;
+  animation: vuln-fadeIn 0.3s ease;
+}
+
+.vuln-container .modal.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vuln-container .modal-content {
+  background: var(--grad-modal);
+  border-radius: var(--radius);
+  max-width: 800px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: vuln-slideUp 0.3s ease;
+  border: 1px solid var(--c-border-strong);
+  box-shadow: var(--shadow-hover);
+}
+
+@keyframes vuln-slideUp {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.vuln-container .modal-header {
+  padding: var(--gap-4);
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--grad-quickpanel);
+  z-index: 1;
+}
+
+.vuln-container .modal-title {
+  font-size: 18px;
+  font-weight: bold;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.vuln-container .close-modal {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 24px;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.vuln-container .close-modal:hover {
+  color: var(--ink);
+}
+
+.vuln-container .modal-body {
+  padding: var(--gap-4);
+}
+
+@media (max-width:768px) {
+  .vuln-container .stats-header {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .vuln-container .control-bar {
+    flex-direction: column;
+  }
+
+  .vuln-container .search-box {
+    width: 100%;
+  }
+
+  .vuln-container .filter-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .vuln-container .severity-filter {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .vuln-container .vuln-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--gap-3);
+  }
+
+  .vuln-container .vuln-meta {
+    flex-direction: column;
+    gap: var(--gap-2);
+  }
+
+  .vuln-container .modal-content {
+    width: 95%;
+    max-height: 90vh;
+  }
+}
+

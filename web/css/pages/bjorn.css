@@ -1,0 +1,33 @@
+/* ==========================================================================
+   BJORN
+   ========================================================================== */
+.bjorn-container .image-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: calc(100vh - 70px);
+}
+
+.bjorn-container .image-container img {
+  max-height: 100%;
+  max-width: 100%;
+  height: -webkit-fill-available;
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out;
+}
+
+.bjorn-container .image-container img:active {
+  transform: scale(1.05);
+}
+
+.bjorn-container .image-container.fullscreen img {
+  height: 100vh;
+  width: auto;
+}
+
+@media (max-width:768px) {
+  .bjorn-container .image-container {
+    height: calc(100vh - 60px);
+  }
+}
+

@@ -13,74 +13,74 @@ function studioTemplate() {
 <div id="app">
   <header>
     <div class="logo" aria-hidden="true"></div>
-    <h1>BJORN Studio</h1>
+    <h1>${t('studio.title')}</h1>
     <div class="sp"></div>
 
-    <button class="btn icon" id="btnPal" title="Open actions/hosts panel" aria-controls="left">&#9776;</button>
-    <button class="btn icon" id="btnIns" title="Open inspector panel" aria-controls="right">&#9881;</button>
-    <button class="btn" id="btnAutoLayout" title="Auto-layout">&#9889; Auto-layout</button>
-    <button class="btn" id="btnRepel" title="Repel overlap">Repel</button>
-    <button class="btn primary" id="btnApply" title="Save and apply">Apply</button>
-    <button class="btn" id="btnHelp" title="Show shortcuts and gestures">Help</button>
+    <button class="btn icon" id="btnPal" title="${t('studio.openPalette')}" aria-controls="left">&#9776;</button>
+    <button class="btn icon" id="btnIns" title="${t('studio.openInspector')}" aria-controls="right">&#9881;</button>
+    <button class="btn" id="btnAutoLayout" title="${t('studio.autoLayout')}">&#9889; ${t('studio.autoLayout')}</button>
+    <button class="btn" id="btnRepel" title="${t('studio.repel')}">${t('studio.repel')}</button>
+    <button class="btn primary" id="btnApply" title="${t('studio.apply')}">${t('studio.apply')}</button>
+    <button class="btn" id="btnHelp" title="${t('studio.help')}">${t('studio.help')}</button>
 
-    <div class="kebab" style="position:relative">
+    <div class="kebab">
       <button class="btn icon" id="btnMenu" aria-haspopup="true">&#8942;</button>
-      <div class="menu" id="mainMenu" role="menu" aria-label="Actions" style="position:absolute;top:calc(100% + 6px);right:0;min-width:240px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:6px;box-shadow:0 10px 32px rgba(0,0,0,.45);display:none;z-index:2400">
-        <div class="item" id="mAddHost" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Add host</div>
-        <div class="item" id="mAutoLayout" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Auto layout</div>
-        <div class="item" id="mRepel" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Repel overlap</div>
-        <div class="item" id="mFit" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Fit graph</div>
-        <div class="item" id="mHelp" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Help</div>
-        <div class="item" id="mSave" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Save to DB</div>
-        <div class="item" id="mImportdbActions" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Import actions DB</div>
-        <div class="item" id="mImportdbActionsStudio" role="menuitem" style="padding:.55rem .7rem;border-radius:8px;font-size:13px;cursor:pointer">Import studio DB</div>
+      <div class="menu studio-kebab-menu" id="mainMenu" role="menu" aria-label="${t('common.actions')}">
+        <div class="item" id="mAddHost" role="menuitem">${t('studio.addHost')}</div>
+        <div class="item" id="mAutoLayout" role="menuitem">${t('studio.autoLayout')}</div>
+        <div class="item" id="mRepel" role="menuitem">${t('studio.repel')}</div>
+        <div class="item" id="mFit" role="menuitem">${t('studio.fitGraph')}</div>
+        <div class="item" id="mHelp" role="menuitem">${t('studio.help')}</div>
+        <div class="item" id="mSave" role="menuitem">${t('studio.saveToDb')}</div>
+        <div class="item" id="mImportdbActions" role="menuitem">${t('studio.importActionsDb')}</div>
+        <div class="item" id="mImportdbActionsStudio" role="menuitem">${t('studio.importStudioDb')}</div>
       </div>
     </div>
   </header>
 
   <main>
-    <aside id="left" aria-label="Palette">
+    <aside id="left" aria-label="${t('studio.palette')}">
       <div class="studio-sidehead">
-        <div class="studio-sidehead-title">Palette</div>
-        <button class="btn icon studio-side-close" id="btnCloseLeft" type="button" aria-label="Close left panel">&times;</button>
+        <div class="studio-sidehead-title">${t('studio.palette')}</div>
+        <button class="btn icon studio-side-close" id="btnCloseLeft" type="button" aria-label="${t('studio.closePanel')}">&times;</button>
       </div>
       <div class="tabs">
-        <div class="tab active" data-tab="actions">Actions</div>
-        <div class="tab" data-tab="hosts">Hosts</div>
+        <div class="tab active" data-tab="actions">${t('studio.actionsTab')}</div>
+        <div class="tab" data-tab="hosts">${t('studio.hostsTab')}</div>
       </div>
 
       <div class="tab-content active" id="tab-actions">
         <div class="search-row">
-          <input class="search" id="filterActions" placeholder="Filter actions...">
-          <button class="search-clear" id="clearFilterActions" aria-label="Clear action filter">&times;</button>
+          <input class="search" id="filterActions" placeholder="${t('studio.filterActions')}">
+          <button class="search-clear" id="clearFilterActions" aria-label="${t('common.clear')}">&times;</button>
         </div>
         <div class="palette-meta" id="actionsMeta">
-          <span class="pill"><span id="actionsTotalCount">0</span> total</span>
-          <span class="pill"><span id="actionsPlacedCount">0</span> placed</span>
+          <span class="pill"><span id="actionsTotalCount">0</span> ${t('studio.total')}</span>
+          <span class="pill"><span id="actionsPlacedCount">0</span> ${t('studio.placed')}</span>
         </div>
-        <h2>Available actions</h2>
+        <h2>${t('studio.availableActions')}</h2>
         <div id="plist"></div>
       </div>
 
       <div class="tab-content" id="tab-hosts">
         <div class="search-row">
-          <input class="search" id="filterHosts" placeholder="Filter host/IP/MAC...">
-          <button class="search-clear" id="clearFilterHosts" aria-label="Clear host filter">&times;</button>
+          <input class="search" id="filterHosts" placeholder="${t('studio.filterHosts')}">
+          <button class="search-clear" id="clearFilterHosts" aria-label="${t('common.clear')}">&times;</button>
         </div>
         <div class="palette-meta" id="hostsMeta">
-          <span class="pill"><span id="hostsTotalCount">0</span> total</span>
-          <span class="pill"><span id="hostsAliveCount">0</span> alive</span>
-          <span class="pill"><span id="hostsPlacedCount">0</span> placed</span>
+          <span class="pill"><span id="hostsTotalCount">0</span> ${t('studio.total')}</span>
+          <span class="pill"><span id="hostsAliveCount">0</span> ${t('studio.alive')}</span>
+          <span class="pill"><span id="hostsPlacedCount">0</span> ${t('studio.placed')}</span>
         </div>
-        <button class="btn" id="btnCreateHost" style="width:100%;margin-bottom:10px">Create test host</button>
-        <h2>Real hosts</h2>
+        <button class="btn studio-create-host-btn" id="btnCreateHost">${t('studio.createTestHost')}</button>
+        <h2>${t('studio.realHosts')}</h2>
         <div id="realHosts"></div>
-        <h2>Test hosts</h2>
+        <h2>${t('studio.testHosts')}</h2>
         <div id="testHosts"></div>
       </div>
     </aside>
 
-    <section id="center" aria-label="Canvas">
+    <section id="center" aria-label="${t('studio.canvas')}">
       <div id="bggrid"></div>
       <div id="canvas" style="transform:translate(0px,0px) scale(1)">
         <svg id="links" width="4000" height="3000" aria-label="Graph links"></svg>
@@ -90,24 +90,24 @@ function studioTemplate() {
       <div id="controls">
         <button class="ctrl" id="zIn" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="ctrl" id="zOut" title="Zoom out" aria-label="Zoom out">-</button>
-        <button class="ctrl" id="zFit" title="Fit to screen" aria-label="Fit graph">[]</button>
+        <button class="ctrl" id="zFit" title="${t('studio.fitGraph')}" aria-label="${t('studio.fitGraph')}">[]</button>
       </div>
 
       <div id="canvasHint" class="canvas-hint">
-        <strong>Tips</strong>
-        <span>Drag background to pan, mouse wheel/pinch to zoom, connect ports to link nodes.</span>
-        <button id="btnHideCanvasHint" class="btn icon" aria-label="Hide hint">&times;</button>
+        <strong>${t('studio.tips')}</strong>
+        <span>${t('studio.tipsText')}</span>
+        <button id="btnHideCanvasHint" class="btn icon" aria-label="${t('common.hide')}">&times;</button>
       </div>
     </section>
 
-    <aside id="right" aria-label="Inspector">
+    <aside id="right" aria-label="${t('studio.inspector')}">
       <div class="studio-sidehead">
-        <div class="studio-sidehead-title">Inspector</div>
-        <button class="btn icon studio-side-close" id="btnCloseRight" type="button" aria-label="Close right panel">&times;</button>
+        <div class="studio-sidehead-title">${t('studio.inspector')}</div>
+        <button class="btn icon studio-side-close" id="btnCloseRight" type="button" aria-label="${t('studio.closePanel')}">&times;</button>
       </div>
       <div class="section" id="actionInspector">
-        <h3>Selected action</h3>
-        <div id="noSel" class="small">Select a node to edit it</div>
+        <h3>${t('studio.selectedAction')}</h3>
+        <div id="noSel" class="small">${t('studio.selectNodeToEdit')}</div>
         <div id="edit" style="display:none">
           <label><span>b_class</span><input id="e_class" disabled></label>
           <div class="form-row">
@@ -115,15 +115,15 @@ function studioTemplate() {
             <label><span>b_status</span><input id="e_status"></label>
           </div>
           <div class="form-row">
-            <label><span>Type</span>
+            <label><span>${t('common.type')}</span>
               <select id="e_type"><option value="normal">normal</option><option value="global">global</option></select>
             </label>
-            <label><span>Enabled</span>
-              <select id="e_enabled"><option value="1">Yes</option><option value="0">No</option></select>
+            <label><span>${t('common.enabled')}</span>
+              <select id="e_enabled"><option value="1">${t('common.yes')}</option><option value="0">${t('common.no')}</option></select>
             </label>
           </div>
           <div class="form-row">
-            <label><span>Priority</span><input type="number" id="e_prio" min="1" max="100"></label>
+            <label><span>${t('sched.priority')}</span><input type="number" id="e_prio" min="1" max="100"></label>
             <label><span>Timeout</span><input type="number" id="e_timeout"></label>
           </div>
           <div class="form-row">
@@ -132,14 +132,14 @@ function studioTemplate() {
           </div>
           <div class="form-row">
             <label><span>Rate limit</span><input id="e_rate" placeholder="3/86400"></label>
-            <label><span>Port</span><input type="number" id="e_port" placeholder="22"></label>
+            <label><span>${t('common.port')}</span><input type="number" id="e_port" placeholder="22"></label>
           </div>
           <label><span>Services (CSV)</span><input id="e_services" placeholder="ssh, http, https"></label>
           <label><span>Tags JSON</span><input id="e_tags" placeholder='["notif"]'></label>
           <hr>
-          <h3>Trigger</h3>
+          <h3>${t('studio.trigger')}</h3>
           <div class="form-row">
-            <label><span>Type</span>
+            <label><span>${t('common.type')}</span>
               <select id="t_type">
                 <option>on_start</option><option>on_new_host</option><option>on_host_alive</option><option>on_host_dead</option>
                 <option>on_join</option><option>on_leave</option><option>on_port_change</option><option>on_new_port</option>
@@ -148,107 +148,107 @@ function studioTemplate() {
                 <option>on_has_cve</option><option>on_has_cpe</option><option>on_all</option><option>on_any</option><option>on_interval</option>
               </select>
             </label>
-            <label><span>Parameter</span><input id="t_param" placeholder="port / service / ActionName / JSON list" style="font-family:ui-monospace"></label>
+            <label><span>Parameter</span><input id="t_param" placeholder="port / service / ActionName / JSON list" class="mono-input"></label>
           </div>
           <hr>
-          <h3>Requirements</h3>
+          <h3>${t('studio.requirement')}</h3>
           <div class="row">
-            <label style="flex:1"><span>Mode</span>
+            <label class="flex-1"><span>${t('studio.mode')}</span>
               <select id="r_mode"><option value="all">ALL (AND)</option><option value="any">ANY (OR)</option></select>
             </label>
-            <button class="btn" id="r_add">+ Condition</button>
+            <button class="btn" id="r_add">${t('studio.addCondition')}</button>
           </div>
           <div id="r_list" class="small"></div>
-          <div class="row" style="margin-top:.6rem">
-            <button class="btn" id="btnUpdateAction">Apply</button>
-            <button class="btn" id="btnDeleteNode">Remove from canvas</button>
+          <div class="row studio-action-btns">
+            <button class="btn primary" id="btnUpdateAction">${t('studio.apply')}</button>
+            <button class="btn" id="btnDeleteNode">${t('studio.removeFromCanvas')}</button>
           </div>
         </div>
       </div>
 
       <div class="section" id="hostInspector" style="display:none">
-        <h3>Selected host</h3>
+        <h3>${t('studio.selectedHost')}</h3>
         <div class="form-row">
-          <label><span>MAC</span><input id="h_mac"></label>
-          <label><span>Hostname</span><input id="h_hostname"></label>
+          <label><span>${t('common.mac')}</span><input id="h_mac"></label>
+          <label><span>${t('common.hostname')}</span><input id="h_hostname"></label>
         </div>
         <div class="form-row">
-          <label><span>IP(s)</span><input id="h_ips" placeholder="192.168.1.10;192.168.1.11"></label>
-          <label><span>Ports</span><input id="h_ports" placeholder="22;80;443"></label>
+          <label><span>${t('common.ip')}(s)</span><input id="h_ips" placeholder="192.168.1.10;192.168.1.11"></label>
+          <label><span>${t('common.ports')}</span><input id="h_ports" placeholder="22;80;443"></label>
         </div>
         <div class="form-row">
           <label><span>Alive</span>
-            <select id="h_alive"><option value="1">Yes</option><option value="0">No</option></select>
+            <select id="h_alive"><option value="1">${t('common.yes')}</option><option value="0">${t('common.no')}</option></select>
           </label>
           <label><span>ESSID</span><input id="h_essid"></label>
         </div>
         <label><span>Services (JSON)</span><textarea id="h_services" placeholder='[{"port":22,"service":"ssh"},{"port":80,"service":"http"}]'></textarea></label>
         <label><span>Vulns (CSV)</span><input id="h_vulns" placeholder="CVE-2023-..., CVE-2024-..."></label>
         <label><span>Creds (JSON)</span><textarea id="h_creds" placeholder='[{"service":"ssh","user":"admin","password":"pass"}]'></textarea></label>
-        <div class="row" style="margin-top:.6rem">
-          <button class="btn" id="btnUpdateHost">Apply</button>
-          <button class="btn" id="btnDeleteHost">Delete from canvas</button>
+        <div class="row studio-action-btns">
+          <button class="btn primary" id="btnUpdateHost">${t('studio.apply')}</button>
+          <button class="btn" id="btnDeleteHost">${t('studio.deleteFromCanvas')}</button>
         </div>
       </div>
     </aside>
 
-    <button id="sideBackdrop" class="studio-side-backdrop" aria-hidden="true" aria-label="Close side panels"></button>
+    <button id="sideBackdrop" class="studio-side-backdrop" aria-hidden="true" aria-label="${t('studio.closePanel')}"></button>
 
     <div id="studioMobileDock" class="studio-mobile-dock" aria-label="Studio mobile controls">
-      <button class="btn" id="btnPalDock" aria-controls="left" title="Open palette">Palette</button>
-      <button class="btn" id="btnFitDock" title="Fit graph">Fit</button>
+      <button class="btn" id="btnPalDock" aria-controls="left" title="${t('studio.openPalette')}">${t('studio.palette')}</button>
+      <button class="btn" id="btnFitDock" title="${t('studio.fitGraph')}">Fit</button>
       <div class="studio-mobile-stats"><span id="nodeCountMini">0</span>N | <span id="linkCountMini">0</span>L</div>
-      <button class="btn primary" id="btnApplyDock">Apply</button>
-      <button class="btn" id="btnInsDock" aria-controls="right" title="Open inspector">Inspect</button>
+      <button class="btn primary" id="btnApplyDock">${t('studio.apply')}</button>
+      <button class="btn" id="btnInsDock" aria-controls="right" title="${t('studio.openInspector')}">Inspect</button>
     </div>
   </main>
 
   <footer>
-    <div class="pill"><span style="width:8px;height:8px;border-radius:50%;background:var(--ok)"></span> success</div>
-    <div class="pill"><span style="width:8px;height:8px;border-radius:50%;background:var(--bad)"></span> failure</div>
-    <div class="pill"><span style="width:8px;height:8px;border-radius:50%;background:#7aa7ff"></span> requires</div>
-    <div class="pill">Pinch/scroll = zoom, drag = pan, connect ports to create links</div>
-    <div class="pill"><span id="nodeCount">0</span> nodes, <span id="linkCount">0</span> links</div>
+    <div class="pill"><span class="legend-dot legend-ok"></span> ${t('studio.success')}</div>
+    <div class="pill"><span class="legend-dot legend-bad"></span> ${t('studio.failure')}</div>
+    <div class="pill"><span class="legend-dot legend-req"></span> ${t('studio.requires')}</div>
+    <div class="pill">${t('studio.pinchHint')}</div>
+    <div class="pill"><span id="nodeCount">0</span> ${t('studio.nodesCount')}, <span id="linkCount">0</span> ${t('studio.linksCount')}</div>
   </footer>
 </div>
 
 <div class="edge-menu" id="edgeMenu">
-  <div class="edge-menu-item" data-action="edit">Edit...</div>
-  <div class="edge-menu-item" data-action="toggle-success">Success</div>
-  <div class="edge-menu-item" data-action="toggle-failure">Failure</div>
-  <div class="edge-menu-item" data-action="toggle-req">Requires</div>
-  <div class="edge-menu-item danger" data-action="delete">Delete</div>
+  <div class="edge-menu-item" data-action="edit">${t('common.edit')}...</div>
+  <div class="edge-menu-item" data-action="toggle-success">${t('studio.success')}</div>
+  <div class="edge-menu-item" data-action="toggle-failure">${t('studio.failure')}</div>
+  <div class="edge-menu-item" data-action="toggle-req">${t('studio.requires')}</div>
+  <div class="edge-menu-item danger" data-action="delete">${t('common.delete')}</div>
 </div>
 
 <div class="modal" id="linkWizard" aria-hidden="true" aria-labelledby="linkWizardTitle" role="dialog">
   <div class="modal-content">
     <div class="modal-header">
-      <h2 class="modal-title" id="linkWizardTitle">Link</h2>
-      <button class="modal-close" id="lwClose" aria-label="Close">x</button>
+      <h2 class="modal-title" id="linkWizardTitle">${t('studio.link')}</h2>
+      <button class="modal-close" id="lwClose" aria-label="${t('common.close')}">x</button>
     </div>
     <div class="modal-body">
-      <div class="row" style="margin-bottom:6px">
-        <div class="pill">From: <b id="lwFromName">-</b></div>
-        <div class="pill">To: <b id="lwToName">-</b></div>
+      <div class="row studio-link-endpoints">
+        <div class="pill">${t('studio.from')}: <b id="lwFromName">-</b></div>
+        <div class="pill">${t('studio.to')}: <b id="lwToName">-</b></div>
       </div>
-      <p class="small" id="lwContext">Choose behavior (trigger or requirement). Presets adapt to node types.</p>
+      <p class="small" id="lwContext">${t('studio.linkContext')}</p>
       <hr>
       <div class="form-row">
-        <label><span>Mode</span>
-          <select id="lwMode"><option value="trigger">Trigger</option><option value="requires">Requirement</option></select>
+        <label><span>${t('studio.mode')}</span>
+          <select id="lwMode"><option value="trigger">${t('studio.trigger')}</option><option value="requires">${t('studio.requirement')}</option></select>
         </label>
-        <label><span>Preset</span><select id="lwPreset"></select></label>
+        <label><span>${t('studio.preset')}</span><select id="lwPreset"></select></label>
       </div>
       <div class="form-row" id="lwParamsRow">
-        <label><span>Param 1</span><input id="lwParam1" placeholder="ssh / 22 / CVE-..."></label>
-        <label><span>Param 2</span><input id="lwParam2" placeholder="optional"></label>
+        <label><span>${t('studio.param1')}</span><input id="lwParam1" placeholder="ssh / 22 / CVE-..."></label>
+        <label><span>${t('studio.param2')}</span><input id="lwParam2" placeholder="optional"></label>
       </div>
-      <div class="section" style="margin-top:10px">
-        <div class="row"><div class="pill">Preview:</div><code id="lwPreview">-</code></div>
+      <div class="section studio-preview-row">
+        <div class="row"><div class="pill">${t('studio.preview')}:</div><code id="lwPreview">-</code></div>
       </div>
-      <div class="row" style="margin-top:16px">
-        <button class="btn primary" id="lwCreate">Validate</button>
-        <button class="btn" id="lwCancel">Cancel</button>
+      <div class="row studio-wizard-btns">
+        <button class="btn primary" id="lwCreate">${t('studio.validate')}</button>
+        <button class="btn" id="lwCancel">${t('common.cancel')}</button>
       </div>
     </div>
   </div>
@@ -257,27 +257,27 @@ function studioTemplate() {
 <div class="modal" id="hostModal" aria-hidden="true" aria-labelledby="hostModalTitle" role="dialog">
   <div class="modal-content">
     <div class="modal-header">
-      <h2 class="modal-title" id="hostModalTitle">Add test host</h2>
-      <button class="modal-close" onclick="closeHostModal()" aria-label="Close">x</button>
+      <h2 class="modal-title" id="hostModalTitle">${t('studio.addTestHost')}</h2>
+      <button class="modal-close" onclick="closeHostModal()" aria-label="${t('common.close')}">x</button>
     </div>
     <div class="modal-body">
-      <label><span>MAC Address</span><input id="new_mac" placeholder="AA:BB:CC:DD:EE:FF"></label>
-      <label><span>Hostname</span><input id="new_hostname" placeholder="test-server-01"></label>
-      <label><span>IP Address(es)</span><input id="new_ips" placeholder="192.168.1.100;192.168.1.101"></label>
-      <label><span>Open Ports</span><input id="new_ports" placeholder="22;80;443;3306"></label>
+      <label><span>${t('common.mac')}</span><input id="new_mac" placeholder="AA:BB:CC:DD:EE:FF"></label>
+      <label><span>${t('common.hostname')}</span><input id="new_hostname" placeholder="test-server-01"></label>
+      <label><span>${t('common.ip')}(s)</span><input id="new_ips" placeholder="192.168.1.100;192.168.1.101"></label>
+      <label><span>${t('common.ports')}</span><input id="new_ports" placeholder="22;80;443;3306"></label>
       <label><span>Services (JSON)</span>
         <textarea id="new_services" placeholder='[{"port":22,"service":"ssh"},{"port":80,"service":"http"}]'>[{"port":22,"service":"ssh"}]</textarea>
       </label>
-      <label><span>Vulnerabilities (CSV)</span><input id="new_vulns" placeholder="CVE-2023-1234, CVE-2024-5678"></label>
-      <label><span>Credentials (JSON)</span>
+      <label><span>Vulns (CSV)</span><input id="new_vulns" placeholder="CVE-2023-1234, CVE-2024-5678"></label>
+      <label><span>Creds (JSON)</span>
         <textarea id="new_creds" placeholder='[{"service":"ssh","user":"admin","password":"password"}]'>[]</textarea>
       </label>
       <label><span>Alive</span>
-        <select id="new_alive"><option value="1">Yes</option><option value="0">No</option></select>
+        <select id="new_alive"><option value="1">${t('common.yes')}</option><option value="0">${t('common.no')}</option></select>
       </label>
-      <div style="display:flex;gap:10px;margin-top:20px">
-        <button class="btn primary" onclick="createTestHost()">Create host</button>
-        <button class="btn" onclick="closeHostModal()">Cancel</button>
+      <div class="row studio-wizard-btns">
+        <button class="btn primary" onclick="createTestHost()">${t('studio.createTestHost')}</button>
+        <button class="btn" onclick="closeHostModal()">${t('common.cancel')}</button>
       </div>
     </div>
   </div>
@@ -286,22 +286,22 @@ function studioTemplate() {
 <div class="modal" id="helpModal" aria-hidden="true" aria-labelledby="helpModalTitle" role="dialog">
   <div class="modal-content">
     <div class="modal-header">
-      <h2 class="modal-title" id="helpModalTitle">Studio shortcuts</h2>
-      <button class="modal-close" id="helpClose" aria-label="Close">x</button>
+      <h2 class="modal-title" id="helpModalTitle">${t('studio.shortcuts')}</h2>
+      <button class="modal-close" id="helpClose" aria-label="${t('common.close')}">x</button>
     </div>
     <div class="modal-body">
       <div class="section">
-        <h3>Navigation</h3>
-        <div class="small">Mouse wheel / pinch: zoom</div>
-        <div class="small">Drag canvas background: pan</div>
-        <div class="small">Drag node: move node</div>
+        <h3>${t('studio.navigation')}</h3>
+        <div class="small">${t('studio.shortcutZoom')}</div>
+        <div class="small">${t('studio.shortcutPan')}</div>
+        <div class="small">${t('studio.shortcutDragNode')}</div>
       </div>
       <div class="section">
-        <h3>Keyboard</h3>
-        <div class="small"><b>F</b>: fit graph to viewport</div>
-        <div class="small"><b>Ctrl/Cmd + S</b>: save to DB</div>
-        <div class="small"><b>Esc</b>: close menus / sidebars / modals</div>
-        <div class="small"><b>Delete</b>: delete selected node</div>
+        <h3>${t('studio.keyboard')}</h3>
+        <div class="small"><b>F</b>: ${t('studio.shortcutFit')}</div>
+        <div class="small"><b>Ctrl/Cmd + S</b>: ${t('studio.shortcutSave')}</div>
+        <div class="small"><b>Esc</b>: ${t('studio.shortcutEsc')}</div>
+        <div class="small"><b>Delete</b>: ${t('studio.shortcutDelete')}</div>
       </div>
     </div>
   </div>

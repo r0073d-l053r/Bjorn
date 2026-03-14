@@ -12,12 +12,12 @@ const PAGE = 'scheduler';
 const PAGE_SIZE = 100;
 const LANES = ['running', 'pending', 'upcoming', 'success', 'failed', 'cancelled'];
 const LANE_LABELS = {
-  running: t('sched.running'),
-  pending: t('sched.pending'),
-  upcoming: t('sched.upcoming'),
-  success: t('sched.success'),
-  failed: t('sched.failed'),
-  cancelled: t('sched.cancelled')
+  running: () => t('sched.running'),
+  pending: () => t('sched.pending'),
+  upcoming: () => t('sched.upcoming'),
+  success: () => t('sched.success'),
+  failed: () => t('sched.failed'),
+  cancelled: () => t('sched.cancelled')
 };
 
 /* ── state ── */
@@ -33,6 +33,8 @@ let lastBuckets = null;
 let showCount = null;
 let lastFilterKey = '';
 let iconCache = new Map();
+/** Map<lane, Map<cardKey, DOM element>> for incremental updates */
+let laneCardMaps = new Map();
 
 /* ── lifecycle ── */
 export async function mount(container) {
@@ -46,12 +48,18 @@ export async function mount(container) {
 }
 
 export function unmount() {
+  clearTimeout(searchDeb);
+  searchDeb = null;
   if (poller) { poller.stop(); poller = null; }
   if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
   if (tracker) { tracker.cleanupAll(); tracker = null; }
   lastBuckets = null;
   showCount = null;
+  lastFilterKey = '';
   iconCache.clear();
+  laneCardMaps.clear();
+  LIVE = true; FOCUS = false; COMPACT = false;
+  COLLAPSED = false; INCLUDE_SUPERSEDED = false;
 }
 
 /* ── shell ── */
@@ -60,15 +68,15 @@ function buildShell() {
     el('div', { id: 'sched-errorBar', class: 'notice', style: 'display:none' }),
     el('div', { class: 'controls' }, [
       el('input', {
-        type: 'text', id: 'sched-search', placeholder: 'Filter (action, MAC, IP, host, service, port...)',
+        type: 'text', id: 'sched-search', placeholder: t('sched.filterPlaceholder'),
         oninput: onSearch
       }),
       pill('sched-liveBtn', t('common.on'), true, () => setLive(!LIVE)),
       pill('sched-refBtn', t('common.refresh'), false, () => tick()),
-      pill('sched-focBtn', 'Focus active', false, () => { FOCUS = !FOCUS; $('#sched-focBtn')?.classList.toggle('active', FOCUS); lastFilterKey = ''; tick(); }),
-      pill('sched-cmpBtn', 'Compact', false, () => { COMPACT = !COMPACT; $('#sched-cmpBtn')?.classList.toggle('active', COMPACT); lastFilterKey = ''; tick(); }),
-      pill('sched-colBtn', 'Collapse', false, toggleCollapse),
-      pill('sched-supBtn', INCLUDE_SUPERSEDED ? '- superseded' : '+ superseded', false, toggleSuperseded),
+      pill('sched-focBtn', t('sched.focusActive'), false, () => { FOCUS = !FOCUS; $('#sched-focBtn')?.classList.toggle('active', FOCUS); lastFilterKey = ''; tick(); }),
+      pill('sched-cmpBtn', t('sched.compact'), false, () => { COMPACT = !COMPACT; $('#sched-cmpBtn')?.classList.toggle('active', COMPACT); lastFilterKey = ''; tick(); }),
+      pill('sched-colBtn', t('sched.collapse'), false, toggleCollapse),
+      pill('sched-supBtn', INCLUDE_SUPERSEDED ? t('sched.hideSuperseded') : t('sched.showSuperseded'), false, toggleSuperseded),
       el('span', { id: 'sched-stats', class: 'stats' }),
     ]),
     el('div', { id: 'sched-boardWrap', class: 'boardWrap' }, [
@@ -88,7 +96,7 @@ function buildShell() {
         ]),
         el('div', { id: 'sched-histBody', class: 'modalBody' }),
         el('div', { class: 'modalFooter' }, [
-          el('small', {}, ['Rows are color-coded by status.']),
+          el('small', {}, [t('sched.historyColorCoded')]),
         ]),
       ]),
     ]),
@@ -134,7 +142,7 @@ async function tick() {
     const rows = await fetchQueue();
     render(rows);
   } catch (e) {
-    showError('Queue fetch error: ' + e.message);
+    showError(t('sched.fetchError') + ': ' + e.message);
   }
 }
 
@@ -203,7 +211,7 @@ function render(rows) {
   /* stats */
   const total = filtered.length;
   const statsEl = $('#sched-stats');
-  if (statsEl) statsEl.textContent = `${total} entries | R:${buckets.running.length} P:${buckets.pending.length} U:${buckets.upcoming.length} S:${buckets.success.length} F:${buckets.failed.length}`;
+  if (statsEl) statsEl.textContent = `${total} ${t('sched.entries')} | R:${buckets.running.length} P:${buckets.pending.length} U:${buckets.upcoming.length} S:${buckets.success.length} F:${buckets.failed.length}`;
 
   /* pagination */
   const fk = filterKey(q);
@@ -214,43 +222,162 @@ function render(rows) {
   renderBoard(buckets);
 }
 
+/* ── cardKey: stable identifier for a card row ── */
+function cardKey(r) {
+  return `${r.id || ''}|${r.action_name}|${r.mac}|${r.port || 0}|${r._computed_status}`;
+}
+
+/* ── card fingerprint for detecting data changes ── */
+function cardFingerprint(r) {
+  return `${r.status}|${r.retry_count || 0}|${r.priority_effective}|${r.started_at || ''}|${r.completed_at || ''}|${r.error_message || ''}|${r.result_summary || ''}|${(r.tags || []).join(',')}`;
+}
+
+/**
+ * Incremental board rendering — updates DOM in-place instead of destroying/recreating.
+ * This prevents flickering of countdown timers and progress bars.
+ */
 function renderBoard(buckets) {
   const board = $('#sched-board');
   if (!board) return;
-  empty(board);
 
+  /* First render: build full structure */
+  if (!board.children.length) {
+    laneCardMaps.clear();
+    LANES.forEach(lane => {
+      const items = buckets[lane] || [];
+      const visible = items.slice(0, showCount?.[lane] || PAGE_SIZE);
+      const cardMap = new Map();
+      laneCardMaps.set(lane, cardMap);
+
+      const laneBody = el('div', { class: 'laneBody' });
+      if (visible.length === 0) {
+        laneBody.appendChild(el('div', { class: 'empty' }, [t('sched.noEntries')]));
+      } else {
+        visible.forEach(r => {
+          const card = cardEl(r);
+          card.dataset.cardKey = cardKey(r);
+          card.dataset.fp = cardFingerprint(r);
+          cardMap.set(cardKey(r), card);
+          laneBody.appendChild(card);
+        });
+        if (items.length > visible.length) {
+          laneBody.appendChild(moreBtn(lane));
+        }
+      }
+
+      const laneEl = el('div', { class: `lane status-${lane}`, 'data-lane': lane }, [
+        el('div', { class: 'laneHeader' }, [
+          el('span', { class: 'dot' }),
+          el('strong', {}, [LANE_LABELS[lane]()]),
+          el('span', { class: 'count' }, [String(items.length)]),
+        ]),
+        laneBody,
+      ]);
+      board.appendChild(laneEl);
+    });
+
+    if (COLLAPSED) $$('.card', board).forEach(c => c.classList.add('collapsed'));
+    startClock();
+    return;
+  }
+
+  /* Incremental update: patch each lane in-place */
   LANES.forEach(lane => {
     const items = buckets[lane] || [];
     const visible = items.slice(0, showCount?.[lane] || PAGE_SIZE);
-    const hasMore = items.length > visible.length;
+    const laneEl = board.querySelector(`[data-lane="${lane}"]`);
+    if (!laneEl) return;
 
-    const laneEl = el('div', { class: `lane status-${lane}` }, [
-      el('div', { class: 'laneHeader' }, [
-        el('span', { class: 'dot' }),
-        el('strong', {}, [LANE_LABELS[lane]]),
-        el('span', { class: 'count' }, [String(items.length)]),
-      ]),
-      el('div', { class: 'laneBody' },
-        visible.length === 0
-          ? [el('div', { class: 'empty' }, ['No entries'])]
-          : [
-            ...visible.map(r => cardEl(r)),
-            ...(hasMore ? [el('button', {
-              class: 'moreBtn', onclick: () => {
-                showCount[lane] = (showCount[lane] || PAGE_SIZE) + PAGE_SIZE;
-                if (lastBuckets) renderBoard(lastBuckets);
-              }
-            }, ['Display more\u2026'])] : []),
-          ]
-      ),
-    ]);
+    /* Update header count */
+    const countEl = laneEl.querySelector('.laneHeader .count');
+    if (countEl) countEl.textContent = String(items.length);
 
-    board.appendChild(laneEl);
+    const laneBody = laneEl.querySelector('.laneBody');
+    if (!laneBody) return;
+
+    const oldMap = laneCardMaps.get(lane) || new Map();
+    const newMap = new Map();
+    const desiredKeys = visible.map(r => cardKey(r));
+    const desiredSet = new Set(desiredKeys);
+
+    /* Remove cards no longer present */
+    for (const [key, cardDom] of oldMap) {
+      if (!desiredSet.has(key)) {
+        cardDom.remove();
+      }
+    }
+
+    /* Remove "more" button and empty message (will re-add if needed) */
+    laneBody.querySelectorAll('.moreBtn, .empty').forEach(n => n.remove());
+
+    /* Add/update cards in order */
+    let prevNode = null;
+    for (let i = 0; i < visible.length; i++) {
+      const r = visible[i];
+      const key = cardKey(r);
+      const fp = cardFingerprint(r);
+      let cardDom = oldMap.get(key);
+
+      if (cardDom) {
+        /* Card exists - check if data changed */
+        if (cardDom.dataset.fp !== fp) {
+          /* Data changed - replace with fresh card */
+          const newCard = cardEl(r);
+          newCard.dataset.cardKey = key;
+          newCard.dataset.fp = fp;
+          if (COLLAPSED) newCard.classList.add('collapsed');
+          cardDom.replaceWith(newCard);
+          cardDom = newCard;
+        }
+        newMap.set(key, cardDom);
+      } else {
+        /* New card */
+        cardDom = cardEl(r);
+        cardDom.dataset.cardKey = key;
+        cardDom.dataset.fp = fp;
+        if (COLLAPSED) cardDom.classList.add('collapsed');
+        newMap.set(key, cardDom);
+      }
+
+      /* Ensure correct order in DOM */
+      const expectedAfter = prevNode;
+      const actualPrev = cardDom.previousElementSibling;
+      if (actualPrev !== expectedAfter || !cardDom.parentNode) {
+        if (expectedAfter) {
+          expectedAfter.after(cardDom);
+        } else {
+          laneBody.prepend(cardDom);
+        }
+      }
+      prevNode = cardDom;
+    }
+
+    /* Empty state */
+    if (visible.length === 0) {
+      laneBody.appendChild(el('div', { class: 'empty' }, [t('sched.noEntries')]));
+    }
+
+    /* "More" button */
+    if (items.length > visible.length) {
+      laneBody.appendChild(moreBtn(lane));
+    }
+
+    laneCardMaps.set(lane, newMap);
   });
 
-  if (COLLAPSED) $$('.card', board).forEach(c => c.classList.add('collapsed'));
+  startClock();
+}
 
-  /* restart countdown clock */
+function moreBtn(lane) {
+  return el('button', {
+    class: 'moreBtn', onclick: () => {
+      showCount[lane] = (showCount[lane] || PAGE_SIZE) + PAGE_SIZE;
+      if (lastBuckets) renderBoard(lastBuckets);
+    }
+  }, [t('sched.displayMore')]);
+}
+
+function startClock() {
   if (clockTimer) clearInterval(clockTimer);
   clockTimer = setInterval(updateCountdowns, 1000);
 }
@@ -284,12 +411,12 @@ function cardEl(r) {
   const chips = [];
   if (r.hostname) chips.push(chipEl(r.hostname, 195));
   if (r.ip) chips.push(chipEl(r.ip, 195));
-  if (r.port) chips.push(chipEl(`Port ${r.port}`, 210, 'Port'));
+  if (r.port) chips.push(chipEl(`${t('sched.port')} ${r.port}`, 210, t('sched.port')));
   if (r.mac) chips.push(chipEl(r.mac, 195));
   if (chips.length) children.push(el('div', { class: 'chips' }, chips));
 
   /* service kv */
-  if (r.service) children.push(el('div', { class: 'kv' }, [el('span', {}, [`Svc: ${r.service}`])]));
+  if (r.service) children.push(el('div', { class: 'kv' }, [el('span', {}, [`${t('sched.service')}: ${r.service}`])]));
 
   /* tags */
   if (r.tags?.length) {
@@ -300,33 +427,33 @@ function cardEl(r) {
   /* timer */
   if ((cs === 'upcoming' || (cs === 'pending' && r.scheduled_ms > Date.now())) && r.scheduled_ms) {
     children.push(el('div', { class: 'timer', 'data-type': 'start', 'data-ts': String(r.scheduled_ms) }, [
-      'Eligible in ', el('span', { class: 'cd' }, ['-']),
+      t('sched.eligibleIn') + ' ', el('span', { class: 'cd' }, ['-']),
     ]));
     children.push(el('div', { class: 'progress' }, [
       el('div', { class: 'bar', 'data-start': String(r.created_ms), 'data-end': String(r.scheduled_ms), style: 'width:0%' }),
     ]));
   } else if (cs === 'running' && r.started_ms) {
     children.push(el('div', { class: 'timer', 'data-type': 'elapsed', 'data-ts': String(r.started_ms) }, [
-      'Elapsed ', el('span', { class: 'cd' }, ['-']),
+      t('sched.elapsed') + ' ', el('span', { class: 'cd' }, ['-']),
     ]));
   }
 
   /* meta */
-  const meta = [el('span', {}, [`created: ${fmt(r.created_at)}`])];
-  if (r.started_at) meta.push(el('span', {}, [`started: ${fmt(r.started_at)}`]));
-  if (r.completed_at) meta.push(el('span', {}, [`done: ${fmt(r.completed_at)}`]));
+  const meta = [el('span', {}, [`${t('sched.created')}: ${fmt(r.created_at)}`])];
+  if (r.started_at) meta.push(el('span', {}, [`${t('sched.started')}: ${fmt(r.started_at)}`]));
+  if (r.completed_at) meta.push(el('span', {}, [`${t('sched.done')}: ${fmt(r.completed_at)}`]));
   if (r.retry_count > 0) meta.push(el('span', { class: 'chip', style: '--h:30' }, [
-    `retries ${r.retry_count}${r.max_retries != null ? '/' + r.max_retries : ''}`]));
-  if (r.priority_effective) meta.push(el('span', {}, [`prio: ${r.priority_effective}`]));
+    `${t('sched.retries')} ${r.retry_count}${r.max_retries != null ? '/' + r.max_retries : ''}`]));
+  if (r.priority_effective) meta.push(el('span', {}, [`${t('sched.priority')}: ${r.priority_effective}`]));
   children.push(el('div', { class: 'meta' }, meta));
 
   /* buttons */
   const btns = [];
   if (['upcoming', 'scheduled', 'pending', 'running'].includes(r.status)) {
-    btns.push(el('button', { class: 'btn warn', onclick: () => queueCmd(r.id, 'cancel') }, ['Cancel']));
+    btns.push(el('button', { class: 'btn warn', onclick: () => queueCmd(r.id, 'cancel') }, [t('common.cancel')]));
   }
   if (!['running', 'pending', 'scheduled'].includes(r.status)) {
-    btns.push(el('button', { class: 'btn danger', onclick: () => queueCmd(r.id, 'delete') }, ['Delete']));
+    btns.push(el('button', { class: 'btn danger', onclick: () => queueCmd(r.id, 'delete') }, [t('common.delete')]));
   }
   if (btns.length) children.push(el('div', { class: 'btns' }, btns));
 
@@ -354,7 +481,7 @@ function updateCountdowns() {
     if (!cd || !ts) return;
     if (type === 'start') {
       const diff = ts - now;
-      cd.textContent = diff <= 0 ? 'due' : ms2str(diff);
+      cd.textContent = diff <= 0 ? t('sched.due') : ms2str(diff);
     } else if (type === 'elapsed') {
       cd.textContent = ms2str(now - ts);
     }
@@ -374,7 +501,7 @@ async function queueCmd(id, cmd) {
     await api.post('/queue_cmd', { id, cmd });
     tick();
   } catch (e) {
-    showError('Command failed: ' + e.message);
+    showError(t('sched.cmdFailed') + ': ' + e.message);
   }
 }
 
@@ -387,7 +514,7 @@ async function openHistory(action, mac, port) {
 
   if (title) title.textContent = `\u2014 ${action} \u00B7 ${mac}${port && port !== 0 ? ` \u00B7 port ${port}` : ''}`;
   empty(body);
-  body.appendChild(el('div', { class: 'empty' }, ['Loading\u2026']));
+  body.appendChild(el('div', { class: 'empty' }, [t('common.loading')]));
   modal.style.display = 'flex';
   modal.setAttribute('aria-hidden', 'false');
 
@@ -398,7 +525,7 @@ async function openHistory(action, mac, port) {
 
     empty(body);
     if (!rows.length) {
-      body.appendChild(el('div', { class: 'empty' }, ['No history']));
+      body.appendChild(el('div', { class: 'empty' }, [t('sched.noHistory')]));
       return;
     }
 
@@ -412,7 +539,7 @@ async function openHistory(action, mac, port) {
     norm.forEach(hr => {
       const st = hr.status || 'unknown';
       const retry = (hr.retry_count || hr.max_retries != null)
-        ? el('span', { style: 'color:var(--ink)' }, [`retry ${hr.retry_count}${hr.max_retries != null ? '/' + hr.max_retries : ''}`])
+        ? el('span', { style: 'color:var(--ink)' }, [`${t('sched.retry')} ${hr.retry_count}${hr.max_retries != null ? '/' + hr.max_retries : ''}`])
         : null;
 
       body.appendChild(el('div', { class: `histRow hist-${st}` }, [
@@ -424,7 +551,7 @@ async function openHistory(action, mac, port) {
     });
   } catch (e) {
     empty(body);
-    body.appendChild(el('div', { class: 'empty' }, [`Error: ${e.message}`]));
+    body.appendChild(el('div', { class: 'empty' }, [`${t('common.error')}: ${e.message}`]));
   }
 }
 
@@ -450,7 +577,7 @@ function setLive(on) {
 function toggleCollapse() {
   COLLAPSED = !COLLAPSED;
   const btn = $('#sched-colBtn');
-  if (btn) btn.textContent = COLLAPSED ? 'Expand' : 'Collapse';
+  if (btn) btn.textContent = COLLAPSED ? t('sched.expand') : t('sched.collapse');
   $$('#sched-board .card').forEach(c => c.classList.toggle('collapsed', COLLAPSED));
 }
 
@@ -459,7 +586,7 @@ function toggleSuperseded() {
   const btn = $('#sched-supBtn');
   if (btn) {
     btn.classList.toggle('active', INCLUDE_SUPERSEDED);
-    btn.textContent = INCLUDE_SUPERSEDED ? '- superseded' : '+ superseded';
+    btn.textContent = INCLUDE_SUPERSEDED ? t('sched.hideSuperseded') : t('sched.showSuperseded');
   }
   lastFilterKey = '';
   tick();
@@ -482,7 +609,6 @@ function showError(msg) {
 /* ── icon resolution ── */
 function resolveIconSync(name) {
   if (iconCache.has(name)) return iconCache.get(name);
-  /* async resolve, return default for now */
   resolveIconAsync(name);
   return '/actions/actions_icons/default.png';
 }

@@ -30,6 +30,8 @@ let showLabels = true;
 let searchTerm = '';
 let searchDebounce = null;
 let currentSortState = { column: -1, direction: 'asc' };
+let prevNetworkFingerprint = '';
+let stickyLevel = 0; /* 0=off, 1=col1, 2=col1+2, 3=col1+2 (max for 2-col table) */
 
 /* D3 state */
 let d3Module = null;
@@ -53,6 +55,7 @@ export async function mount(container) {
   tracker = new ResourceTracker(PAGE);
 
   viewMode = getPref('nv:view', 'table');
+  if (!['table', 'map'].includes(viewMode)) viewMode = 'table';
   showLabels = getPref('nv:showHostname', 'true') === 'true';
   const savedSearch = getPref('nv:search', '');
   if (savedSearch) searchTerm = savedSearch.toLowerCase();
@@ -68,6 +71,7 @@ export async function mount(container) {
 
 export function unmount() {
   clearTimeout(searchDebounce);
+  searchDebounce = null;
   if (poller) { poller.stop(); poller = null; }
   if (simulation) { simulation.stop(); simulation = null; }
   if (tracker) { tracker.cleanupAll(); tracker = null; }
@@ -81,17 +85,25 @@ export function unmount() {
   nodeGroup = null;
   linkGroup = null;
   labelsGroup = null;
+  currentSortState = { column: -1, direction: 'asc' };
+  searchTerm = '';
+  prevNetworkFingerprint = '';
 }
 
 /* ── data fetch ── */
 async function refresh() {
   try {
     const html = await api.get('/network_data', { timeout: 8000 });
-    if (typeof html !== 'string') return;
-    networkData = parseNetworkHTML(html);
+    if (typeof html !== 'string' || !tracker) return;
+    const parsed = parseNetworkHTML(html);
+    /* Skip DOM rebuild when data unchanged */
+    const fp = parsed.map(r => `${r.hostname}|${r.ip}|${r.mac}|${(r.ports||[]).join(',')}`).join(';');
+    if (fp === prevNetworkFingerprint) return;
+    prevNetworkFingerprint = fp;
+    networkData = parsed;
     renderTable();
     applySearchToTable();
-    if (mapInitialized) updateMapFromData(networkData);
+    if (mapInitialized && simulation) updateMapFromData(networkData);
   } catch (err) {
     console.warn(`[${PAGE}]`, err.message);
   }
@@ -135,7 +147,7 @@ function buildShell(savedSearch) {
           }),
           el('button', {
             class: 'nv-search-clear', id: 'nv-searchClear', type: 'button',
-            'aria-label': 'Clear', onclick: clearSearch
+            'aria-label': t('common.clear'), onclick: clearSearch
           }, ['\u2715']),
         ]),
         el('div', { class: 'segmented', id: 'viewSeg' }, [
@@ -168,13 +180,21 @@ function buildShell(savedSearch) {
 /* ── search ── */
 function onSearchInput(e) {
   clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => {
-    searchTerm = e.target.value.trim().toLowerCase();
-    setPref('nv:search', searchTerm);
-    applySearchToTable();
-    applySearchToMap();
-    syncClearBtn();
-  }, 120);
+  searchDebounce = tracker
+    ? tracker.trackTimeout(() => {
+        searchTerm = e.target.value.trim().toLowerCase();
+        setPref('nv:search', searchTerm);
+        applySearchToTable();
+        applySearchToMap();
+        syncClearBtn();
+      }, 120)
+    : setTimeout(() => {
+        searchTerm = e.target.value.trim().toLowerCase();
+        setPref('nv:search', searchTerm);
+        applySearchToTable();
+        applySearchToMap();
+        syncClearBtn();
+      }, 120);
 }
 
 function clearSearch() {
@@ -212,6 +232,7 @@ function applySearchToMap() {
 
 /* ── view ── */
 function setView(mode) {
+  if (!['table', 'map'].includes(mode)) return;
   viewMode = mode;
   setPref('nv:view', mode);
   syncViewUI();
@@ -219,9 +240,14 @@ function setView(mode) {
 }
 
 function syncViewUI() {
+  const root = $('.network-container');
   const tableWrap = $('#table-wrap');
   const mapContainer = $('#visualization-container');
   const hostSwitch = $('#hostSwitch');
+  if (root) {
+    root.classList.toggle('is-table-view', viewMode === 'table');
+    root.classList.toggle('is-map-view', viewMode === 'map');
+  }
   if (tableWrap) tableWrap.style.display = viewMode === 'table' ? 'block' : 'none';
   if (mapContainer) mapContainer.style.display = viewMode === 'map' ? 'block' : 'none';
   if (hostSwitch) hostSwitch.style.display = viewMode === 'map' ? 'inline-flex' : 'none';
@@ -250,10 +276,20 @@ function renderTable() {
     return;
   }
 
+  const pinBtn = el('button', {
+    class: 'nv-pin-btn',
+    title: L('network.toggleSticky', 'Pin columns'),
+    onclick: () => cycleStickyLevel(),
+  }, ['\uD83D\uDCCC']);
+  if (stickyLevel > 0) pinBtn.classList.add('active');
+
   const thead = el('thead', {}, [
     el('tr', {}, [
-      el('th', { class: 'hosts-header' }, [L('common.hosts', 'Hosts')]),
-      el('th', {}, [L('common.ports', 'Ports')]),
+      el('th', { class: 'hosts-header' }, [
+        L('common.hosts', 'Hosts'),
+        el('span', { style: 'display:inline-flex;margin-left:6px;vertical-align:middle' }, [pinBtn]),
+      ]),
+      el('th', { class: 'ports-header' }, [L('common.ports', 'Ports')]),
     ]),
   ]);
 
@@ -264,20 +300,70 @@ function renderTable() {
     if (item.mac) hostBubbles.push(el('span', { class: 'bubble mac-address' }, [item.mac]));
     if (item.vendor) hostBubbles.push(el('span', { class: 'bubble vendor' }, [item.vendor]));
     if (item.essid) hostBubbles.push(el('span', { class: 'bubble essid' }, [item.essid]));
+    if (hostBubbles.length === 0) hostBubbles.push(el('span', { class: 'bubble bubble-empty' }, [t('network.unknownHost')]));
 
-    const portBubbles = item.ports.map(p => el('span', { class: 'port-bubble' }, [p]));
+    const portBubbles = item.ports.length
+      ? item.ports.map(p => el('span', { class: 'port-bubble' }, [p]))
+      : [el('span', { class: 'port-bubble is-empty' }, [L('common.none', 'None')])];
 
     return el('tr', {}, [
       el('td', { class: 'hosts-cell' }, [el('div', { class: 'hosts-content' }, hostBubbles)]),
-      el('td', {}, [el('div', { class: 'ports-container' }, portBubbles)]),
+      el('td', { class: 'ports-cell' }, [el('div', { class: 'ports-container' }, portBubbles)]),
     ]);
   });
 
   const table = el('table', { class: 'network-table' }, [thead, el('tbody', {}, rows)]);
   wrap.appendChild(el('div', { class: 'table-inner' }, [table]));
+  applyStickyClasses();
 
   /* table sort */
   initTableSorting(table);
+  applyCurrentSort(table);
+}
+
+function cycleStickyLevel() {
+  stickyLevel = (stickyLevel + 1) % 3; /* 0 → 1 → 2 → 0 */
+  applyStickyClasses();
+}
+
+function applyStickyClasses() {
+  const table = document.querySelector('#network-table table');
+  if (!table) return;
+  const headers = table.querySelectorAll('thead th');
+  const rows = table.querySelectorAll('tbody tr');
+
+  /* update pin button state */
+  const pinBtn = table.querySelector('.nv-pin-btn');
+  if (pinBtn) {
+    pinBtn.classList.toggle('active', stickyLevel > 0);
+    pinBtn.textContent = stickyLevel > 0 ? `\uD83D\uDCCC${stickyLevel}` : '\uD83D\uDCCC';
+  }
+
+  /* reset all sticky */
+  headers.forEach(th => { th.classList.remove('nv-sticky-col'); th.style.left = ''; });
+  rows.forEach(tr => {
+    tr.querySelectorAll('td').forEach(td => { td.classList.remove('nv-sticky-col'); td.style.left = ''; });
+  });
+
+  if (stickyLevel === 0) return;
+
+  /* measure column widths */
+  const firstRow = table.querySelector('tbody tr');
+  if (!firstRow) return;
+  const cells = firstRow.querySelectorAll('td');
+  let leftOffset = 0;
+
+  for (let col = 0; col < Math.min(stickyLevel, headers.length); col++) {
+    const th = headers[col];
+    const w = cells[col] ? cells[col].offsetWidth : th.offsetWidth;
+    th.classList.add('nv-sticky-col');
+    th.style.left = leftOffset + 'px';
+    rows.forEach(tr => {
+      const td = tr.children[col];
+      if (td) { td.classList.add('nv-sticky-col'); td.style.left = leftOffset + 'px'; }
+    });
+    leftOffset += w;
+  }
 }
 
 function initTableSorting(table) {
@@ -293,16 +379,31 @@ function initTableSorting(table) {
         currentSortState.direction = 'asc';
       }
       h.classList.add(`sort-${currentSortState.direction}`);
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
-      rows.sort((a, b) => {
-        const A = a.querySelectorAll('td')[idx]?.textContent.trim().toLowerCase() || '';
-        const B = b.querySelectorAll('td')[idx]?.textContent.trim().toLowerCase() || '';
-        return currentSortState.direction === 'asc' ? A.localeCompare(B) : B.localeCompare(A);
-      });
-      rows.forEach(r => tbody.appendChild(r));
+      sortTable(table, idx, currentSortState.direction);
     });
   });
+}
+
+function applyCurrentSort(table) {
+  if (!table) return;
+  if (currentSortState.column < 0) return;
+  const headers = Array.from(table.querySelectorAll('th'));
+  headers.forEach(x => x.classList.remove('sort-asc', 'sort-desc'));
+  const active = headers[currentSortState.column];
+  if (active) active.classList.add(`sort-${currentSortState.direction}`);
+  sortTable(table, currentSortState.column, currentSortState.direction);
+}
+
+function sortTable(table, colIndex, direction) {
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  rows.sort((a, b) => {
+    const A = a.querySelectorAll('td')[colIndex]?.textContent.trim().toLowerCase() || '';
+    const B = b.querySelectorAll('td')[colIndex]?.textContent.trim().toLowerCase() || '';
+    return direction === 'asc' ? A.localeCompare(B) : B.localeCompare(A);
+  });
+  rows.forEach(r => tbody.appendChild(r));
 }
 
 /* ── D3 Map ── */
@@ -321,7 +422,7 @@ async function initMap() {
       if (!d3Module) throw new Error('window.d3 unavailable');
     } catch (e) {
       console.warn('[network] D3 not available:', e.message);
-      container.appendChild(el('div', { class: 'network-empty' }, ['D3 library not available for map view.']));
+      container.appendChild(el('div', { class: 'network-empty' }, [t('network.d3Unavailable')]));
       return;
     }
   }
@@ -420,6 +521,7 @@ function updateMapFromData(data) {
   incomingNodes.set('bjorn', { id: 'bjorn', type: 'bjorn', r: 50, label: 'BJORN' });
 
   data.forEach(h => {
+    if (!h?.ip) return;
     const hasPorts = h.ports && h.ports.length > 0;
     const isGateway = h.ip.endsWith('.1') || h.ip.endsWith('.254');
     const type = isGateway ? 'gateway' : (hasPorts ? 'host_active' : 'host_empty');
@@ -556,7 +658,7 @@ function showTooltip(e, d) {
   if (d.type === 'loot') {
     tt.appendChild(el('div', {}, [`\u{1F4B0} Port ${d.label}`]));
   } else {
-    tt.appendChild(el('div', { style: 'color:var(--accent1);font-weight:bold;margin-bottom:5px' }, [d.label]));
+    tt.appendChild(el('div', { style: 'color:var(--acid);font-weight:bold;margin-bottom:5px' }, [d.label]));
     if (d.ip && d.ip !== d.label) tt.appendChild(el('div', {}, [d.ip]));
     if (d.vendor) tt.appendChild(el('div', { style: 'opacity:0.8;font-size:0.8em' }, [d.vendor]));
   }

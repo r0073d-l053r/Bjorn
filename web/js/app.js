@@ -57,8 +57,11 @@ function bootUI() {
   router.route('/backup', () => import('./pages/backup.js'));
   router.route('/web-enum', () => import('./pages/web-enum.js'));
   router.route('/zombieland', () => import('./pages/zombieland.js'));
-  router.route('/ai-dashboard', () => import('./pages/rl-dashboard.js?t=' + Date.now()));
+  router.route('/ai-dashboard', () => import('./pages/rl-dashboard.js'));
   router.route('/bjorn-debug', () => import('./pages/bjorn-debug.js'));
+  router.route('/sentinel', () => import('./pages/sentinel.js'));
+  router.route('/bifrost', () => import('./pages/bifrost.js'));
+  router.route('/loki', () => import('./pages/loki.js'));
   router.route('/bjorn', () => import('./pages/bjorn.js'));
 
   // 404 fallback
@@ -408,6 +411,9 @@ const PAGES = [
   { path: '/backup', icon: 'backup_update.png', label: 'nav.backup' },
   { path: '/web-enum', icon: 'web_enum.png', label: 'nav.webEnum' },
   { path: '/zombieland', icon: 'zombieland.png', label: 'nav.zombieland' },
+  { path: '/sentinel', icon: 'network.png', label: 'nav.sentinel' },
+  { path: '/bifrost', icon: 'network.png', label: 'nav.bifrost' },
+  { path: '/loki', icon: 'actions_launcher.png', label: 'nav.loki' },
   { path: '/ai-dashboard', icon: 'ai_dashboard.png', label: 'nav.ai_dashboard' },
   { path: '/bjorn-debug', icon: 'database.png', label: 'Bjorn Debug' },
 ];
@@ -598,6 +604,11 @@ function wireSettingsModal() {
       const panel = modal.querySelector(`#tab-${tabId}`);
       if (panel) panel.hidden = false;
       if (tabId === 'config') settingsConfig.loadConfig(cfgHost);
+      if (tabId === 'theme') {
+        theme.disableOverlay();
+      } else {
+        theme.restoreOverlay();
+      }
     });
 
     // Notifications switch
@@ -627,6 +638,7 @@ function toggleSettings() {
 
   const isOpen = backdrop.style.display === 'flex';
   if (isOpen) {
+    theme.restoreOverlay();
     backdrop.style.display = 'none';
     backdrop.setAttribute('aria-hidden', 'true');
   } else {

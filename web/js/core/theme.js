@@ -7,6 +7,8 @@
  *  - User custom overrides persisted to localStorage
  *  - Theme editor with color pickers + raw CSS textarea
  *  - Icon pack switching via icon registry
+ *  - Import / Export themes as JSON
+ *  - Live preview: overlay disabled while Theme tab is active
  */
 
 import { t } from './i18n.js';
@@ -29,9 +31,17 @@ const DEFAULT_THEME = {
   '--accent-2': '#18d6ff',
   '--c-border': '#00ffff22',
   '--c-border-strong': '#00ffff33',
+  '--c-border-hi': '#00ffff44',
   '--panel': '#0e1717',
   '--panel-2': '#101c1c',
   '--c-panel': '#0b1218',
+  '--c-panel-2': '#0a1118',
+  '--c-btn': '#0d151c',
+  '--switch-track': '#111111',
+  '--switch-on-bg': '#022a1a',
+  '--sb-track': '#07121a',
+  '--sb-thumb': '#09372b',
+  '--glass-8': '#00000088',
   '--radius': '14px'
 };
 
@@ -41,9 +51,13 @@ const TOKEN_GROUPS = [
     label: 'theme.group.colors',
     tokens: [
       { key: '--bg', label: 'theme.token.bg', type: 'color' },
+      { key: '--bg-2', label: 'theme.token.bg2', type: 'color' },
       { key: '--ink', label: 'theme.token.ink', type: 'color' },
+      { key: '--muted', label: 'theme.token.muted', type: 'color' },
       { key: '--acid', label: 'theme.token.accent1', type: 'color' },
       { key: '--acid-2', label: 'theme.token.accent2', type: 'color' },
+      { key: '--accent', label: 'theme.token.accent', type: 'color' },
+      { key: '--accent-2', label: 'theme.token.accentAlt', type: 'color' },
       { key: '--danger', label: 'theme.token.danger', type: 'color' },
       { key: '--warning', label: 'theme.token.warning', type: 'color' },
       { key: '--ok', label: 'theme.token.ok', type: 'color' },
@@ -55,7 +69,26 @@ const TOKEN_GROUPS = [
       { key: '--panel', label: 'theme.token.panel', type: 'color' },
       { key: '--panel-2', label: 'theme.token.panel2', type: 'color' },
       { key: '--c-panel', label: 'theme.token.ctrlPanel', type: 'color' },
+      { key: '--c-panel-2', label: 'theme.token.ctrlPanel2', type: 'color' },
+      { key: '--c-btn', label: 'theme.token.btnBg', type: 'color' },
+    ]
+  },
+  {
+    label: 'theme.group.borders',
+    tokens: [
       { key: '--c-border', label: 'theme.token.border', type: 'color' },
+      { key: '--c-border-strong', label: 'theme.token.borderStrong', type: 'color' },
+      { key: '--c-border-hi', label: 'theme.token.borderHi', type: 'color' },
+    ]
+  },
+  {
+    label: 'theme.group.controls',
+    tokens: [
+      { key: '--switch-track', label: 'theme.token.switchTrack', type: 'color' },
+      { key: '--switch-on-bg', label: 'theme.token.switchOnBg', type: 'color' },
+      { key: '--sb-track', label: 'theme.token.scrollTrack', type: 'color' },
+      { key: '--sb-thumb', label: 'theme.token.scrollThumb', type: 'color' },
+      { key: '--glass-8', label: 'theme.token.glass', type: 'color' },
     ]
   },
   {
@@ -144,6 +177,60 @@ export function getCurrentOverrides() {
   return { ...DEFAULT_THEME, ..._userOverrides };
 }
 
+/* -- Import / Export -- */
+
+/** Export current theme as JSON string */
+export function exportTheme() {
+  return JSON.stringify(_userOverrides, null, 2);
+}
+
+/** Import theme from JSON string */
+export function importTheme(json) {
+  try {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid');
+    _userOverrides = parsed;
+    persist();
+    applyToDOM();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* -- Overlay management for live preview -- */
+
+let _overlayWasVisible = false;
+
+/** Disable the settings backdrop overlay so theme changes are visible live */
+export function disableOverlay() {
+  const backdrop = document.getElementById('settingsBackdrop');
+  if (!backdrop) return;
+  _overlayWasVisible = true;
+  backdrop.style.background = 'transparent';
+  const modal = backdrop.querySelector('.modal');
+  if (modal) {
+    modal.style.boxShadow = '0 0 0 2px var(--acid), 0 20px 60px rgba(0,0,0,.6)';
+    modal.style.maxHeight = '70vh';
+    modal.style.overflow = 'auto';
+  }
+}
+
+/** Restore the overlay when leaving theme tab */
+export function restoreOverlay() {
+  if (!_overlayWasVisible) return;
+  const backdrop = document.getElementById('settingsBackdrop');
+  if (!backdrop) return;
+  backdrop.style.background = '';
+  const modal = backdrop.querySelector('.modal');
+  if (modal) {
+    modal.style.boxShadow = '';
+    modal.style.maxHeight = '';
+    modal.style.overflow = '';
+  }
+  _overlayWasVisible = false;
+}
+
 /* -- Icon registry -- */
 
 /**
@@ -179,6 +266,9 @@ export function setIconPack(name) {
  */
 export function mountEditor(container) {
   container.innerHTML = '';
+
+  /* Disable overlay for live preview */
+  disableOverlay();
 
   const current = getCurrentOverrides();
 
@@ -243,17 +333,61 @@ export function mountEditor(container) {
   });
   advSection.appendChild(applyBtn);
 
-  // Reset button
+  container.appendChild(advSection);
+
+  // Import / Export / Reset buttons
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'theme-actions';
+
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'btn btn-sm';
+  exportBtn.textContent = t('theme.export');
+  exportBtn.addEventListener('click', () => {
+    const blob = new Blob([exportTheme()], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bjorn-theme.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+  actionsRow.appendChild(exportBtn);
+
+  const importBtn = document.createElement('button');
+  importBtn.className = 'btn btn-sm';
+  importBtn.textContent = t('theme.import');
+  importBtn.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const ok = importTheme(reader.result);
+        if (ok) {
+          mountEditor(container);
+        } else {
+          alert(t('theme.importError'));
+        }
+      };
+      reader.readAsText(file);
+    });
+    input.click();
+  });
+  actionsRow.appendChild(importBtn);
+
   const resetBtn = document.createElement('button');
   resetBtn.className = 'btn btn-sm btn-danger';
   resetBtn.textContent = t('theme.reset');
   resetBtn.addEventListener('click', () => {
     resetToDefault();
-    mountEditor(container); // Re-render editor
+    mountEditor(container);
   });
-  advSection.appendChild(resetBtn);
+  actionsRow.appendChild(resetBtn);
 
-  container.appendChild(advSection);
+  container.appendChild(actionsRow);
 }
 
 /** Parse raw CSS var declarations from textarea */

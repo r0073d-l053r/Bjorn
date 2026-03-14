@@ -9,6 +9,7 @@ import subprocess
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 from logger import Logger
 
@@ -22,68 +23,57 @@ class SystemUtils:
         self.logger = logger
         self.shared_data = shared_data
 
+    def _send_json(self, handler, data, status=200):
+        """Send a JSON response (helper to reduce boilerplate)."""
+        handler.send_response(status)
+        handler.send_header("Content-type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(json.dumps(data).encode('utf-8'))
+
     def reboot_system(self, handler):
         """Reboot the system."""
         try:
-            command = "sudo reboot"
-            subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "System is rebooting"}).encode('utf-8'))
-        except subprocess.CalledProcessError as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+            subprocess.Popen(["sudo", "reboot"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self._send_json(handler, {"status": "success", "message": "System is rebooting"})
+        except Exception as e:
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def shutdown_system(self, handler):
         """Shutdown the system."""
         try:
-            command = "sudo shutdown now"
-            subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "System is shutting down"}).encode('utf-8'))
-        except subprocess.CalledProcessError as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+            subprocess.Popen(["sudo", "shutdown", "now"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self._send_json(handler, {"status": "success", "message": "System is shutting down"})
+        except Exception as e:
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def restart_bjorn_service(self, handler):
         """Restart the Bjorn service."""
         if not hasattr(handler, 'send_response'):
             raise TypeError("Invalid handler passed. Expected an HTTP handler.")
-        
+
         try:
-            command = "sudo systemctl restart bjorn.service"
-            subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "Bjorn service restarted successfully"}).encode('utf-8'))
-        except subprocess.CalledProcessError as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+            subprocess.Popen(["sudo", "systemctl", "restart", "bjorn.service"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self._send_json(handler, {"status": "success", "message": "Bjorn service restarted successfully"})
+        except Exception as e:
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def clear_logs(self, handler):
         """Clear logs directory contents."""
         try:
-            command = "sudo rm -rf data/logs/*"
-            subprocess.Popen(command, shell=True)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "Logs cleared successfully"}).encode('utf-8'))
+            logs_dir = os.path.join(self.shared_data.current_dir, "data", "logs")
+            if os.path.isdir(logs_dir):
+                for entry in os.scandir(logs_dir):
+                    try:
+                        if entry.is_file() or entry.is_symlink():
+                            os.remove(entry.path)
+                        elif entry.is_dir():
+                            import shutil
+                            shutil.rmtree(entry.path)
+                    except OSError as e:
+                        self.logger.warning(f"Failed to remove {entry.path}: {e}")
+            self._send_json(handler, {"status": "success", "message": "Logs cleared successfully"})
         except Exception as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def initialize_db(self, handler):
         """Initialize or prepare database schema."""
@@ -91,15 +81,9 @@ class SystemUtils:
             self.shared_data.sync_actions_to_database()
             self.shared_data.initialize_database()
             self.shared_data.initialize_statistics()
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "Database initialized successfully"}).encode("utf-8"))
+            self._send_json(handler, {"status": "success", "message": "Database initialized successfully"})
         except Exception as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode("utf-8"))
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def erase_bjorn_memories(self, handler):
         """Erase all Bjorn-related memories and restart service."""
@@ -148,15 +132,9 @@ class SystemUtils:
             db.update_livestats(0, 0, 0, 0)
             if restart:
                 self.restart_bjorn_service(handler)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "NetKB cleared in database"}).encode("utf-8"))
+            self._send_json(handler, {"status": "success", "message": "NetKB cleared in database"})
         except Exception as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode("utf-8"))
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def clear_livestatus(self, handler, restart=True):
         """Clear live status counters."""
@@ -164,15 +142,9 @@ class SystemUtils:
             self.shared_data.db.update_livestats(0, 0, 0, 0)
             if restart:
                 self.restart_bjorn_service(handler)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "Livestatus counters reset"}).encode("utf-8"))
+            self._send_json(handler, {"status": "success", "message": "Livestatus counters reset"})
         except Exception as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode("utf-8"))
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def clear_actions_file(self, handler, restart=True):
         """Clear actions table and resynchronize from modules."""
@@ -181,15 +153,9 @@ class SystemUtils:
             self.shared_data.generate_actions_json()
             if restart:
                 self.restart_bjorn_service(handler)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "Actions table refreshed"}).encode("utf-8"))
+            self._send_json(handler, {"status": "success", "message": "Actions table refreshed"})
         except Exception as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode("utf-8"))
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def clear_shared_config_json(self, handler, restart=True):
         """Reset configuration to defaults."""
@@ -198,15 +164,9 @@ class SystemUtils:
             self.shared_data.save_config()
             if restart:
                 self.restart_bjorn_service(handler)
-            handler.send_response(200)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "success", "message": "Configuration reset to defaults"}).encode("utf-8"))
+            self._send_json(handler, {"status": "success", "message": "Configuration reset to defaults"})
         except Exception as e:
-            handler.send_response(500)
-            handler.send_header("Content-type", "application/json")
-            handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode("utf-8"))
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def save_configuration(self, data):
         """Save configuration to database."""
@@ -258,7 +218,9 @@ class SystemUtils:
         try:
             log_file_path = self.shared_data.webconsolelog
             if not os.path.exists(log_file_path):
-                subprocess.Popen(f"sudo tail -f /home/bjorn/Bjorn/data/logs/* > {log_file_path}", shell=True)
+                # Create the log file if it doesn't exist; tail aggregation
+                # is handled by the bjorn service, not by shell piping.
+                Path(log_file_path).touch(exist_ok=True)
 
             with open(log_file_path, 'r') as log_file:
                 log_lines = log_file.readlines()
@@ -390,3 +352,116 @@ class SystemUtils:
             return
         except Exception as e:
             self.logger.error(f"check_console_autostart failed: {e}")
+
+    # ----------------------------------------------------------------
+    # EPD Layout API (EPD-01 / EPD-02)
+    # ----------------------------------------------------------------
+
+    def epd_get_layout(self, handler):
+        """GET /api/epd/layout — return current layout JSON.
+
+        Optional query param: ?epd_type=epd2in7
+        If provided, returns the layout for that EPD type (custom or built-in)
+        without changing the active device layout.
+        """
+        try:
+            from urllib.parse import parse_qs, urlparse
+            from display_layout import BUILTIN_LAYOUTS
+            query = parse_qs(urlparse(handler.path).query)
+            requested_type = query.get('epd_type', [''])[0]
+
+            layout = getattr(self.shared_data, 'display_layout', None)
+            if layout is None:
+                self._send_json(handler, {"status": "error", "message": "Layout engine not initialised"}, 503)
+                return
+
+            if requested_type and requested_type != self.shared_data.config.get('epd_type', ''):
+                # Return layout for the requested type without modifying active layout
+                custom_path = os.path.join(layout._custom_dir, f'{requested_type}.json')
+                if os.path.isfile(custom_path):
+                    import json as _json
+                    with open(custom_path, 'r') as f:
+                        self._send_json(handler, _json.load(f))
+                    return
+                # Fallback to built-in
+                base = requested_type.split('_')[0] if '_' in requested_type else requested_type
+                builtin = BUILTIN_LAYOUTS.get(requested_type) or BUILTIN_LAYOUTS.get(base)
+                if builtin:
+                    self._send_json(handler, builtin)
+                    return
+                self._send_json(handler, {"status": "error", "message": f"Unknown EPD type: {requested_type}"}, 404)
+                return
+
+            self._send_json(handler, layout.to_dict())
+        except Exception as e:
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
+
+    def epd_save_layout(self, handler, data):
+        """POST /api/epd/layout — save a custom layout."""
+        try:
+            layout = getattr(self.shared_data, 'display_layout', None)
+            if layout is None:
+                self._send_json(handler, {"status": "error", "message": "Layout engine not initialised"}, 503)
+                return
+            if not isinstance(data, dict) or 'meta' not in data or 'elements' not in data:
+                self._send_json(handler, {"status": "error", "message": "Invalid layout: must contain 'meta' and 'elements'"}, 400)
+                return
+            epd_type = data.get('meta', {}).get('epd_type') or None
+            layout.save_custom(data, epd_type=epd_type)
+            self._send_json(handler, {"status": "success", "message": "Layout saved"})
+        except Exception as e:
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
+
+    def epd_reset_layout(self, handler, data):
+        """POST /api/epd/layout/reset — reset to built-in default."""
+        try:
+            layout = getattr(self.shared_data, 'display_layout', None)
+            if layout is None:
+                self._send_json(handler, {"status": "error", "message": "Layout engine not initialised"}, 503)
+                return
+            epd_type = data.get('epd_type') if isinstance(data, dict) else None
+            layout.reset_to_default(epd_type=epd_type)
+            self._send_json(handler, {"status": "success", "message": "Layout reset to default"})
+        except Exception as e:
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
+
+    def epd_list_layouts(self, handler):
+        """GET /api/epd/layouts — list available EPD types and their layouts."""
+        try:
+            from display_layout import BUILTIN_LAYOUTS
+            result = {}
+            for epd_type, layout_dict in BUILTIN_LAYOUTS.items():
+                result[epd_type] = {
+                    "meta": layout_dict.get("meta", {}),
+                    "builtin": True,
+                }
+            # Check for custom overrides
+            layout = getattr(self.shared_data, 'display_layout', None)
+            if layout:
+                custom_dir = layout._custom_dir
+                if os.path.isdir(custom_dir):
+                    for fname in os.listdir(custom_dir):
+                        if fname.endswith('.json'):
+                            epd_name = fname[:-5]
+                            try:
+                                with open(os.path.join(custom_dir, fname), 'r') as f:
+                                    custom_data = json.load(f)
+                                if epd_name in result:
+                                    result[epd_name]["has_custom"] = True
+                                    result[epd_name]["custom_meta"] = custom_data.get("meta", {})
+                                else:
+                                    result[epd_name] = {
+                                        "meta": custom_data.get("meta", {}),
+                                        "builtin": False,
+                                        "has_custom": True,
+                                    }
+                            except Exception:
+                                pass
+            # Add current active type info
+            current_type = self.shared_data.config.get('epd_type', 'epd2in13_V4')
+            self._send_json(handler, {
+                "current_epd_type": current_type,
+                "layouts": result,
+            })
+        except Exception as e:
+            self._send_json(handler, {"status": "error", "message": str(e)}, 500)

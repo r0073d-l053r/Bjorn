@@ -144,6 +144,34 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/api/rl/stats': wu.rl.get_stats,
             '/api/rl/history': wu.rl.get_training_history,
             '/api/rl/experiences': wu.rl.get_recent_experiences,
+
+            # SENTINEL
+            '/api/sentinel/status': wu.sentinel.get_status,
+            '/api/sentinel/events': wu.sentinel.get_events,
+            '/api/sentinel/rules': wu.sentinel.get_rules,
+            '/api/sentinel/devices': wu.sentinel.get_devices,
+            '/api/sentinel/arp': wu.sentinel.get_arp_table,
+
+            # BIFROST
+            '/api/bifrost/status': wu.bifrost.get_status,
+            '/api/bifrost/networks': wu.bifrost.get_networks,
+            '/api/bifrost/handshakes': wu.bifrost.get_handshakes,
+            '/api/bifrost/activity': wu.bifrost.get_activity,
+            '/api/bifrost/epochs': wu.bifrost.get_epochs,
+            '/api/bifrost/stats': wu.bifrost.get_stats,
+            '/api/bifrost/plugins': wu.bifrost.get_plugins,
+
+            # LOKI
+            '/api/loki/status': wu.loki.get_status,
+            '/api/loki/scripts': wu.loki.get_scripts,
+            '/api/loki/script': wu.loki.get_script,
+            '/api/loki/jobs': wu.loki.get_jobs,
+            '/api/loki/payloads': wu.loki.get_payloads,
+            '/api/loki/layouts': wu.loki.get_layouts,
+
+            # EPD Layout
+            '/api/epd/layout': wu.system_utils.epd_get_layout,
+            '/api/epd/layouts': wu.system_utils.epd_list_layouts,
         }
 
         if debug_enabled:
@@ -207,11 +235,26 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             # SYSTEM
             '/save_config': wu.system_utils.save_configuration,
             # BLUETOOTH
-            '/connect_bluetooth': lambda d: wu.bluetooth_utils.connect_bluetooth(d.get('address')),
-            '/disconnect_bluetooth': lambda d: wu.bluetooth_utils.disconnect_bluetooth(d.get('address')),
-            '/forget_bluetooth': lambda d: wu.bluetooth_utils.forget_bluetooth(d.get('address')),
-            '/pair_bluetooth': lambda d: wu.bluetooth_utils.pair_bluetooth(d.get('address'), d.get('pin')),
-            '/trust_bluetooth': lambda d: wu.bluetooth_utils.trust_bluetooth(d.get('address')),
+            '/connect_bluetooth': lambda d: (
+                {"status": "error", "message": "Missing 'address' parameter"} if not d.get('address')
+                else wu.bluetooth_utils.connect_bluetooth(d['address'])
+            ),
+            '/disconnect_bluetooth': lambda d: (
+                {"status": "error", "message": "Missing 'address' parameter"} if not d.get('address')
+                else wu.bluetooth_utils.disconnect_bluetooth(d['address'])
+            ),
+            '/forget_bluetooth': lambda d: (
+                {"status": "error", "message": "Missing 'address' parameter"} if not d.get('address')
+                else wu.bluetooth_utils.forget_bluetooth(d['address'])
+            ),
+            '/pair_bluetooth': lambda d: (
+                {"status": "error", "message": "Missing 'address' parameter"} if not d.get('address')
+                else wu.bluetooth_utils.pair_bluetooth(d['address'], d.get('pin'))
+            ),
+            '/trust_bluetooth': lambda d: (
+                {"status": "error", "message": "Missing 'address' parameter"} if not d.get('address')
+                else wu.bluetooth_utils.trust_bluetooth(d['address'])
+            ),
             # SCRIPTS
             '/clear_script_output': wu.script_utils.clear_script_output,
             '/delete_script': wu.script_utils.delete_script,
@@ -246,6 +289,30 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/manual_scan': lambda d: wu.orchestrator_utils.execute_manual_scan(),
             '/start_orchestrator': lambda _: wu.orchestrator_utils.start_orchestrator(),
             '/stop_orchestrator': lambda _: wu.orchestrator_utils.stop_orchestrator(),
+            # SENTINEL
+            '/api/sentinel/toggle': wu.sentinel.toggle_sentinel,
+            '/api/sentinel/ack': wu.sentinel.acknowledge_event,
+            '/api/sentinel/clear': wu.sentinel.clear_events,
+            '/api/sentinel/rule': wu.sentinel.upsert_rule,
+            '/api/sentinel/rule/delete': wu.sentinel.delete_rule,
+            '/api/sentinel/device': wu.sentinel.update_device,
+            '/api/sentinel/notifiers': wu.sentinel.save_notifier_config,
+            # BIFROST
+            '/api/bifrost/toggle': wu.bifrost.toggle_bifrost,
+            '/api/bifrost/mode': wu.bifrost.set_mode,
+            '/api/bifrost/plugin/toggle': wu.bifrost.toggle_plugin,
+            '/api/bifrost/activity/clear': wu.bifrost.clear_activity,
+            '/api/bifrost/whitelist': wu.bifrost.update_whitelist,
+            # LOKI
+            '/api/loki/toggle': wu.loki.toggle_loki,
+            '/api/loki/script/save': wu.loki.save_script,
+            '/api/loki/script/delete': wu.loki.delete_script,
+            '/api/loki/script/run': wu.loki.run_script,
+            '/api/loki/job/cancel': wu.loki.cancel_job,
+            '/api/loki/jobs/clear': wu.loki.clear_jobs,
+            '/api/loki/quick': wu.loki.quick_type,
+            '/api/loki/install': wu.loki.install_gadget,
+            '/api/loki/reboot': wu.loki.reboot,
         }
 
         if debug_enabled:
@@ -299,6 +366,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/action/delete': lambda h, d: wu.action_utils.delete_action(h, d),
             '/actions/restore_defaults': lambda h, _: wu.action_utils.restore_defaults(h),
             '/actions/set_enabled': lambda h, d: wu.action_utils.set_action_enabled(h, d),
+            # EPD Layout
+            '/api/epd/layout': lambda h, d: wu.system_utils.epd_save_layout(h, d),
+            '/api/epd/layout/reset': lambda h, d: wu.system_utils.epd_reset_layout(h, d),
             # Legacy aliases
             'reboot': lambda h, _: wu.system_utils.reboot_system(h),
             'shutdown': lambda h, _: wu.system_utils.shutdown_system(h),
@@ -470,8 +540,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "/api/rl/stats",
                 "/api/rl/config",
                 "/api/rl/experiences",
-                "/api/rl/history"
-                ""
+                "/api/rl/history",
             ]
 
             # Si l'une des routes silencieuses est dans le message, on quitte la fonction sans rien écrire
@@ -488,6 +557,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     # ------------------------------------------------------------------------
     # DELETE REQUEST HANDLER
     # ------------------------------------------------------------------------
+    @staticmethod
+    def _is_valid_mac(mac):
+        """Validate MAC address format (XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX)."""
+        import re
+        if not mac or not isinstance(mac, str):
+            return False
+        return bool(re.fullmatch(r'([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}', mac))
+
     def do_DELETE(self):
         if self.shared_data.webauth and not self.is_authenticated():
             self._send_json({"status": "error", "message": "Unauthorized"}, 401)
@@ -495,11 +572,15 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
         try:
             if self.path.startswith('/api/studio/host/'):
-                mac = self.path.split('/api/studio/host/')[-1]
+                mac = unquote(self.path.split('/api/studio/host/')[-1])
             elif self.path.startswith('/studio/host/'):
-                mac = self.path.split('/studio/host/')[-1]
+                mac = unquote(self.path.split('/studio/host/')[-1])
             else:
                 super().do_GET()
+                return
+
+            if not self._is_valid_mac(mac):
+                self._send_json({"status": "error", "message": "Invalid MAC address format"}, 400)
                 return
 
             resp = self.web_utils.studio_utils.studio_delete_host({"mac_address": mac})

@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from PIL import Image, ImageDraw, ImageFont
 from init_shared import shared_data
 from logger import Logger
+from display_layout import DisplayLayout
 
 logger = Logger(name="display.py", level=logging.DEBUG)
 
@@ -166,6 +167,10 @@ class Display:
         self.config = self.shared_data.config
         self.epd_enabled = self.config.get("epd_enabled", True)
 
+        # Initialize display layout engine
+        self.layout = DisplayLayout(self.shared_data)
+        self.shared_data.display_layout = self.layout
+
         self.epd = self.shared_data.epd if self.epd_enabled else None
 
         if self.config.get("epd_type") == "epd2in13_V2":
@@ -304,7 +309,8 @@ class Display:
             image = Image.new('1', (self.shared_data.width, self.shared_data.height), 255)
             draw = ImageDraw.Draw(image)
 
-            draw.text((self.px(37), self.py(5)), "BJORN", font=self.shared_data.font_viking, fill=0)
+            title_pos = self.layout.get('title')
+            draw.text((self.px(title_pos.get('x', 37)), self.py(title_pos.get('y', 5))), "BJORN", font=self.shared_data.font_viking, fill=0)
 
             message = f"Awakening...\nIP: {ip_address}"
             draw.text(
@@ -349,14 +355,25 @@ class Display:
             return default
 
     def get_frise_position(self) -> Tuple[int, int]:
-        display_type = self.config.get("epd_type", "default")
-
-        if display_type == "epd2in7":
-            x = self._as_int(getattr(self.shared_data, "frise_epd2in7_x", 50), 50)
-            y = self._as_int(getattr(self.shared_data, "frise_epd2in7_y", 160), 160)
+        frise = self.layout.get('frise')
+        if frise:
+            # Layout-driven frise position; shared_data overrides still honoured
+            display_type = self.config.get("epd_type", "default")
+            if display_type == "epd2in7":
+                x = self._as_int(getattr(self.shared_data, "frise_epd2in7_x", frise.get('x', 50)), frise.get('x', 50))
+                y = self._as_int(getattr(self.shared_data, "frise_epd2in7_y", frise.get('y', 160)), frise.get('y', 160))
+            else:
+                x = self._as_int(getattr(self.shared_data, "frise_default_x", frise.get('x', 0)), frise.get('x', 0))
+                y = self._as_int(getattr(self.shared_data, "frise_default_y", frise.get('y', 160)), frise.get('y', 160))
         else:
-            x = self._as_int(getattr(self.shared_data, "frise_default_x", 0), 0)
-            y = self._as_int(getattr(self.shared_data, "frise_default_y", 160), 160)
+            # Fallback to original hardcoded logic
+            display_type = self.config.get("epd_type", "default")
+            if display_type == "epd2in7":
+                x = self._as_int(getattr(self.shared_data, "frise_epd2in7_x", 50), 50)
+                y = self._as_int(getattr(self.shared_data, "frise_epd2in7_y", 160), 160)
+            else:
+                x = self._as_int(getattr(self.shared_data, "frise_default_x", 0), 0)
+                y = self._as_int(getattr(self.shared_data, "frise_default_y", 160), 160)
 
         return self.px(x), self.py(y)
 
@@ -609,16 +626,18 @@ class Display:
         try:
             draw = ImageDraw.Draw(image)
 
-            draw.text((self.px(37), self.py(5)), self.bjorn_name, font=self.font_to_use, fill=0)
+            title_pos = self.layout.get('title')
+            draw.text((self.px(title_pos.get('x', 37)), self.py(title_pos.get('y', 5))), self.bjorn_name, font=self.font_to_use, fill=0)
 
             self._draw_connection_icons(image)
             self._draw_battery_status(image)
             self._draw_statistics(image, draw)
             self._draw_system_histogram(image, draw)
 
+            status_pos = self.layout.get('status_image')
             status_img = self.shared_data.bjorn_status_image or self.shared_data.attack
             if status_img is not None:
-                image.paste(status_img, (self.px(3), self.py(52)))
+                image.paste(status_img, (self.px(status_pos.get('x', 3)), self.py(status_pos.get('y', 52))))
 
             self._draw_status_text(draw)
             self._draw_decorations(image, draw)
@@ -635,12 +654,13 @@ class Display:
             raise
 
     def _draw_connection_icons(self, image: Image.Image):
+        wifi_pos = self.layout.get('wifi_icon')
         wifi_width = self.px(16)
         bluetooth_width = self.px(9)
         usb_width = self.px(9)
         ethernet_width = self.px(12)
 
-        start_x = self.px(3)
+        start_x = self.px(wifi_pos.get('x', 3))
         spacing = self.px(6)
 
         active_icons = []
@@ -663,7 +683,8 @@ class Display:
                 current_x += width + spacing
 
     def _draw_battery_status(self, image: Image.Image):
-        battery_pos = (self.px(110), self.py(3))
+        bat = self.layout.get('battery_icon')
+        battery_pos = (self.px(bat.get('x', 110)), self.py(bat.get('y', 3)))
         battery_status = self.shared_data.battery_status
 
         if battery_status == 101:
@@ -683,47 +704,41 @@ class Display:
                     break
 
     def _draw_system_histogram(self, image: Image.Image, draw: ImageDraw.Draw):
-        # Vertical bars at the bottom-left
-        # Screen W: 122, Character W: 78 -> Character X: 22
-        # Available Left: 0-21.
-        # Margins: Left 2px (0,1), Right 1px (21)
-        # RAM: x=2-10 (9px)
-        # Gap: 11 (1px)
-        # CPU: x=12-20 (9px)
-        
-        # Bottom of screen is 249. User requested 1px up -> 248.
-        # Font 9 height approx 9-10px. 
-        # Label now has NO box and 1px gap.
-        # Label Y: 248 - 9 (height) = 239.
-        # Gap: 1px -> 238 empty.
-        # Bar Base Y: 237.
-        
-        label_h = self.py(9) # Approx height for font 9
+        # Vertical bars at the bottom-left — positions from layout
+        mem_hist = self.layout.get('mem_histogram')
+        cpu_hist = self.layout.get('cpu_histogram')
+
+        # Memory bar: x from layout, width from layout
+        mem_x = mem_hist.get('x', 2)
+        mem_w = mem_hist.get('w', 8)
+        mem_bar_y = mem_hist.get('y', 204)
+        mem_bar_h = mem_hist.get('h', 33)
+
+        # CPU bar: x from layout
+        cpu_x = cpu_hist.get('x', 12)
+        cpu_w = cpu_hist.get('w', 8)
+
         label_y = self.py(239)
         base_y = self.py(237) # 1px gap above label
-        max_h = self.py(33) # Remaining height (237 - 204 = 33)
-        
+        max_h = self.py(mem_bar_h)
+
         # RAM
         ram_pct = max(0, min(100, self.shared_data.system_mem))
         ram_h = int((ram_pct / 100.0) * max_h)
-        # Bar background (x=2 to x=10 inclusive)
-        draw.rectangle([self.px(2), base_y - max_h, self.px(10), base_y], outline=0)
-        # Fill
-        draw.rectangle([self.px(2), base_y - ram_h, self.px(10), base_y], fill=0)
-        
-        # Label 'M' - No Box, just text
-        draw.text((self.px(3), label_y), "M", font=self.shared_data.font_arial9, fill=0)
+        draw.rectangle([self.px(mem_x), base_y - max_h, self.px(mem_x + mem_w), base_y], outline=0)
+        draw.rectangle([self.px(mem_x), base_y - ram_h, self.px(mem_x + mem_w), base_y], fill=0)
 
-        # CPU 
+        # Label 'M' - No Box, just text
+        draw.text((self.px(mem_x + 1), label_y), "M", font=self.shared_data.font_arial9, fill=0)
+
+        # CPU
         cpu_pct = max(0, min(100, self.shared_data.system_cpu))
         cpu_h = int((cpu_pct / 100.0) * max_h)
-        # Bar background (x=12 to x=20 inclusive)
-        draw.rectangle([self.px(12), base_y - max_h, self.px(20), base_y], outline=0)
-        # Fill
-        draw.rectangle([self.px(12), base_y - cpu_h, self.px(20), base_y], fill=0)
-        
+        draw.rectangle([self.px(cpu_x), base_y - max_h, self.px(cpu_x + cpu_w), base_y], outline=0)
+        draw.rectangle([self.px(cpu_x), base_y - cpu_h, self.px(cpu_x + cpu_w), base_y], fill=0)
+
         # Label 'C' - No Box
-        draw.text((self.px(13), label_y), "C", font=self.shared_data.font_arial9, fill=0)
+        draw.text((self.px(cpu_x + 1), label_y), "C", font=self.shared_data.font_arial9, fill=0)
 
     def _format_count(self, val):
         try:
@@ -735,26 +750,32 @@ class Display:
             return str(val)
 
     def _draw_statistics(self, image: Image.Image, draw: ImageDraw.Draw):
+        stats_y = self.layout.get('stats_row', 'y') if isinstance(self.layout.get('stats_row'), dict) else 22
+        if isinstance(stats_y, dict):
+            stats_y = stats_y.get('y', 22)
+        stats_row = self.layout.get('stats_row')
+        sr_y = stats_row.get('y', 22) if stats_row else 22
+        sr_text_y = sr_y + 17  # Text offset below icon row
         stats = [
-            # Row 1 (Icons at y=22, Text at y=39)
+            # Row 1 (Icons at stats_row y, Text at y+17)
             # Target
-            (self.shared_data.target, (self.px(2), self.py(22)),
-             (self.px(2), self.py(39)), self._format_count(self.shared_data.target_count)),
+            (self.shared_data.target, (self.px(2), self.py(sr_y)),
+             (self.px(2), self.py(sr_text_y)), self._format_count(self.shared_data.target_count)),
             # Port
-            (self.shared_data.port, (self.px(22), self.py(22)),
-             (self.px(22), self.py(39)), self._format_count(self.shared_data.port_count)),
+            (self.shared_data.port, (self.px(22), self.py(sr_y)),
+             (self.px(22), self.py(sr_text_y)), self._format_count(self.shared_data.port_count)),
             # Vuln
-            (self.shared_data.vuln, (self.px(42), self.py(22)),
-             (self.px(42), self.py(39)), self._format_count(self.shared_data.vuln_count)),
+            (self.shared_data.vuln, (self.px(42), self.py(sr_y)),
+             (self.px(42), self.py(sr_text_y)), self._format_count(self.shared_data.vuln_count)),
             # Cred
-            (self.shared_data.cred, (self.px(62), self.py(22)),
-             (self.px(62), self.py(39)), self._format_count(self.shared_data.cred_count)),
+            (self.shared_data.cred, (self.px(62), self.py(sr_y)),
+             (self.px(62), self.py(sr_text_y)), self._format_count(self.shared_data.cred_count)),
             # Zombie
-            (self.shared_data.zombie, (self.px(82), self.py(22)),
-             (self.px(82), self.py(39)), self._format_count(self.shared_data.zombie_count)),
+            (self.shared_data.zombie, (self.px(82), self.py(sr_y)),
+             (self.px(82), self.py(sr_text_y)), self._format_count(self.shared_data.zombie_count)),
             # Data
-            (self.shared_data.data, (self.px(102), self.py(22)),
-             (self.px(102), self.py(39)), self._format_count(self.shared_data.data_count)),
+            (self.shared_data.data, (self.px(102), self.py(sr_y)),
+             (self.px(102), self.py(sr_text_y)), self._format_count(self.shared_data.data_count)),
             
             # LVL Widget (Top-Left of bottom frame)
             # Frame Line at y=170. Gap 1px -> Start y=172. Left Gap 1px -> Start x=2.
@@ -782,13 +803,11 @@ class Display:
                 draw.text(text_pos, text, font=self.shared_data.font_arial9, fill=0)
         
         # Draw LVL Box manually to ensure perfect positioning
-        # Box: x=2, y=172. 
-        # User requested "LVL" above value -> Rectangle.
-        # Height increased to fit both (approx 26px).
-        lvl_x = self.px(2)
-        lvl_y = self.py(172)
-        lvl_w = self.px(18)
-        lvl_h = self.py(26) 
+        lvl = self.layout.get('lvl_box')
+        lvl_x = self.px(lvl.get('x', 2))
+        lvl_y = self.py(lvl.get('y', 172))
+        lvl_w = self.px(lvl.get('w', 18))
+        lvl_h = self.py(lvl.get('h', 26))
         
         draw.rectangle([lvl_x, lvl_y, lvl_x + lvl_w, lvl_y + lvl_h], outline=0)
         
@@ -813,17 +832,14 @@ class Display:
         draw.text((v_x, v_y), lvl_val, font=val_font, fill=0)
 
         # --- Right Side Widgets (Integrated with Frame) ---
-        # Existing Frame: Top line at y=170. Right edge at x=121. Bottom at y=249.
-        # We only need to draw the Left Vertical separator and Internal Horizontal separators.
-        
-        # Column: x=101 to x=121 (Width 20px).
-        # Height: y=170 to y=249 (Total 79px).
-        
-        col_x_start = self.px(101)
-        col_x_end = self.px(121) # Implicit right edge, useful for centering
-        col_w = self.px(20)
-        
-        y_top = self.py(170)
+        nkb = self.layout.get('network_kb')
+        line_bottom = self.layout.get('line_bottom_section')
+
+        col_x_start = self.px(nkb.get('x', 101))
+        col_x_end = self.px(nkb.get('x', 101) + nkb.get('w', 20))
+        col_w = self.px(nkb.get('w', 20))
+
+        y_top = self.py(line_bottom.get('y', 170))
         y_bottom = self.py(249)
         
         # 1. Draw Left Vertical Divider
@@ -925,13 +941,20 @@ class Display:
             progress_val = int(progress_str)
         except:
             progress_val = 0
-            
-        # Draw Progress Bar (y=75-80) - Moved up & narrower to fit text
-        bar_x = self.px(35)
-        bar_y = self.py(75)
-        bar_w = self.px(55) # Reduced to 55px to fit text "100%"
-        bar_h = self.py(5)
-        
+
+        # Layout lookups for status area
+        pbar = self.layout.get('progress_bar')
+        ip_pos = self.layout.get('ip_text')
+        sl1 = self.layout.get('status_line1')
+        sl2 = self.layout.get('status_line2')
+        line_comment = self.layout.get('line_comment_top')
+
+        # Draw Progress Bar
+        bar_x = self.px(pbar.get('x', 35))
+        bar_y = self.py(pbar.get('y', 75))
+        bar_w = self.px(pbar.get('w', 55))
+        bar_h = self.py(pbar.get('h', 5))
+
         if progress_val > 0:
             # Standard Progress Bar
             draw.rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], outline=0)
@@ -940,9 +963,6 @@ class Display:
                 draw.rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + bar_h], fill=0)
 
             # Draw Percentage Text at the end
-            # x = bar_x + bar_w + 3
-            # y = centered with bar (bar y=75, h=5 -> center 77.5)
-            # Font 9 height ~9-10px. y_text ~ 73 ?
             text_x = bar_x + bar_w + self.px(4)
             text_y = bar_y - 2 # Align visually with bar
             draw.text((text_x, text_y), f"{progress_val}%", font=self.shared_data.font_arial9, fill=0)
@@ -951,6 +971,7 @@ class Display:
         action_target_ip = str(getattr(self.shared_data, "action_target_ip", "") or "").strip()
         orch_status = str(getattr(self.shared_data, "bjorn_orch_status", "IDLE") or "IDLE").upper()
         show_ip = bool(getattr(self.shared_data, "showiponscreen", False))
+        comment_line_y = self.py(line_comment.get('y', 85))
         if show_ip:
             # Show local IP only while idle; during actions show target IP when available.
             if orch_status == "IDLE":
@@ -958,21 +979,24 @@ class Display:
             else:
                 ip_to_show = action_target_ip or current_ip
 
-            draw.text((self.px(35), self.py(52)), ip_to_show,
+            draw.text((self.px(ip_pos.get('x', 35)), self.py(ip_pos.get('y', 52))), ip_to_show,
                       font=self.shared_data.font_arial9, fill=0)
-            draw.text((self.px(35), self.py(61)), self.shared_data.bjorn_status_text,
+            draw.text((self.px(sl1.get('x', 35)), self.py(sl1.get('y', 55) + 6)), self.shared_data.bjorn_status_text,
                       font=self.shared_data.font_arial9, fill=0)
-            # Line at y=85 (moved up 3px)
-            draw.line((1, self.py(85), self.shared_data.width - 1, self.py(85)), fill=0)
+            draw.line((1, comment_line_y, self.shared_data.width - 1, comment_line_y), fill=0)
         else:
-            draw.text((self.px(35), self.py(55)), self.shared_data.bjorn_status_text,
+            draw.text((self.px(sl1.get('x', 35)), self.py(sl1.get('y', 55))), self.shared_data.bjorn_status_text,
                       font=self.shared_data.font_arial9, fill=0)
-            draw.text((self.px(35), self.py(66)), self.shared_data.bjorn_status_text2,
+            draw.text((self.px(sl2.get('x', 35)), self.py(sl2.get('y', 66))), self.shared_data.bjorn_status_text2,
                       font=self.shared_data.font_arial9, fill=0)
-            # Line at y=85 (moved up 3px)
-            draw.line((1, self.py(85), self.shared_data.width - 1, self.py(85)), fill=0)
+            draw.line((1, comment_line_y, self.shared_data.width - 1, comment_line_y), fill=0)
 
     def _draw_decorations(self, image: Image.Image, draw: ImageDraw.Draw):
+        line_top = self.layout.get('line_top_bar')
+        line_mid = self.layout.get('line_mid_section')
+        line_bottom = self.layout.get('line_bottom_section')
+        frise_elem = self.layout.get('frise')
+
         show_ssid = bool(getattr(self.shared_data, "showssidonscreen", False))
         if show_ssid:
             # Center SSID
@@ -980,18 +1004,19 @@ class Display:
             ssid_w = draw.textlength(ssid, font=self.shared_data.font_arial9)
             center_x = self.shared_data.width // 2
             ssid_x = int(center_x - (ssid_w / 2))
-            
-            draw.text((ssid_x, self.py(160)), ssid,
+
+            frise_y_val = frise_elem.get('y', 160) if frise_elem else 160
+            draw.text((ssid_x, self.py(frise_y_val)), ssid,
                       font=self.shared_data.font_arial9, fill=0)
-            draw.line((0, self.py(170), self.shared_data.width, self.py(170)), fill=0)
+            draw.line((0, self.py(line_bottom.get('y', 170)), self.shared_data.width, self.py(line_bottom.get('y', 170))), fill=0)
         else:
             frise_x, frise_y = self.get_frise_position()
             if self.shared_data.frise is not None:
                 image.paste(self.shared_data.frise, (frise_x, frise_y))
 
         draw.rectangle((0, 0, self.shared_data.width - 1, self.shared_data.height - 1), outline=0)
-        draw.line((0, self.py(20), self.shared_data.width, self.py(20)), fill=0)
-        draw.line((0, self.py(51), self.shared_data.width, self.py(51)), fill=0)
+        draw.line((0, self.py(line_top.get('y', 20)), self.shared_data.width, self.py(line_top.get('y', 20))), fill=0)
+        draw.line((0, self.py(line_mid.get('y', 51)), self.shared_data.width, self.py(line_mid.get('y', 51))), fill=0)
 
     def _draw_comment_text(self, draw: ImageDraw.Draw):
             # Cache key for the layout
@@ -1011,9 +1036,8 @@ class Display:
             else:
                 lines = self._comment_layout_cache["lines"]
 
-            # MODIFICATION ICI :
-            # La ligne du dessus est à self.py(85). On veut 1px d'écart, donc 85 + 1 = 86.
-            y_text = self.py(86) 
+            comment = self.layout.get('comment_area')
+            y_text = self.py(comment.get('y', 86))
             
             font = self.shared_data.font_arialbold
             bbox = font.getbbox('Aj')

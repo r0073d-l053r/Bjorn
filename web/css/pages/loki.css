@@ -1,0 +1,403 @@
+/* ============================================================
+   Loki (HID Attack Mode) — SPA page styles
+   ============================================================ */
+
+.loki-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+  padding: 15px;
+}
+
+/* ── Header bar ─────────────────────────────────────────── */
+
+.loki-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.loki-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loki-title-icon { font-size: 1.5rem; }
+
+.loki-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Status bar ─────────────────────────────────────────── */
+
+.loki-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.loki-status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.loki-status-item .label { font-weight: 600; }
+.loki-status-item .value { color: var(--ink); }
+
+.loki-status-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.loki-status-item .dot.on  { background: var(--ok, #10b981); }
+.loki-status-item .dot.off { background: var(--muted, #888); }
+
+/* ── Grid: Editor + Library ──────────────────────────────── */
+
+.loki-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  .loki-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+}
+
+/* ── Editor panel ────────────────────────────────────────── */
+
+.loki-editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.loki-editor {
+  flex: 1;
+  min-height: 200px;
+  width: 100%;
+  font-family: 'Courier New', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  resize: vertical;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+
+.loki-editor:focus {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: -1px;
+}
+
+.loki-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.loki-editor-toolbar select {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8rem;
+}
+
+/* ── Library panel ───────────────────────────────────────── */
+
+.loki-library {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.loki-library-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.loki-library-heading {
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.loki-library-heading::after {
+  content: '▾';
+  font-size: 0.7rem;
+}
+
+.loki-library-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.loki-library-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line-faint, var(--line));
+  transition: background 0.15s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.loki-library-item:last-child { border-bottom: none; }
+
+.loki-library-item:hover {
+  background: var(--hover, rgba(0,0,0,0.04));
+}
+
+.loki-library-item.active {
+  background: var(--accent-bg, rgba(59, 130, 246, 0.1));
+  font-weight: 600;
+}
+
+.loki-library-item .name { flex: 1; }
+.loki-library-item .badge {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--muted);
+  color: var(--surface, #fff);
+}
+
+/* ── Jobs panel ──────────────────────────────────────────── */
+
+.loki-jobs {
+  flex-shrink: 0;
+}
+
+.loki-jobs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.loki-jobs-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.loki-jobs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.loki-jobs-table th,
+.loki-jobs-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.loki-jobs-table th {
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.loki-jobs-empty {
+  text-align: center;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* ── Job status badges ───────────────────────────────────── */
+
+.loki-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.loki-badge.running  { background: #fef3c7; color: #92400e; }
+.loki-badge.succeeded { background: #d1fae5; color: #065f46; }
+.loki-badge.failed   { background: #fee2e2; color: #991b1b; }
+.loki-badge.cancelled { background: #e5e7eb; color: #374151; }
+.loki-badge.pending  { background: #e0e7ff; color: #3730a3; }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+
+.loki-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.loki-btn:hover { background: var(--hover, rgba(0,0,0,0.04)); }
+
+.loki-btn.primary {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  border-color: var(--accent, #3b82f6);
+}
+.loki-btn.primary:hover { filter: brightness(1.1); }
+
+.loki-btn.danger {
+  background: var(--danger, #ef4444);
+  color: #fff;
+  border-color: var(--danger, #ef4444);
+}
+.loki-btn.danger:hover { filter: brightness(1.1); }
+
+.loki-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Toggle switch ───────────────────────────────────────── */
+
+.loki-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  appearance: none;
+  background: var(--muted, #ccc);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.3s;
+  border: none;
+}
+
+.loki-toggle:checked { background: var(--ok, #10b981); }
+
+.loki-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.3s;
+}
+
+.loki-toggle:checked::after { transform: translateX(20px); }
+
+/* ── Disabled overlay ────────────────────────────────────── */
+
+.loki-disabled-overlay {
+  position: relative;
+}
+
+.loki-disabled-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--surface, #fff);
+  opacity: 0.6;
+  pointer-events: all;
+  border-radius: 8px;
+  z-index: 2;
+}
+
+/* ── Quick type ──────────────────────────────────────────── */
+
+.loki-quick-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.loki-quick-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ── Install banner ─────────────────────────────────────── */
+
+.loki-install-banner {
+  padding: 16px 20px;
+  background: var(--warn-bg, #fff3cd);
+  border: 1px solid var(--warn-border, #ffc107);
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.loki-install-banner p {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--ink);
+}

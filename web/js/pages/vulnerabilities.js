@@ -71,8 +71,11 @@ export async function mount(container) {
 }
 
 export function unmount() {
-  clearTimeout(searchDebounce);
-  searchDebounce = null;
+  if (searchDebounce != null) {
+    if (tracker) tracker.clearTrackedTimeout(searchDebounce);
+    else clearTimeout(searchDebounce);
+    searchDebounce = null;
+  }
   if (poller)               { poller.stop(); poller = null; }
   if (disposeSidebarLayout) { try { disposeSidebarLayout(); } catch {} disposeSidebarLayout = null; }
   if (tracker)              { tracker.cleanupAll(); tracker = null; }
@@ -96,13 +99,13 @@ function buildShell() {
     el('div', { class: 'sidecontent' }, [
       /* stats */
       el('div', { class: 'stats-header' }, [
-        statItem('\u{1F6E1}', 'total-cves',       'Total CVEs'),
-        statItem('\u{1F534}', 'active-vulns',      'Active'),
-        statItem('\u2705',    'remediated-vulns',  'Remediated'),
-        statItem('\u{1F525}', 'critical-count',    'Critical'),
-        statItem('\u{1F5A5}', 'affected-hosts',    'Hosts'),
-        statItem('\u{1F4A3}', 'exploit-count',     'w/ Exploit'),
-        statItem('\u26A0',    'kev-count',         'KEV'),
+        statItem('\u{1F6E1}', 'total-cves',       t('vulns.totalCVEs')),
+        statItem('\u{1F534}', 'active-vulns',      t('vulns.active')),
+        statItem('\u2705',    'remediated-vulns',  t('vulns.remediated')),
+        statItem('\u{1F525}', 'critical-count',    t('vulns.critical')),
+        statItem('\u{1F5A5}', 'affected-hosts',    t('vulns.hosts')),
+        statItem('\u{1F4A3}', 'exploit-count',     t('vulns.withExploit')),
+        statItem('\u26A0',    'kev-count',         t('vulns.kev')),
       ]),
       /* freshness */
       el('div', { id: 'vuln-freshness', style: 'font-size:.75rem;opacity:.5;padding:8px 0 0 4px' }),
@@ -113,29 +116,29 @@ function buildShell() {
           class:   'vuln-btn exploit-btn',
           style:   'width:100%;font-weight:600',
           onclick: runFeedSync,
-        }, ['\u{1F504} Update Exploit Feeds']),
+        }, ['\u{1F504} ' + t('vulns.updateFeeds')]),
         el('div', { id: 'feed-sync-status', style: 'font-size:.72rem;opacity:.55;margin-top:4px;min-height:16px' }),
       ]),
       /* sort */
       el('div', { style: 'margin-top:14px;padding:0 4px' }, [
-        el('div', { style: 'font-size:.75rem;opacity:.55;margin-bottom:4px' }, ['Sort by']),
+        el('div', { style: 'font-size:.75rem;opacity:.55;margin-bottom:4px' }, [t('vulns.sortBy')]),
         el('select', { id: 'vuln-sort-field', class: 'vuln-select', onchange: onSortChange }, [
-          el('option', { value: 'cvss_score' }, ['CVSS Score']),
-          el('option', { value: 'severity'   }, ['Severity']),
-          el('option', { value: 'last_seen'  }, ['Last Seen']),
-          el('option', { value: 'first_seen' }, ['First Seen']),
+          el('option', { value: 'cvss_score' }, [t('vulns.cvssScore')]),
+          el('option', { value: 'severity'   }, [t('vulns.severity')]),
+          el('option', { value: 'last_seen'  }, [t('vulns.lastSeen')]),
+          el('option', { value: 'first_seen' }, [t('vulns.firstSeen')]),
         ]),
         el('select', { id: 'vuln-sort-dir', class: 'vuln-select', onchange: onSortChange, style: 'margin-top:4px' }, [
-          el('option', { value: 'desc' }, ['Descending']),
-          el('option', { value: 'asc'  }, ['Ascending']),
+          el('option', { value: 'desc' }, [t('common.descending')]),
+          el('option', { value: 'asc'  }, [t('common.ascending')]),
         ]),
       ]),
       /* date filter */
       el('div', { style: 'margin-top:14px;padding:0 4px' }, [
-        el('div', { style: 'font-size:.75rem;opacity:.55;margin-bottom:4px' }, ['Date filter (last seen)']),
+        el('div', { style: 'font-size:.75rem;opacity:.55;margin-bottom:4px' }, [t('vulns.dateFilter')]),
         el('input', { type: 'date', id: 'vuln-date-from', class: 'vuln-date-input', onchange: onDateChange }),
         el('input', { type: 'date', id: 'vuln-date-to',   class: 'vuln-date-input', onchange: onDateChange, style: 'margin-top:4px' }),
-        el('button', { class: 'vuln-btn', style: 'margin-top:6px;width:100%', onclick: clearDateFilter }, ['Clear dates']),
+        el('button', { class: 'vuln-btn', style: 'margin-top:6px;width:100%', onclick: clearDateFilter }, [t('vulns.clearDates')]),
       ]),
     ]),
   ]);
@@ -147,9 +150,9 @@ function buildShell() {
         el('button', { class: 'clear-global-button', onclick: clearSearch }, ['\u2716']),
       ]),
       el('div', { class: 'vuln-buttons' }, [
-        el('button', { class: 'vuln-btn active', id: 'vuln-view-cve',      onclick: () => switchView('cve') },      ['CVE View']),
-        el('button', { class: 'vuln-btn',        id: 'vuln-view-host',     onclick: () => switchView('host') },     ['Host View']),
-        el('button', { class: 'vuln-btn',        id: 'vuln-view-exploits', onclick: () => switchView('exploits') }, ['\u{1F4A3} Exploits']),
+        el('button', { class: 'vuln-btn active', id: 'vuln-view-cve',      onclick: () => switchView('cve') },      [t('vulns.cveView')]),
+        el('button', { class: 'vuln-btn',        id: 'vuln-view-host',     onclick: () => switchView('host') },     [t('vulns.hostView')]),
+        el('button', { class: 'vuln-btn',        id: 'vuln-view-exploits', onclick: () => switchView('exploits') }, ['\u{1F4A3} ' + t('vulns.exploits')]),
         el('button', { class: 'vuln-btn',        id: 'vuln-active-toggle', onclick: toggleActiveFilter }, [t('status.online')]),
         el('button', { class: 'vuln-btn',        id: 'vuln-history-btn',   onclick: toggleHistory },      [t('sched.history')]),
         el('button', { class: 'vuln-btn',        onclick: exportCSV  }, [t('common.export') + ' CSV']),
@@ -200,10 +203,11 @@ async function fetchVulnerabilities() {
   if (historyMode) return;
   try {
     const data = await api.get('/list_vulnerabilities', { timeout: 10000 });
+    if (!tracker) return; /* unmounted while awaiting */
     vulnerabilities = Array.isArray(data) ? data : (data?.vulnerabilities || []);
     lastFetchTime   = new Date();
     const f = $('#vuln-freshness');
-    if (f) f.textContent = `Last refresh: ${lastFetchTime.toLocaleTimeString()}`;
+    if (f) f.textContent = t('vulns.lastRefresh', { time: lastFetchTime.toLocaleTimeString() });
     updateStats();
     filterAndRender();
   } catch (err) {
@@ -220,8 +224,8 @@ async function runFeedSync() {
   const btn    = $('#btn-feed-sync');
   const status = $('#feed-sync-status');
   if (btn && btn.disabled) return;
-  if (btn)    { btn.disabled = true; btn.textContent = '\u23F3 Downloading\u2026'; }
-  if (status) status.textContent = 'Syncing CISA KEV, Exploit-DB, EPSS\u2026';
+  if (btn)    { btn.disabled = true; btn.textContent = '\u23F3 ' + t('vulns.downloading'); }
+  if (status) status.textContent = t('vulns.syncingFeeds');
 
   try {
     const res = await api.post('/api/feeds/sync', {}, { timeout: 120000 });
@@ -236,7 +240,7 @@ async function runFeedSync() {
   } catch (err) {
     if (status) status.textContent = `\u274C ${err.message}`;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '\u{1F504} Update Exploit Feeds'; }
+    if (btn) { btn.disabled = false; btn.textContent = '\u{1F504} ' + t('vulns.updateFeeds'); }
   }
 }
 
@@ -246,12 +250,12 @@ async function loadFeedStatus() {
     const status = $('#feed-sync-status');
     if (!status || !res?.feeds) return;
     const entries = Object.entries(res.feeds);
-    if (!entries.length) { status.textContent = 'No sync yet — click to update.'; return; }
+    if (!entries.length) { status.textContent = t('vulns.noSyncYet'); return; }
     // show the most recent sync time
     const latest = entries.reduce((a, [, v]) => Math.max(a, v.last_synced || 0), 0);
     if (latest) {
       const d = new Date(latest * 1000);
-      status.textContent = `Last sync: ${d.toLocaleDateString()} ${d.toLocaleTimeString()} \u00B7 ${res.total_exploits || 0} exploits`;
+      status.textContent = t('vulns.lastSync', { date: `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`, count: res.total_exploits || 0 });
     }
   } catch { /* ignore */ }
 }
@@ -364,7 +368,7 @@ function renderCVEView() {
   if (!grid) return;
   empty(grid);
   const page = filteredVulns.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  if (!page.length) { grid.appendChild(emptyState('No vulnerabilities found')); return; }
+  if (!page.length) { grid.appendChild(emptyState(t('vulns.noVulns'))); return; }
 
   page.forEach((v, i) => {
     const exploitChips = buildExploitChips(v);
@@ -386,13 +390,13 @@ function renderCVEView() {
           ...(v.is_kev           ? [el('span', { class: 'vuln-tag kev',  title: 'CISA Known Exploited' }, ['KEV'])] : []),
           ...(v.epss > 0.1       ? [el('span', { class: 'vuln-tag epss' }, [`EPSS ${(v.epss * 100).toFixed(1)}%`])] : []),
         ]),
-        el('span', { style: 'font-size:.72rem;opacity:.35;white-space:nowrap' }, ['\u{1F4CB} click for details']),
+        el('span', { style: 'font-size:.72rem;opacity:.35;white-space:nowrap' }, ['\u{1F4CB} ' + t('vulns.clickDetails')]),
       ]),
       /* meta */
       el('div', { class: 'vuln-meta' }, [
-        metaItem('IP',   v.ip),
-        metaItem('Host', v.hostname),
-        metaItem('Port', v.port),
+        metaItem(t('common.ip'),   v.ip),
+        metaItem(t('common.host'), v.hostname),
+        metaItem(t('common.port'), v.port),
       ]),
       /* description */
       el('div', { style: 'font-size:.83rem;opacity:.7;margin:6px 0 8px;line-height:1.4' }, [
@@ -426,7 +430,7 @@ function renderHostView() {
   totalPages    = Math.max(1, Math.ceil(hostArr.length / ITEMS_PER_PAGE));
   if (currentPage > totalPages) currentPage = 1;
   const page = hostArr.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  if (!page.length) { grid.appendChild(emptyState('No hosts found')); return; }
+  if (!page.length) { grid.appendChild(emptyState(t('vulns.noHostsFound'))); return; }
 
   page.forEach((host, i) => {
     const hostId     = `host-${i + (currentPage - 1) * ITEMS_PER_PAGE}`;
@@ -442,8 +446,8 @@ function renderHostView() {
       el('div', { class: 'vuln-card-header', onclick: () => toggleHostCard(hostId) }, [
         el('div', { class: 'vuln-card-title' }, [
           el('span', { class: 'vuln-id' }, [host.hostname || host.ip || host.mac || 'Unknown']),
-          el('span', { class: 'stat-label' }, [`${host.vulns.length} vulns`]),
-          ...(remediated > 0                          ? [el('span', { class: 'vuln-tag remediated' }, [`${remediated} FIXED`])] : []),
+          el('span', { class: 'stat-label' }, [t('vulns.vulnsCount', { count: host.vulns.length })]),
+          ...(remediated > 0                          ? [el('span', { class: 'vuln-tag remediated' }, [`${remediated} ${t('vulns.fixed')}`])] : []),
           ...(host.vulns.some(v => v.has_exploit) ? [el('span', { class: 'vuln-tag exploit' }, ['\u{1F4A3}'])] : []),
         ]),
         el('div', { class: 'host-severity-pills' }, [
@@ -456,10 +460,10 @@ function renderHostView() {
       ]),
       el('div', { class: 'vuln-content' }, [
         el('div', { class: 'vuln-meta' }, [
-          metaItem('IP',       host.ip),
-          metaItem('MAC',      host.mac),
-          metaItem('Active',   host.vulns.filter(v => v.is_active === 1).length),
-          metaItem('Max CVSS', Math.max(...host.vulns.map(v => parseFloat(v.cvss_score) || 0)).toFixed(1)),
+          metaItem(t('common.ip'),       host.ip),
+          metaItem(t('common.mac'),      host.mac),
+          metaItem(t('vulns.active'),   host.vulns.filter(v => v.is_active === 1).length),
+          metaItem(t('vulns.maxCvss'), Math.max(...host.vulns.map(v => parseFloat(v.cvss_score) || 0)).toFixed(1)),
         ]),
         ...sortVulnsByPriority(host.vulns).map(v => {
           const exploitChips = buildExploitChips(v);
@@ -478,8 +482,8 @@ function renderHostView() {
               ...(v.is_active === 0 ? [el('span', { class: 'vuln-tag remediated' }, ['REMEDIATED'])] : []),
             ]),
             el('div', { class: 'vuln-meta', style: 'margin:4px 0' }, [
-              metaItem('Port', v.port),
-              metaItem('Last', formatDate(v.last_seen)),
+              metaItem(t('common.port'), v.port),
+              metaItem(t('common.last'), formatDate(v.last_seen)),
             ]),
             el('div', { style: 'font-size:.82rem;opacity:.65;margin-bottom:6px' }, [
               (v.description || '').substring(0, 110) + ((v.description || '').length > 110 ? '\u2026' : ''),
@@ -509,10 +513,10 @@ function renderExploitsView() {
 
   if (!page.length) {
     const wrapper = el('div', { style: 'text-align:center;padding:40px' }, [
-      emptyState('\u{1F4A3} No exploit data yet'),
+      emptyState('\u{1F4A3} ' + t('vulns.noExploitData')),
       el('div', { style: 'margin-top:16px' }, [
         el('button', { class: 'vuln-btn exploit-btn', onclick: runGlobalExploitSearch },
-          ['\u{1F4A3} Search All Exploits now']),
+          ['\u{1F4A3} ' + t('vulns.searchExploits')]),
       ]),
     ]);
     grid.appendChild(wrapper);
@@ -538,7 +542,7 @@ function renderExploitsView() {
           ...(v.is_kev     ? [el('span', { class: 'vuln-tag kev' }, ['KEV'])] : []),
           ...(v.epss > 0.1 ? [el('span', { class: 'vuln-tag epss' }, [`EPSS ${(v.epss * 100).toFixed(1)}%`])] : []),
         ]),
-        el('span', { style: 'font-size:.72rem;opacity:.35' }, ['\u{1F4CB} click for details']),
+        el('span', { style: 'font-size:.72rem;opacity:.35' }, ['\u{1F4CB} ' + t('vulns.clickDetails')]),
       ]),
       el('div', { class: 'vuln-meta' }, [metaItem('IP', v.ip), metaItem('Host', v.hostname), metaItem('Port', v.port)]),
       el('div', { style: 'font-size:.83rem;opacity:.7;margin:6px 0 8px' }, [
@@ -587,13 +591,13 @@ function renderHistory() {
   grid.appendChild(el('div', { style: 'margin-bottom:12px' }, [
     el('input', {
       type: 'text', class: 'global-search-input', value: historySearch,
-      placeholder: 'Filter history\u2026',
+      placeholder: t('vulns.filterHistory'),
       oninput: (e) => { historySearch = e.target.value; historyPage = 1; renderHistory(); },
       style: 'width:100%;max-width:360px',
     }),
   ]));
 
-  if (!filtered.length) { grid.appendChild(emptyState('No history entries')); return; }
+  if (!filtered.length) { grid.appendChild(emptyState(t('vulns.noHistory'))); return; }
 
   filtered.slice((historyPage - 1) * ITEMS_PER_PAGE, historyPage * ITEMS_PER_PAGE).forEach((entry, i) => {
     grid.appendChild(el('div', { class: 'vuln-card', style: `animation-delay:${i * 0.02}s` }, [
@@ -602,20 +606,20 @@ function renderHistory() {
         el('span', { class: 'vuln-tag' }, [entry.event || '']),
       ]),
       el('div', { class: 'vuln-meta' }, [
-        metaItem('Date', entry.seen_at ? new Date(entry.seen_at).toLocaleString() : 'N/A'),
-        metaItem('IP', entry.ip), metaItem('Host', entry.hostname),
-        metaItem('Port', entry.port), metaItem('MAC', entry.mac_address),
+        metaItem(t('common.date'), entry.seen_at ? new Date(entry.seen_at).toLocaleString() : t('vulns.na')),
+        metaItem(t('common.ip'), entry.ip), metaItem(t('common.host'), entry.hostname),
+        metaItem(t('common.port'), entry.port), metaItem(t('common.mac'), entry.mac_address),
       ]),
     ]));
   });
 
   if (pagDiv && hTotal > 1) {
-    pagDiv.appendChild(pageBtn('Prev', historyPage > 1, () => { historyPage--; renderHistory(); }));
+    pagDiv.appendChild(pageBtn(t('webenum.prev'), historyPage > 1, () => { historyPage--; renderHistory(); }));
     for (let i = Math.max(1, historyPage - 2); i <= Math.min(hTotal, historyPage + 2); i++) {
       pagDiv.appendChild(pageBtn(String(i), true, () => { historyPage = i; renderHistory(); }, i === historyPage));
     }
-    pagDiv.appendChild(pageBtn('Next', historyPage < hTotal, () => { historyPage++; renderHistory(); }));
-    pagDiv.appendChild(el('span', { class: 'vuln-page-info' }, [`Page ${historyPage}/${hTotal} — ${filtered.length} entries`]));
+    pagDiv.appendChild(pageBtn(t('webenum.next'), historyPage < hTotal, () => { historyPage++; renderHistory(); }));
+    pagDiv.appendChild(el('span', { class: 'vuln-page-info' }, [t('vulns.pageInfo', { page: historyPage, total: hTotal, count: filtered.length })]));
   }
 }
 
@@ -647,7 +651,7 @@ async function showCVEDetails(cveId) {
     ].forEach(([label, href, cls]) => chipsEl.appendChild(refChip(label, href, cls)));
   }
 
-  if (body) { empty(body); body.appendChild(el('div', { class: 'page-loading' }, ['Loading\u2026'])); }
+  if (body) { empty(body); body.appendChild(el('div', { class: 'page-loading' }, [t('common.loading')])); }
   modal.classList.add('show');
 
   try {
@@ -655,26 +659,26 @@ async function showCVEDetails(cveId) {
     if (!body) return;
     empty(body);
 
-    if (data.description) body.appendChild(modalSection('Description', data.description));
+    if (data.description) body.appendChild(modalSection(t('vulns.description'), data.description));
     if (data.cvss) {
       const s = data.cvss;
       body.appendChild(modalSection('CVSS',
-        `Score: ${s.baseScore || 'N/A'} | Severity: ${s.baseSeverity || 'N/A'}` +
+        `${t('vulns.score')}: ${s.baseScore || t('vulns.na')} | ${t('vulns.severity')}: ${s.baseSeverity || t('vulns.na')}` +
         (s.vectorString ? ` | Vector: ${s.vectorString}` : '')
       ));
     }
-    if (data.is_kev) body.appendChild(modalSection('\u26A0 CISA KEV', 'This vulnerability is in the CISA Known Exploited Vulnerabilities catalog.'));
-    if (data.epss)   body.appendChild(modalSection('EPSS',
-      `Probability: ${(data.epss.probability * 100).toFixed(2)}% | Percentile: ${(data.epss.percentile * 100).toFixed(2)}%`
+    if (data.is_kev) body.appendChild(modalSection('\u26A0 ' + t('vulns.cisaKev'), t('vulns.cisaKevMsg')));
+    if (data.epss)   body.appendChild(modalSection(t('vulns.epss'),
+      `${t('vulns.probability')}: ${(data.epss.probability * 100).toFixed(2)}% | ${t('vulns.percentile')}: ${(data.epss.percentile * 100).toFixed(2)}%`
     ));
 
     /* Affected */
     if (data.affected && data.affected.length > 0) {
       const rows = normalizeAffected(data.affected);
       body.appendChild(el('div', { class: 'modal-detail-section' }, [
-        el('div', { class: 'modal-section-title' }, ['Affected Products']),
+        el('div', { class: 'modal-section-title' }, [t('vulns.affectedProducts')]),
         el('div', { class: 'vuln-affected-table' }, [
-          el('div', { class: 'vuln-affected-row header' }, [el('span', {}, ['Vendor']), el('span', {}, ['Product']), el('span', {}, ['Versions'])]),
+          el('div', { class: 'vuln-affected-row header' }, [el('span', {}, [t('common.vendor')]), el('span', {}, [t('vulns.product')]), el('span', {}, [t('vulns.versions')])]),
           ...rows.map(r => el('div', { class: 'vuln-affected-row' }, [el('span', {}, [r.vendor]), el('span', {}, [r.product]), el('span', {}, [r.versions])])),
         ]),
       ]));
@@ -683,7 +687,7 @@ async function showCVEDetails(cveId) {
     /* Exploits section */
     const exploits = data.exploits || [];
     const exploitSection = el('div', { class: 'modal-detail-section' }, [
-      el('div', { class: 'modal-section-title' }, ['\u{1F4A3} Exploits & References']),
+      el('div', { class: 'modal-section-title' }, ['\u{1F4A3} ' + t('vulns.exploitsRefs')]),
       /* dynamic entries from DB */
       ...exploits.map(entry => {
         const isStr = typeof entry === 'string';
@@ -704,7 +708,7 @@ async function showCVEDetails(cveId) {
         refChip('MITRE \u2197',         `https://cve.mitre.org/cgi-bin/cvename.cgi?name=${encodeURIComponent(cveId)}`, 'chip-mitre'),
       ]),
       exploits.length === 0
-        ? el('div', { style: 'opacity:.45;font-size:.8rem;margin-top:6px' }, ['No exploit records in DB yet — use \u201cSearch All Exploits\u201d to enrich.'])
+        ? el('div', { style: 'opacity:.45;font-size:.8rem;margin-top:6px' }, [t('vulns.noExploitRecords')])
         : null,
     ].filter(Boolean));
     body.appendChild(exploitSection);
@@ -712,16 +716,16 @@ async function showCVEDetails(cveId) {
     /* References */
     if (data.references && data.references.length > 0) {
       body.appendChild(el('div', { class: 'modal-detail-section' }, [
-        el('div', { class: 'modal-section-title' }, ['References']),
+        el('div', { class: 'modal-section-title' }, [t('vulns.references')]),
         ...data.references.map(url => el('div', {}, [
           el('a', { href: url, target: '_blank', rel: 'noopener', class: 'vuln-ref-link' }, [url]),
         ])),
       ]));
     }
 
-    if (data.lastModified) body.appendChild(modalSection('Last Modified', formatDate(data.lastModified)));
+    if (data.lastModified) body.appendChild(modalSection(t('vulns.lastModified'), formatDate(data.lastModified)));
     if (!data.description && !data.cvss && !data.affected) {
-      body.appendChild(el('div', { style: 'opacity:.6;padding:20px;text-align:center' }, ['No enrichment data available.']));
+      body.appendChild(el('div', { style: 'opacity:.6;padding:20px;text-align:center' }, [t('vulns.noEnrichment')]));
     }
   } catch (err) {
     if (body) { empty(body); body.appendChild(el('div', { style: 'color:var(--danger);padding:20px' }, [`Failed: ${err.message}`])); }
@@ -755,14 +759,26 @@ function normalizeAffected(affected) {
 }
 
 /* ════════════════════════════════════════
+   GLOBAL EXPLOIT SEARCH (alias for feed sync from exploits view)
+═══════════════════════════════════════ */
+async function runGlobalExploitSearch() {
+  await runFeedSync();
+}
+
+/* ════════════════════════════════════════
    SEARCH / FILTER / SORT HANDLERS
 ═══════════════════════════════════════ */
 function onSearch(e) {
-  clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => {
+  if (searchDebounce != null) {
+    if (tracker) tracker.clearTrackedTimeout(searchDebounce);
+    else clearTimeout(searchDebounce);
+  }
+  const handler = () => {
     searchTerm = e.target.value; currentPage = 1; filterAndRender();
     const b = e.target.nextElementSibling; if (b) b.classList.toggle('show', searchTerm.length > 0);
-  }, 300);
+    searchDebounce = null;
+  };
+  searchDebounce = tracker ? tracker.trackTimeout(handler, 300) : setTimeout(handler, 300);
 }
 function clearSearch() {
   const inp = $('#vuln-search'); if (inp) inp.value = '';
@@ -813,11 +829,11 @@ function renderPagination() {
   const pag = $('#vuln-pagination'); if (!pag) return;
   empty(pag);
   if (historyMode || totalPages <= 1) return;
-  pag.appendChild(pageBtn('Prev', currentPage > 1, () => changePage(currentPage - 1)));
+  pag.appendChild(pageBtn(t('webenum.prev'), currentPage > 1, () => changePage(currentPage - 1)));
   for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++)
     pag.appendChild(pageBtn(String(i), true, () => changePage(i), i === currentPage));
-  pag.appendChild(pageBtn('Next', currentPage < totalPages, () => changePage(currentPage + 1)));
-  pag.appendChild(el('span', { class: 'vuln-page-info' }, [`Page ${currentPage}/${totalPages} — ${filteredVulns.length} results`]));
+  pag.appendChild(pageBtn(t('webenum.next'), currentPage < totalPages, () => changePage(currentPage + 1)));
+  pag.appendChild(el('span', { class: 'vuln-page-info' }, [t('vulns.resultsInfo', { page: currentPage, total: totalPages, count: filteredVulns.length })]));
 }
 function pageBtn(label, enabled, onclick, active = false) {
   return el('button', {
@@ -880,7 +896,7 @@ function onModalBackdrop(e) { if (e.target.classList.contains('vuln-modal')) clo
 function metaItem(label, value) {
   return el('div', { class: 'meta-item' }, [
     el('span', { class: 'meta-label' }, [label + ':']),
-    el('span', { class: 'meta-value' }, [String(value ?? 'N/A')]),
+    el('span', { class: 'meta-value' }, [String(value ?? t('vulns.na'))]),
   ]);
 }
 function modalSection(title, text) {
@@ -899,7 +915,7 @@ function sevPill(sev, count) {
   return el('span', { class: `severity-badge severity-${sev}` }, [`${count} ${sev}`]);
 }
 function formatDate(d) {
-  if (!d) return 'Unknown';
+  if (!d) return t('vulns.unknown');
   try { return new Date(d).toLocaleString('en-US', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); }
   catch { return String(d); }
 }

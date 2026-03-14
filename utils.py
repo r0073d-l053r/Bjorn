@@ -22,6 +22,9 @@ class WebUtils:
         "action_utils": ("web_utils.action_utils", "ActionUtils"),
         "rl": ("web_utils.rl_utils", "RLUtils"),
         "debug_utils": ("web_utils.debug_utils", "DebugUtils"),
+        "sentinel": ("web_utils.sentinel_utils", "SentinelUtils"),
+        "bifrost": ("web_utils.bifrost_utils", "BifrostUtils"),
+        "loki": ("web_utils.loki_utils", "LokiUtils"),
     }
 
 

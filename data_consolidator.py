@@ -40,31 +40,38 @@ class DataConsolidator:
     Consolidates raw feature logs into training datasets.
     Optimized for Raspberry Pi Zero - processes in batches.
     """
-    
+
     def __init__(self, shared_data, export_dir: str = None):
         """
         Initialize data consolidator
-        
+
         Args:
             shared_data: SharedData instance
             export_dir: Directory for export files
         """
         self.shared_data = shared_data
         self.db = shared_data.db
-        
+
         if export_dir is None:
             # Default to shared_data path (cross-platform)
             self.export_dir = Path(getattr(shared_data, 'ml_exports_dir', Path(shared_data.data_dir) / "ml_exports"))
         else:
             self.export_dir = Path(export_dir)
-            
+
         self.export_dir.mkdir(parents=True, exist_ok=True)
         # Server health state consumed by orchestrator fallback logic.
         self.last_server_attempted = False
         self.last_server_contact_ok = None
         self._upload_backoff_until = 0.0
         self._upload_backoff_current_s = 0.0
-        
+
+        # AI-01: Feature variance tracking for dimensionality reduction
+        self._feature_variance_min = float(
+            getattr(shared_data, 'ai_feature_selection_min_variance', 0.001)
+        )
+        # Accumulator: {feature_name: [sum, sum_of_squares, count]}
+        self._feature_stats = {}
+
         logger.info(f"DataConsolidator initialized, exports: {self.export_dir}")
 
     def _set_server_contact_state(self, attempted: bool, ok: Optional[bool]) -> None:
@@ -206,7 +213,10 @@ class DataConsolidator:
             feature_vector = self._build_feature_vector(
                 host_features, network_features, temporal_features, action_features
             )
-            
+
+            # AI-01: Track feature variance for dimensionality reduction
+            self._track_feature_variance(feature_vector)
+
             # Determine time window
             raw_ts = record['timestamp']
             if isinstance(raw_ts, str):
@@ -341,6 +351,72 @@ class DataConsolidator:
             raise
     
     # ═══════════════════════════════════════════════════════════════════════
+    # AI-01: FEATURE VARIANCE TRACKING & SELECTION
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _track_feature_variance(self, feature_vector: Dict[str, float]):
+        """
+        Update running statistics (mean, variance) for each feature.
+        Uses Welford's online algorithm via sum/sum_sq/count.
+        """
+        for name, value in feature_vector.items():
+            try:
+                val = float(value)
+            except (TypeError, ValueError):
+                continue
+            if name not in self._feature_stats:
+                self._feature_stats[name] = [0.0, 0.0, 0]
+            stats = self._feature_stats[name]
+            stats[0] += val          # sum
+            stats[1] += val * val    # sum of squares
+            stats[2] += 1            # count
+
+    def _get_feature_variances(self) -> Dict[str, float]:
+        """Return computed variance for each tracked feature."""
+        variances = {}
+        for name, (s, sq, n) in self._feature_stats.items():
+            if n < 2:
+                variances[name] = 0.0
+            else:
+                mean = s / n
+                variances[name] = max(0.0, sq / n - mean * mean)
+        return variances
+
+    def _get_selected_features(self) -> List[str]:
+        """Return feature names that pass the minimum variance threshold."""
+        threshold = self._feature_variance_min
+        variances = self._get_feature_variances()
+        selected = [name for name, var in variances.items() if var >= threshold]
+        dropped = len(variances) - len(selected)
+        if dropped > 0:
+            logger.info(
+                f"Feature selection: kept {len(selected)}/{len(variances)} features "
+                f"(dropped {dropped} near-zero variance < {threshold})"
+            )
+        return sorted(selected)
+
+    def _write_feature_manifest(self, selected_features: List[str], export_filepath: str):
+        """Write feature_manifest.json alongside the export file."""
+        try:
+            variances = self._get_feature_variances()
+            manifest = {
+                'created_at': datetime.now().isoformat(),
+                'feature_count': len(selected_features),
+                'min_variance_threshold': self._feature_variance_min,
+                'features': {
+                    name: {'variance': round(variances.get(name, 0.0), 6)}
+                    for name in selected_features
+                },
+                'export_file': str(export_filepath),
+            }
+            manifest_path = self.export_dir / 'feature_manifest.json'
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(manifest, f, indent=2)
+            logger.info(f"Feature manifest written: {manifest_path} ({len(selected_features)} features)")
+        except Exception as e:
+            logger.error(f"Failed to write feature manifest: {e}")
+
+    # ═══════════════════════════════════════════════════════════════════════
     # EXPORT FUNCTIONS
     # ═══════════════════════════════════════════════════════════════════════
     
@@ -410,6 +486,14 @@ class DataConsolidator:
 
             # Free the large records list immediately after export — record_ids is all we still need
             del records
+
+            # AI-01: Write feature manifest with variance-filtered feature names
+            try:
+                selected = self._get_selected_features()
+                if selected:
+                    self._write_feature_manifest(selected, str(filepath))
+            except Exception as e:
+                logger.error(f"Feature manifest generation failed: {e}")
 
             # Create export batch record
             batch_id = self._create_export_batch(filepath, count)

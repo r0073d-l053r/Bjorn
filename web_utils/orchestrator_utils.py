@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import html
 import importlib
+import threading
 from datetime import datetime
 from typing import Any, Dict, Optional
 import logging
@@ -19,6 +20,9 @@ class OrchestratorUtils:
     def __init__(self, shared_data):
         self.logger = logger
         self.shared_data = shared_data
+        # ORCH-03: Background scan timer for MANUAL mode
+        self._scan_timer = None
+        self._scan_stop_event = threading.Event()
 
     def execute_manual_attack(self, params):
         """Execute a manual attack on a specific target."""
@@ -96,6 +100,9 @@ class OrchestratorUtils:
     def start_orchestrator(self):
         """Start the orchestrator."""
         try:
+            # ORCH-03: Stop background scan timer when switching to AUTO/AI
+            self._stop_scan_timer()
+
             bjorn_instance = self.shared_data.bjorn_instance
             if getattr(self.shared_data, "ai_mode", False):
                 self.shared_data.operation_mode = "AI"
@@ -109,16 +116,65 @@ class OrchestratorUtils:
             return {"status": "error", "message": str(e)}
 
     def stop_orchestrator(self):
-        """Stop the orchestrator."""
+        """Stop the orchestrator and reset all status fields to IDLE."""
         try:
             bjorn_instance = self.shared_data.bjorn_instance
             self.shared_data.operation_mode = "MANUAL"
             bjorn_instance.stop_orchestrator()
             self.shared_data.orchestrator_should_exit = True
-            return {"status": "success", "message": "Orchestrator stopping..."}
+            # Explicit reset so the web UI reflects IDLE immediately,
+            # even if the orchestrator thread is still finishing up.
+            self.shared_data.bjorn_orch_status = "IDLE"
+            self.shared_data.bjorn_status_text = "IDLE"
+            self.shared_data.bjorn_status_text2 = "Waiting for instructions..."
+            self.shared_data.action_target_ip = ""
+            self.shared_data.active_action = None
+            self.shared_data.update_status("IDLE", "")
+
+            # ORCH-03: Start background scan timer if enabled
+            if getattr(self.shared_data, 'manual_mode_auto_scan', True):
+                self._start_scan_timer()
+
+            return {"status": "success", "message": "Orchestrator stopped"}
         except Exception as e:
             self.logger.error(f"Error stopping orchestrator: {e}")
             return {"status": "error", "message": str(e)}
+
+    # =========================================================================
+    # ORCH-03: Background scan timer for MANUAL mode
+    # =========================================================================
+
+    def _start_scan_timer(self):
+        """Start a background thread that periodically scans in MANUAL mode."""
+        if self._scan_timer and self._scan_timer.is_alive():
+            return
+        self._scan_stop_event.clear()
+        self._scan_timer = threading.Thread(
+            target=self._scan_loop, daemon=True, name="ManualModeScanTimer"
+        )
+        self._scan_timer.start()
+        self.logger.info("ORCH-03: Background scan timer started for MANUAL mode")
+
+    def _scan_loop(self):
+        """Periodically run network scan while in MANUAL mode."""
+        interval = int(getattr(self.shared_data, 'manual_mode_scan_interval', 180))
+        while not self._scan_stop_event.wait(timeout=interval):
+            if self.shared_data.operation_mode != "MANUAL":
+                self.logger.info("ORCH-03: Exiting scan timer, no longer in MANUAL mode")
+                break
+            try:
+                self.logger.info("ORCH-03: Manual mode background scan starting")
+                self.execute_manual_scan()
+            except Exception as e:
+                self.logger.error(f"ORCH-03: Background scan error: {e}")
+
+    def _stop_scan_timer(self):
+        """Stop the background scan timer."""
+        if self._scan_timer:
+            self._scan_stop_event.set()
+            self._scan_timer.join(timeout=5)
+            self._scan_timer = None
+            self.logger.debug("ORCH-03: Background scan timer stopped")
 
     def serve_credentials_data(self, handler):
         """Serve credentials data as HTML."""

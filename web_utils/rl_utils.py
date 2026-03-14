@@ -174,7 +174,11 @@ class RLUtils:
         try:
             return self.shared_data.db.query(sql) or []
         except Exception as exc:
-            logger.error(f"DB query failed: {exc}")
+            msg = str(exc)
+            if "no such table" in msg:
+                logger.debug(f"Table not yet created (AI not active): {msg}")
+            else:
+                logger.error(f"DB query failed: {exc}")
             return []
 
     def _query_scalar(self, sql: str, key: str, default: int = 0) -> int:

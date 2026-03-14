@@ -8,13 +8,23 @@ import json
 import subprocess
 import time
 import os
+import threading
 import dbus
 import dbus.mainloop.glib
 import dbus.exceptions
 from typing import Any, Dict, Optional
 import logging
 from logger import Logger
+
 logger = Logger(name="bluetooth_utils.py", level=logging.DEBUG)
+
+# Constants
+BT_SCAN_DURATION_S = 3
+BT_PAIR_TIMEOUT_S = 60
+BT_CONNECT_SETTLE_S = 2
+BT_CONFIG_PATH = "/home/bjorn/.settings_bjorn/bt.json"
+BT_DISCOVERABLE_TIMEOUT = 180
+
 
 class BluetoothUtils:
     """Utilities for Bluetooth device management."""
@@ -29,6 +39,7 @@ class BluetoothUtils:
         self.adapter = None
         self.adapter_props = None
         self.adapter_methods = None
+        self._config_lock = threading.Lock()
 
     def _ensure_bluetooth_service(self):
         """Check if bluetooth service is running, if not start and enable it."""
@@ -105,42 +116,78 @@ class BluetoothUtils:
                     return self.bus.get_object("org.bluez", path)
         return None
 
+    def _save_bt_config(self, address):
+        """Atomically save Bluetooth device MAC to config file (thread-safe)."""
+        with self._config_lock:
+            current_mac = None
+            if os.path.exists(BT_CONFIG_PATH):
+                try:
+                    with open(BT_CONFIG_PATH, "r") as f:
+                        data = json.load(f)
+                        current_mac = data.get("device_mac")
+                except (json.JSONDecodeError, IOError) as e:
+                    self.logger.warning(f"Could not read bt.json: {e}")
+
+            if current_mac != address:
+                self.logger.info(f"Updating bt.json with new MAC: {address}")
+                os.makedirs(os.path.dirname(BT_CONFIG_PATH), exist_ok=True)
+                tmp_path = BT_CONFIG_PATH + ".tmp"
+                with open(tmp_path, "w") as f:
+                    json.dump({"device_mac": address}, f)
+                os.replace(tmp_path, BT_CONFIG_PATH)
+                self.logger.info("Updated bt.json with new device MAC.")
+
+    def _restart_auto_bt_connect(self):
+        """Restart auto_bt_connect service (non-fatal if service doesn't exist)."""
+        result = subprocess.run(
+            ["sudo", "systemctl", "restart", "auto_bt_connect"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        if result.returncode != 0:
+            self.logger.warning(f"auto_bt_connect service restart failed (may not exist): {result.stderr.strip()}")
+        else:
+            self.logger.info("auto_bt_connect service restarted successfully")
+
     def scan_bluetooth(self, handler):
         """Scan for Bluetooth devices."""
         try:
             self._init_bluetooth()
             self.adapter_props.Set("org.bluez.Adapter1", "Powered", dbus.Boolean(True))
             self.adapter_props.Set("org.bluez.Adapter1", "Discoverable", dbus.Boolean(True))
-            self.adapter_props.Set("org.bluez.Adapter1", "DiscoverableTimeout", dbus.UInt32(180))
+            self.adapter_props.Set("org.bluez.Adapter1", "DiscoverableTimeout", dbus.UInt32(BT_DISCOVERABLE_TIMEOUT))
 
             self.adapter_methods.StartDiscovery()
-            time.sleep(3)
+            time.sleep(BT_SCAN_DURATION_S)
             objects = self.manager_interface.GetManagedObjects()
             devices = []
             for path, ifaces in objects.items():
                 if "org.bluez.Device1" in ifaces:
                     dev = ifaces["org.bluez.Device1"]
-                    addr = dev.get("Address", "")
-                    name = dev.get("Name", "Unknown")
-                    paired = bool(dev.get("Paired", False))
-                    trusted = bool(dev.get("Trusted", False))
-                    connected = bool(dev.get("Connected", False))
-
                     devices.append({
-                        "name": name,
-                        "address": addr,
-                        "paired": paired,
-                        "trusted": trusted,
-                        "connected": connected
+                        "name": str(dev.get("Name", "Unknown")),
+                        "address": str(dev.get("Address", "")),
+                        "paired": bool(dev.get("Paired", False)),
+                        "trusted": bool(dev.get("Trusted", False)),
+                        "connected": bool(dev.get("Connected", False))
                     })
 
-            self.adapter_methods.StopDiscovery()
+            try:
+                self.adapter_methods.StopDiscovery()
+            except dbus.exceptions.DBusException:
+                pass  # Discovery may have already stopped
+
             response = {"devices": devices}
             handler.send_response(200)
             handler.send_header("Content-Type", "application/json")
             handler.end_headers()
             handler.wfile.write(json.dumps(response).encode('utf-8'))
 
+        except dbus.exceptions.DBusException as e:
+            self.logger.error(f"DBus error scanning Bluetooth: {e}")
+            handler.send_response(500)
+            handler.send_header("Content-Type", "application/json")
+            handler.end_headers()
+            handler.wfile.write(json.dumps({"status": "error", "message": f"Bluetooth DBus error: {e}"}).encode('utf-8'))
         except Exception as e:
             self.logger.error(f"Error scanning Bluetooth: {e}")
             handler.send_response(500)
@@ -150,13 +197,13 @@ class BluetoothUtils:
 
     def pair_bluetooth(self, address, pin=None):
         """Pair with a Bluetooth device."""
+        bt_process = None
         try:
             device = self._get_device_object(address)
             if device is None:
                 self.logger.error(f"Device {address} not found")
                 return {"status": "error", "message": f"Device {address} not found"}
 
-            device_methods = dbus.Interface(device, "org.bluez.Device1")
             device_props = dbus.Interface(device, "org.freedesktop.DBus.Properties")
 
             bt_process = subprocess.Popen(
@@ -173,58 +220,35 @@ class BluetoothUtils:
                 self.logger.info(f"Attempting to pair with {address}")
                 bt_process.stdin.write(f"pair {address}\n")
                 bt_process.stdin.flush()
-                
-                timeout = 60
+
                 start_time = time.time()
-                
-                while (time.time() - start_time) < timeout:
+
+                while (time.time() - start_time) < BT_PAIR_TIMEOUT_S:
                     line = bt_process.stdout.readline()
                     if not line:
                         continue
-                        
+
                     self.logger.info(f"Bluetoothctl output: {line.strip()}")
-                    
+
                     if "Confirm passkey" in line or "Request confirmation" in line:
                         self.logger.info("Sending confirmation...")
                         bt_process.stdin.write("yes\n")
                         bt_process.stdin.flush()
-                    
+
                     try:
                         paired = device_props.Get("org.bluez.Device1", "Paired")
                         if paired:
                             self.logger.info("Device successfully paired!")
                             device_props.Set("org.bluez.Device1", "Trusted", dbus.Boolean(True))
-                            
-                            time.sleep(2)
-                            
-                            config_path = "/home/bjorn/.settings_bjorn/bt.json"
-                            current_mac = None
-                            if os.path.exists(config_path):
-                                try:
-                                    with open(config_path, "r") as f:
-                                        data = json.load(f)
-                                        current_mac = data.get("device_mac")
-                                except (json.JSONDecodeError, IOError):
-                                    pass
 
-                            if current_mac != address:
-                                self.logger.info(f"Updating config with new MAC: {address}")
-                                new_data = {"device_mac": address}
-                                os.makedirs(os.path.dirname(config_path), exist_ok=True)
-                                with open(config_path, "w") as f:
-                                    json.dump(new_data, f)
-                                self.logger.info("Updated bt.json with new device MAC.")
+                            time.sleep(BT_CONNECT_SETTLE_S)
+                            self._save_bt_config(address)
+                            self._restart_auto_bt_connect()
 
-                            try:
-                                subprocess.run(["sudo", "systemctl", "restart", "auto_bt_connect"], check=True)
-                                self.logger.info("auto_bt_connect service restarted successfully")
-                            except subprocess.CalledProcessError as e:
-                                self.logger.error(f"Failed to restart auto_bt_connect service: {e}")
-                            
                             return {"status": "success", "message": "Device successfully paired and trusted"}
-                    except:
-                        pass
-                        
+                    except dbus.exceptions.DBusException as e:
+                        self.logger.debug(f"Pairing check DBus error (may be transient): {e}")
+
                     if "Failed" in line or "Error" in line:
                         self.logger.error(f"Bluetoothctl error: {line}")
                         return {"status": "error", "message": f"Pairing failed: {line.strip()}"}
@@ -235,12 +259,17 @@ class BluetoothUtils:
                 self.logger.error(f"Error during pairing process: {str(e)}")
                 return {"status": "error", "message": f"Error during pairing: {str(e)}"}
 
+        except Exception as e:
+            self.logger.error(f"Error initiating pairing: {str(e)}")
+            return {"status": "error", "message": f"Error initiating pairing: {str(e)}"}
         finally:
-            if 'bt_process' in locals():
-                bt_process.stdin.write("quit\n")
-                bt_process.stdin.flush()
-                time.sleep(1)
-                bt_process.terminate()
+            if bt_process is not None:
+                try:
+                    bt_process.stdin.write("quit\n")
+                    bt_process.stdin.flush()
+                    bt_process.wait(timeout=3)
+                except Exception:
+                    bt_process.kill()
 
     def forget_bluetooth(self, address):
         """Remove/forget a Bluetooth device."""
@@ -253,19 +282,17 @@ class BluetoothUtils:
             adapter_methods = dbus.Interface(self.adapter, "org.bluez.Adapter1")
 
             try:
-                try:
-                    device_methods.Disconnect()
-                except:
-                    pass
+                device_methods.Disconnect()
+            except dbus.exceptions.DBusException as e:
+                self.logger.debug(f"Disconnect before forget (non-fatal): {e}")
 
-                adapter_methods.RemoveDevice(device)
-                self.logger.info(f"Successfully removed device {address}")
-                return {"status": "success", "message": "Device forgotten successfully"}
+            adapter_methods.RemoveDevice(device)
+            self.logger.info(f"Successfully removed device {address}")
+            return {"status": "success", "message": "Device forgotten successfully"}
 
-            except Exception as e:
-                self.logger.error(f"Failed to forget device: {e}")
-                return {"status": "error", "message": f"Failed to forget device: {str(e)}"}
-
+        except dbus.exceptions.DBusException as e:
+            self.logger.error(f"DBus error forgetting device: {e}")
+            return {"status": "error", "message": f"Failed to forget device: {str(e)}"}
         except Exception as e:
             self.logger.error(f"Error in forget_bluetooth: {str(e)}")
             return {"status": "error", "message": f"Error forgetting device: {str(e)}"}
@@ -279,7 +306,7 @@ class BluetoothUtils:
         try:
             device_props.Set("org.bluez.Device1", "Trusted", dbus.Boolean(True))
             return {"status": "success", "message": f"Trusted {address}"}
-        except Exception as e:
+        except dbus.exceptions.DBusException as e:
             return {"status": "error", "message": f"Failed to trust {address}: {e}"}
 
     def connect_bluetooth(self, address):
@@ -300,7 +327,7 @@ class BluetoothUtils:
                 text=True
             )
 
-            time.sleep(2)
+            time.sleep(BT_CONNECT_SETTLE_S)
 
             if bt_net_process.poll() is not None:
                 if bt_net_process.returncode != 0:
@@ -321,24 +348,7 @@ class BluetoothUtils:
                 return {"status": "error", "message": f"Connected to {address}, bt-network ok, but dhclient failed: {dhclient_res.stderr}"}
 
             self.logger.info("Successfully obtained IP via dhclient on bnep0.")
-
-            config_path = "/home/bjorn/.settings_bjorn/bt.json"
-            current_mac = None
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, "r") as f:
-                        data = json.load(f)
-                        current_mac = data.get("device_mac")
-                except (json.JSONDecodeError, IOError):
-                    pass
-
-            if current_mac != address:
-                self.logger.info(f"Updating config with new MAC: {address}")
-                new_data = {"device_mac": address}
-                os.makedirs(os.path.dirname(config_path), exist_ok=True)
-                with open(config_path, "w") as f:
-                    json.dump(new_data, f)
-                self.logger.info("Updated bt.json with new device MAC.")
+            self._save_bt_config(address)
 
             return {"status": "success", "message": f"Connected to {address} and network interface set up."}
         except dbus.exceptions.DBusException as e:

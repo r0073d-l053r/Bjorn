@@ -1,4 +1,4 @@
-﻿import { $, el, toast, empty } from './dom.js';
+import { $, el, toast, empty } from './dom.js';
 import { api } from './api.js';
 import { t } from './i18n.js';
 
@@ -33,10 +33,51 @@ const RANGES = {
   semaphore_slots: { min: 1, max: 128, step: 1 },
   line_spacing: { min: 0, max: 10, step: 0.1 },
   vuln_update_interval: { min: 1, max: 86400, step: 1 },
+  ai_feature_selection_min_variance: { min: 0, max: 1, step: 0.001 },
+  ai_model_history_max: { min: 1, max: 10, step: 1 },
+  ai_auto_rollback_window: { min: 10, max: 500, step: 10 },
+  ai_cold_start_bootstrap_weight: { min: 0, max: 1, step: 0.05 },
+  circuit_breaker_threshold: { min: 1, max: 20, step: 1 },
+  manual_mode_scan_interval: { min: 30, max: 3600, step: 10 },
 };
+
+/* ── Sub-tab grouping: maps __title_* section keys → sub-tab id ── */
+const SECTION_TO_TAB = {
+  '__title_Bjorn__':          'core',
+  '__title_modes__':          'core',
+  '__title_web__':            'core',
+  '__title_interfaces__':     'network',
+  '__title_network__':        'network',
+  '__title_actions_studio__': 'actions',
+  '__title_timewaits__':      'actions',
+  '__title_orchestrator__':   'actions',
+  '__title_bruteforce__':     'actions',
+  '__title_display__':        'display',
+  '__title_epd__':            'display',
+  '__title_timing__':         'display',
+  '__title_ai__':             'ai',
+  '__title_vuln__':           'security',
+  '__title_lists__':          'security',
+  '__title_runtime__':        'system',
+  '__title_power__':          'system',
+  '__title_sentinel__':       'security',
+  '__title_bifrost__':        'network',
+  '__title_loki__':           'security',
+};
+
+const SUB_TABS = [
+  { id: 'core',     icon: '\u2699',     label: 'Core' },
+  { id: 'network',  icon: '\uD83C\uDF10', label: 'Network' },
+  { id: 'actions',  icon: '\u26A1',     label: 'Actions' },
+  { id: 'display',  icon: '\uD83D\uDDA5', label: 'Display' },
+  { id: 'ai',       icon: '\uD83E\uDDE0', label: 'AI / RL' },
+  { id: 'security', icon: '\uD83D\uDD12', label: 'Security' },
+  { id: 'system',   icon: '\uD83D\uDD27', label: 'System' },
+];
 
 let _host = null;
 let _lastConfig = null;
+let _activeSubTab = 'core';
 
 function resolveTooltips(config) {
   const tips = config?.__tooltips_i18n__;
@@ -260,41 +301,114 @@ function createSectionCard(title) {
   ]);
 }
 
+/* ── Sub-tab navigation bar ── */
+function createSubTabBar(onSwitch) {
+  const nav = el('nav', { class: 'cfg-subtabs' });
+  for (const tab of SUB_TABS) {
+    const btn = el('button', {
+      class: `cfg-subtab${tab.id === _activeSubTab ? ' active' : ''}`,
+      'data-subtab': tab.id,
+      type: 'button',
+    }, [`${tab.icon}\u00A0${tab.label}`]);
+    nav.appendChild(btn);
+  }
+  nav.addEventListener('click', (e) => {
+    const btn = e.target.closest('.cfg-subtab');
+    if (!btn) return;
+    const id = btn.dataset.subtab;
+    if (id === _activeSubTab) return;
+    _activeSubTab = id;
+    nav.querySelectorAll('.cfg-subtab').forEach(b => b.classList.toggle('active', b.dataset.subtab === id));
+    onSwitch(id);
+  });
+  return nav;
+}
+
 function render(config) {
   if (!_host) return;
   empty(_host);
   ensureChipHelpers();
   const tooltips = resolveTooltips(config);
 
-  const togglesCard = createSectionCard(t('settings.toggles'));
-  const togglesBody = togglesCard.querySelector('.cfg-card-body');
-  const cardsGrid = el('div', { class: 'cfg-cards-grid' });
+  /* Buckets: one per sub-tab, each with a toggles card + section cards */
+  const buckets = {};
+  for (const tab of SUB_TABS) {
+    buckets[tab.id] = {
+      togglesBody: null,
+      togglesCard: null,
+      cardsGrid: el('div', { class: 'cfg-cards-grid' }),
+      currentCard: null,
+      pane: el('div', { class: 'cfg-subtab-pane', 'data-pane': tab.id }),
+    };
+  }
 
-  let currentCard = null;
+  /* Helper: lazily create the toggles card for a bucket */
+  const ensureToggles = (b) => {
+    if (!b.togglesCard) {
+      b.togglesCard = createSectionCard(t('settings.toggles'));
+      b.togglesBody = b.togglesCard.querySelector('.cfg-card-body');
+    }
+  };
+
+  let currentTabId = 'core';  // default bucket for fields before first __title_*
+
   for (const [key, value] of Object.entries(config || {})) {
     if (key.startsWith('__')) {
       if (key.startsWith('__title_')) {
-        if (currentCard) cardsGrid.appendChild(currentCard);
-        currentCard = createSectionCard(String(value).replace('__title_', '').replace(/__/g, ''));
+        /* Close previous card if any */
+        const prevBucket = buckets[currentTabId];
+        if (prevBucket.currentCard) {
+          prevBucket.cardsGrid.appendChild(prevBucket.currentCard);
+          prevBucket.currentCard = null;
+        }
+        /* Switch to the right bucket */
+        currentTabId = SECTION_TO_TAB[key] || 'core';
+        const bucket = buckets[currentTabId];
+        const sectionName = String(value).replace('__title_', '').replace(/__/g, '');
+        bucket.currentCard = createSectionCard(sectionName);
       }
       continue;
     }
 
+    const bucket = buckets[currentTabId];
     const tooltipI18nKey = String(tooltips[key] || '');
+
     if (typeof value === 'boolean') {
-      togglesBody.appendChild(createBooleanField(key, value, tooltipI18nKey));
+      ensureToggles(bucket);
+      bucket.togglesBody.appendChild(createBooleanField(key, value, tooltipI18nKey));
       continue;
     }
-    if (!currentCard) currentCard = createSectionCard(t('settings.general'));
-    const body = currentCard.querySelector('.cfg-card-body');
+
+    if (!bucket.currentCard) bucket.currentCard = createSectionCard(t('settings.general'));
+    const body = bucket.currentCard.querySelector('.cfg-card-body');
     if (Array.isArray(value)) body.appendChild(createListField(key, value, tooltipI18nKey));
     else if (typeof value === 'number') body.appendChild(createNumberField(key, value, tooltipI18nKey));
     else body.appendChild(createStringField(key, value, tooltipI18nKey));
   }
 
-  if (currentCard) cardsGrid.appendChild(currentCard);
-  _host.appendChild(togglesCard);
-  _host.appendChild(cardsGrid);
+  /* Finalize all buckets */
+  for (const tab of SUB_TABS) {
+    const b = buckets[tab.id];
+    if (b.currentCard) b.cardsGrid.appendChild(b.currentCard);
+    if (b.togglesCard) b.pane.appendChild(b.togglesCard);
+    if (b.cardsGrid.children.length) b.pane.appendChild(b.cardsGrid);
+  }
+
+  /* Build sub-tab bar */
+  const showPane = (id) => {
+    _host.querySelectorAll('.cfg-subtab-pane').forEach(p => {
+      p.hidden = p.dataset.pane !== id;
+    });
+  };
+  const subTabBar = createSubTabBar(showPane);
+  _host.appendChild(subTabBar);
+
+  /* Append all panes */
+  for (const tab of SUB_TABS) {
+    const b = buckets[tab.id];
+    b.pane.hidden = tab.id !== _activeSubTab;
+    _host.appendChild(b.pane);
+  }
 }
 
 function collect() {
@@ -371,6 +485,3 @@ export function mountConfig(host) {
 export function hasLoadedConfig() {
   return !!_lastConfig;
 }
-
-
-

@@ -214,13 +214,17 @@ function updateStaticI18n() {
 async function loadAllFiles() {
   setStatus(L('common.loading', 'Loading...'));
   try {
-    const response = await fetch('/list_files');
+    const ac = tracker ? tracker.trackAbortController() : new AbortController();
+    const response = await fetch('/list_files', { signal: ac.signal });
+    if (tracker) tracker.removeAbortController(ac);
+    if (!tracker) return; /* unmounted while awaiting */
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     allFiles = Array.isArray(data) ? data : [];
     absoluteBasePath = inferAbsoluteBasePath(allFiles) || '/home/bjorn';
     renderCurrentFolder();
   } catch (err) {
+    if (err.name === 'AbortError') return;
     console.error(`[${PAGE}] loadAllFiles:`, err);
     allFiles = [];
     renderCurrentFolder();

@@ -1,0 +1,153 @@
+/* ===== STUDIO RUNTIME HOST ===== */
+.studio-container.studio-runtime-host {
+  min-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 60px) - 12px);
+  height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 60px) - 12px);
+}
+
+.studio-container.studio-runtime-host #app {
+  height: 100%;
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.studio-container.studio-runtime-host main {
+  min-height: 0;
+}
+
+.studio-container.studio-runtime-host #left,
+.studio-container.studio-runtime-host #center,
+.studio-container.studio-runtime-host #right {
+  min-height: 0;
+  height: 100%;
+}
+
+/* ===== Studio kebab menu (replaces inline styles) ===== */
+.studio-container .kebab {
+  position: relative;
+}
+
+.studio-container .studio-kebab-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, .45);
+  display: none;
+  z-index: 2400;
+}
+
+.studio-container .studio-kebab-menu .item {
+  padding: .55rem .7rem;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background .15s ease;
+}
+
+.studio-container .studio-kebab-menu .item:hover {
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+}
+
+/* ===== Studio legend dots ===== */
+.studio-container .legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.studio-container .legend-dot.legend-ok {
+  background: var(--ok, #22c55e);
+}
+
+.studio-container .legend-dot.legend-bad {
+  background: var(--bad, #ef4444);
+}
+
+.studio-container .legend-dot.legend-req {
+  background: #7aa7ff;
+}
+
+/* ===== Studio create host button ===== */
+.studio-container .studio-create-host-btn {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+/* ===== Studio action buttons row ===== */
+.studio-container .studio-action-btns {
+  margin-top: .6rem;
+}
+
+/* ===== Studio mono input ===== */
+.studio-container .mono-input {
+  font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+}
+
+/* ===== Flex-1 utility ===== */
+.studio-container .flex-1 {
+  flex: 1;
+}
+
+/* ===== Studio link wizard endpoints ===== */
+.studio-container .studio-link-endpoints {
+  margin-bottom: 6px;
+}
+
+/* ===== Studio preview row ===== */
+.studio-container .studio-preview-row {
+  margin-top: 10px;
+}
+
+/* ===== Studio wizard buttons ===== */
+.studio-container .studio-wizard-btns {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 1100px) {
+  .studio-container.studio-runtime-host #left,
+  .studio-container.studio-runtime-host #right {
+    top: calc(var(--h-topbar, 56px) + var(--studio-header-h, 52px) + 8px);
+  }
+}
+
+.studio-container .studio-loading {
+  padding: 14px;
+  color: var(--muted);
+  text-align: center;
+  border: 1px dashed var(--c-border);
+  border-radius: 10px;
+  margin: 12px;
+}
+
+/* ===== Backup page responsive ===== */
+@media (max-width: 900px) {
+  .page-backup .backup-layout {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .page-backup .backup-sidebar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .page-backup .backup-sidehead {
+    grid-column: 1 / -1;
+  }
+
+  .page-backup.page-with-sidebar .backup-sidebar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .page-backup.page-with-sidebar .backup-sidehead {
+    grid-column: 1 / -1;
+  }
+}

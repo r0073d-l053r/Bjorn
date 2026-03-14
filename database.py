@@ -26,6 +26,9 @@ from db_utils.comments import CommentOps
 from db_utils.agents import AgentOps
 from db_utils.studio import StudioOps
 from db_utils.webenum import WebEnumOps
+from db_utils.sentinel import SentinelOps
+from db_utils.bifrost import BifrostOps
+from db_utils.loki import LokiOps
 
 logger = Logger(name="database.py", level=logging.DEBUG)
 
@@ -61,7 +64,10 @@ class BjornDatabase:
         self._agents = AgentOps(self._base)
         self._studio = StudioOps(self._base)
         self._webenum = WebEnumOps(self._base)
-        
+        self._sentinel = SentinelOps(self._base)
+        self._bifrost = BifrostOps(self._base)
+        self._loki = LokiOps(self._base)
+
         # Ensure schema is created
         self.ensure_schema()
         
@@ -138,7 +144,10 @@ class BjornDatabase:
         self._agents.create_tables()
         self._studio.create_tables()
         self._webenum.create_tables()
-        
+        self._sentinel.create_tables()
+        self._bifrost.create_tables()
+        self._loki.create_tables()
+
         # Initialize stats singleton
         self._stats.ensure_stats_initialized()
         
@@ -268,7 +277,27 @@ class BjornDatabase:
     
     def get_last_action_statuses_for_mac(self, mac_address: str) -> Dict[str, Dict[str, str]]:
         return self._queue.get_last_action_statuses_for_mac(mac_address)
-    
+
+    # Circuit breaker operations
+    def record_circuit_breaker_failure(self, action_name: str, mac: str = '',
+                                       max_failures: int = 5, cooldown_s: int = 300) -> None:
+        return self._queue.record_circuit_breaker_failure(action_name, mac, max_failures, cooldown_s)
+
+    def record_circuit_breaker_success(self, action_name: str, mac: str = '') -> None:
+        return self._queue.record_circuit_breaker_success(action_name, mac)
+
+    def is_circuit_open(self, action_name: str, mac: str = '') -> bool:
+        return self._queue.is_circuit_open(action_name, mac)
+
+    def get_circuit_breaker_status(self, action_name: str, mac: str = '') -> Optional[Dict[str, Any]]:
+        return self._queue.get_circuit_breaker_status(action_name, mac)
+
+    def reset_circuit_breaker(self, action_name: str, mac: str = '') -> None:
+        return self._queue.reset_circuit_breaker(action_name, mac)
+
+    def count_running_actions(self, action_name: Optional[str] = None) -> int:
+        return self._queue.count_running_actions(action_name)
+
     # Vulnerability operations
     def add_vulnerability(self, mac_address: str, vuln_id: str, ip: Optional[str] = None,
                          hostname: Optional[str] = None, port: Optional[int] = None):

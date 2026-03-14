@@ -19,6 +19,8 @@ let currentCategory = 'all';
 let searchGlobal = '';
 let searchTerms = {};
 let collapsedCards = new Set();
+let toastTimer = null;
+let prevServiceFingerprint = ''; /* tracks service data for incremental updates */
 
 /* ── localStorage ── */
 const LS_CARD = 'cred:card:collapsed:';
@@ -42,6 +44,8 @@ export function unmount() {
     searchGlobal = '';
     searchTerms = {};
     collapsedCards.clear();
+    toastTimer = null;
+    prevServiceFingerprint = '';
 }
 
 /* ── shell ── */
@@ -66,7 +70,7 @@ function buildShell() {
         /* services grid */
         el('div', { class: 'services-grid', id: 'credentials-grid' }),
         /* toast */
-        el('div', { class: 'copied-feedback', id: 'cred-toast' }, ['Copied to clipboard!']),
+        el('div', { class: 'copied-feedback', id: 'cred-toast' }, [t('creds.copied')]),
     ]);
 }
 
@@ -81,7 +85,13 @@ function statItem(icon, id, label) {
 /* ── fetch ── */
 async function fetchCredentials() {
     try {
-        const text = await fetch('/list_credentials').then(r => r.text());
+        const ac = tracker ? tracker.trackAbortController() : new AbortController();
+        const text = await fetch('/list_credentials', { signal: ac.signal }).then(r => r.text());
+        if (tracker) tracker.removeAbortController(ac);
+
+        /* guard: page may have unmounted while awaiting */
+        if (!tracker) return;
+
         const doc = new DOMParser().parseFromString(text, 'text/html');
         const tables = doc.querySelectorAll('table');
 
@@ -98,11 +108,20 @@ async function fetchCredentials() {
         // Sort by most credentials first
         serviceData.sort((a, b) => (b.credentials.rows?.length || 0) - (a.credentials.rows?.length || 0));
 
+        /* Compute a fingerprint of the data to skip DOM rebuild when nothing changed */
+        const fp = serviceData.map(s =>
+          `${s.service}:${s.credentials.rows.length}:${s.credentials.rows.map(r => Object.values(r).join('|')).join(',')}`
+        ).join(';');
+
+        if (fp === prevServiceFingerprint) return; /* no changes — skip DOM rebuild */
+        prevServiceFingerprint = fp;
+
         updateStats();
         renderTabs();
         renderServices();
         applyPersistedCollapse();
     } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error(`[${PAGE}] fetch error:`, err);
     }
 }
@@ -179,7 +198,7 @@ function renderTabs() {
     empty(tabs);
 
     cats.forEach(cat => {
-        const label = cat === 'all' ? 'All' : cat.toUpperCase();
+        const label = cat === 'all' ? t('common.all') : cat.toUpperCase();
         const count = counts[cat] || 0;
         const active = cat === currentCategory ? 'active' : '';
         const tab = el('div', { class: `tab ${active}`, 'data-cat': cat }, [
@@ -231,7 +250,7 @@ function renderServices() {
     if (searched.length === 0) {
         grid.appendChild(el('div', { style: 'text-align:center;color:var(--muted);padding:40px' }, [
             el('div', { style: 'font-size:3rem;margin-bottom:16px;opacity:.5' }, ['🔍']),
-            'No credentials',
+            t('creds.noCredentials'),
         ]));
         updateBadges();
         return;
@@ -265,16 +284,16 @@ function createServiceCard(svc) {
         /* header */
         el('div', { class: 'service-header', onclick: (e) => toggleCollapse(e, svc.service) }, [
             el('span', { class: 'service-title' }, [svc.service.toUpperCase()]),
-            el('span', { class: 'service-count' }, [`Credentials: ${count}`]),
+            el('span', { class: 'service-count' }, [t('creds.credentialsCount', { count })]),
             el('div', { class: 'search-container', onclick: e => e.stopPropagation() }, [
                 el('input', {
-                    type: 'text', class: 'search-input', placeholder: 'Search...',
+                    type: 'text', class: 'search-input', placeholder: t('creds.searchDots'),
                     'data-service': svc.service, oninput: (e) => filterServiceCreds(e, svc.service)
                 }),
                 el('button', { class: 'clear-button', onclick: (e) => clearServiceSearch(e, svc.service) }, ['✖']),
             ]),
             el('button', {
-                class: 'download-button', title: 'Download CSV',
+                class: 'download-button', title: t('creds.downloadCsv'),
                 onclick: (e) => downloadCSV(e, svc.service, svc.credentials)
             }, ['💾']),
             el('span', { class: 'collapse-indicator' }, ['▼']),
@@ -299,7 +318,7 @@ function createCredentialItem(row) {
                     class: `field-value ${val.trim() ? bubbleClass : ''}`,
                     'data-value': val,
                     onclick: (e) => copyToClipboard(e.currentTarget),
-                    title: 'Click to copy',
+                    title: t('creds.clickToCopy'),
                 }, [val]),
             ]);
         }),
@@ -399,7 +418,8 @@ function copyToClipboard(el) {
         showToast();
         const bg = el.style.background;
         el.style.background = '#4CAF50';
-        setTimeout(() => el.style.background = bg, 500);
+        if (tracker) tracker.trackTimeout(() => { el.style.background = bg; }, 500);
+        else setTimeout(() => { el.style.background = bg; }, 500);
     }).catch(() => {
         // Fallback
         const ta = document.createElement('textarea');
@@ -416,7 +436,13 @@ function showToast() {
     const toast = $('#cred-toast');
     if (!toast) return;
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 1500);
+    if (toastTimer != null) {
+        if (tracker) tracker.clearTrackedTimeout(toastTimer);
+        else clearTimeout(toastTimer);
+    }
+    toastTimer = tracker
+        ? tracker.trackTimeout(() => { toast.classList.remove('show'); toastTimer = null; }, 1500)
+        : setTimeout(() => { toast.classList.remove('show'); toastTimer = null; }, 1500);
 }
 
 /* ── CSV export ── */

@@ -16,6 +16,8 @@ let currentSort = 'name';
 let sortDirection = 'asc';
 let searchTerm = '';
 let searchTimer = null;
+let expandedDirs = new Set();
+let treeExpansionInitialized = false;
 
 const FILE_ICONS = {
   ssh: '🔐',
@@ -49,6 +51,8 @@ export function unmount() {
   currentSort = 'name';
   sortDirection = 'asc';
   searchTerm = '';
+  expandedDirs = new Set();
+  treeExpansionInitialized = false;
 }
 
 function buildShell() {
@@ -71,7 +75,7 @@ function buildShell() {
         el('span', { class: 'clear-search', id: 'clearSearch' }, ['✖']),
       ]),
       el('div', { class: 'view-controls' }, [
-        el('button', { class: 'view-btn active', id: 'treeViewBtn', title: 'Tree View', type: 'button' }, ['🌳']),
+        el('button', { class: 'view-btn active', id: 'treeViewBtn', title: t('loot.treeView'), type: 'button' }, ['🌳']),
         el('button', { class: 'view-btn', id: 'listViewBtn', title: t('common.list'), type: 'button' }, ['📋']),
         el('div', { class: 'sort-dropdown', id: 'sortDropdown' }, [
           el('button', { class: 'sort-btn', id: 'sortBtn', type: 'button', title: t('common.sortBy') }, ['⬇️']),
@@ -194,10 +198,12 @@ async function loadFiles() {
   try {
     const data = await api.get('/loot_directories', { timeout: 15000 });
     if (!data || data.status !== 'success' || !Array.isArray(data.data)) {
-      throw new Error('Invalid response');
+      throw new Error(t('common.error'));
     }
 
     fileData = data.data;
+    expandedDirs = new Set();
+    treeExpansionInitialized = false;
     processFiles();
     updateStats();
     renderContent();
@@ -322,7 +328,7 @@ function renderTabs(categories) {
   if (!tabs) return;
   empty(tabs);
 
-  tabs.appendChild(tabNode('all', 'All', true));
+  tabs.appendChild(tabNode('all', t('common.all'), true));
   for (const cat of categories) {
     tabs.appendChild(tabNode(cat, cat.toUpperCase(), false));
   }
@@ -369,33 +375,34 @@ function renderTreeView(container, autoExpand = false) {
     return;
   }
 
+  if (!treeExpansionInitialized && !searchTerm) {
+    expandRootDirectories(filteredData);
+    treeExpansionInitialized = true;
+  }
+
   const tree = el('div', { class: 'tree-view active' });
   tree.appendChild(renderTreeItems(filteredData, 0, '', autoExpand || !!searchTerm));
   container.appendChild(tree);
 }
 
 function filterDataForTree() {
-  function filterItems(items, path = '', isRoot = false) {
+  function filterItems(items, path = '') {
     return (items || [])
       .map((item) => {
         if (item.type === 'directory') {
           const dirPath = `${path}${item.name}/`;
-          const dirCategory = getDirCategory(dirPath);
           const filteredChildren = Array.isArray(item.children)
-            ? filterItems(item.children, dirPath, false)
+            ? filterItems(item.children, dirPath)
             : [];
           const nameMatch = String(item.name || '').toLowerCase().includes(searchTerm);
+          const dirMatchesCategory = currentCategory === 'all' || getDirCategory(dirPath) === currentCategory;
 
-          if (isRoot) {
-            if (currentCategory !== 'all' && dirCategory !== currentCategory) return null;
-            if (!searchTerm) return { ...item, children: filteredChildren };
-            if (filteredChildren.length > 0 || nameMatch) return { ...item, children: filteredChildren };
-            return null;
-          }
-
-          if (nameMatch || filteredChildren.length > 0) {
+          if (filteredChildren.length > 0) {
             return { ...item, children: filteredChildren };
           }
+          if (searchTerm) return nameMatch ? { ...item, children: [] } : null;
+          if (currentCategory === 'all') return { ...item, children: [] };
+          if (dirMatchesCategory) return { ...item, children: [] };
           return null;
         }
 
@@ -417,37 +424,44 @@ function filterDataForTree() {
       .filter(Boolean);
   }
 
-  return filterItems(fileData, '', true);
+  return filterItems(fileData, '');
 }
 
-function renderTreeItems(items, level, path = '', expanded = false) {
+function renderTreeItems(items, level, path = '', forceExpand = false) {
   const frag = document.createDocumentFragment();
+  const sortedItems = sortTreeItems(items, path);
 
-  items.forEach((item, index) => {
+  sortedItems.forEach((item, index) => {
     if (item.type === 'directory') {
+      const dirPath = `${path}${item.name}/`;
       const hasChildren = Array.isArray(item.children) && item.children.length > 0;
-      const treeItem = el('div', { class: `tree-item${expanded ? ' expanded' : ''}` });
+      const expanded = forceExpand || expandedDirs.has(dirPath);
+      const treeItem = el('div', { class: `loot-tree-node${expanded ? ' expanded' : ''}` });
       treeItem.style.animationDelay = `${index * 0.05}s`;
+      treeItem.style.setProperty('--loot-level', String(level));
 
-      const header = el('div', { class: 'tree-header' }, [
-        el('div', { class: 'tree-icon folder-icon' }, ['📁']),
-        el('div', { class: 'tree-name' }, [item.name]),
+      const stats = directoryStats(item);
+      const header = el('button', { class: 'loot-tree-row', type: 'button' }, [
+        el('span', { class: 'loot-tree-chevron' }, [hasChildren ? '▶' : '•']),
+        el('span', { class: 'loot-tree-icon folder-icon' }, ['📁']),
+        el('span', { class: 'loot-tree-name' }, [item.name]),
+        el('span', { class: 'loot-tree-meta' }, [t('loot.filesCount', { count: stats.files })]),
       ]);
-
-      if (hasChildren) {
-        header.appendChild(el('div', { class: 'tree-chevron' }, ['▶']));
-      }
 
       tracker.trackEventListener(header, 'click', (e) => {
         e.stopPropagation();
-        treeItem.classList.toggle('expanded');
+        if (!hasChildren) return;
+        const next = !treeItem.classList.contains('expanded');
+        treeItem.classList.toggle('expanded', next);
+        if (next) expandedDirs.add(dirPath);
+        else expandedDirs.delete(dirPath);
       });
 
       treeItem.appendChild(header);
 
       if (hasChildren) {
-        const children = el('div', { class: 'tree-children' });
-        children.appendChild(renderTreeItems(item.children, level + 1, `${path}${item.name}/`, expanded));
+        const children = el('div', { class: 'loot-tree-children' });
+        children.appendChild(renderTreeItems(item.children, level + 1, dirPath, forceExpand));
         treeItem.appendChild(children);
       }
 
@@ -462,7 +476,7 @@ function renderTreeItems(items, level, path = '', expanded = false) {
         category,
         fullPath: `${path}${item.name}`,
         path: item.path || `${path}${item.name}`,
-      }, category, index, false));
+      }, category, index, false, { treeLevel: level + 1, treeMode: true }));
     }
   });
 
@@ -522,10 +536,13 @@ function fileTimestamp(file) {
   return 0;
 }
 
-function renderFileItem(file, category, index = 0, showPath = false) {
+function renderFileItem(file, category, index = 0, showPath = false, opts = {}) {
   const path = file.path || file.fullPath || file.name;
-  const item = el('div', { class: 'file-item', 'data-path': path });
+  const item = el('div', { class: `file-item${opts.treeMode ? ' is-tree-file' : ''}`, 'data-path': path });
   item.style.animationDelay = `${index * 0.02}s`;
+  if (typeof opts.treeLevel === 'number') {
+    item.style.setProperty('--loot-level', String(opts.treeLevel));
+  }
 
   tracker.trackEventListener(item, 'click', () => {
     downloadFile(path);
@@ -542,6 +559,55 @@ function renderFileItem(file, category, index = 0, showPath = false) {
   item.append(icon, name, type);
 
   return item;
+}
+
+function compareBySort(a, b, path = '') {
+  let res = 0;
+  switch (currentSort) {
+    case 'type': {
+      const ca = a.type === 'directory' ? getDirCategory(`${path}${a.name}/`) : getFileCategory(a.name, path);
+      const cb = b.type === 'directory' ? getDirCategory(`${path}${b.name}/`) : getFileCategory(b.name, path);
+      res = ca.localeCompare(cb) || String(a.name || '').localeCompare(String(b.name || ''));
+      break;
+    }
+    case 'date':
+      res = fileTimestamp(a) - fileTimestamp(b);
+      break;
+    case 'name':
+    default:
+      res = String(a.name || '').localeCompare(String(b.name || ''));
+      break;
+  }
+  return sortDirection === 'desc' ? -res : res;
+}
+
+function sortTreeItems(items, path = '') {
+  return [...(items || [])].sort((a, b) => {
+    const ad = a.type === 'directory';
+    const bd = b.type === 'directory';
+    if (ad !== bd) return ad ? -1 : 1;
+    return compareBySort(a, b, path);
+  });
+}
+
+function expandRootDirectories(items) {
+  (items || []).forEach((item) => {
+    if (item.type === 'directory') {
+      expandedDirs.add(`${item.name}/`);
+    }
+  });
+}
+
+function directoryStats(item) {
+  let files = 0;
+  const walk = (nodes) => {
+    for (const n of nodes || []) {
+      if (n.type === 'directory') walk(n.children || []);
+      if (n.type === 'file') files += 1;
+    }
+  };
+  walk(item.children || []);
+  return { files };
 }
 
 function downloadFile(path) {

@@ -974,6 +974,32 @@ class ActionScheduler:
         """
         self_port = 0 if target_port is None else int(target_port)
 
+        # Circuit breaker check (ORCH-01)
+        if self.db.is_circuit_open(action_name, mac):
+            logger.debug(f"Circuit breaker open for {action_name}/{mac}, skipping")
+            return False
+
+        # Global concurrency limit check (ORCH-02)
+        running_count = self.db.count_running_actions()
+        max_concurrent = int(getattr(self.shared_data, 'semaphore_slots', 5))
+        if running_count >= max_concurrent:
+            logger.debug(f"Concurrency limit reached ({running_count}/{max_concurrent}), skipping {action_name}")
+            return False
+
+        # Per-action concurrency limit (ORCH-02)
+        requires_raw = action_def.get("b_requires", "")
+        if requires_raw:
+            try:
+                req_obj = json.loads(requires_raw) if isinstance(requires_raw, str) else requires_raw
+                if isinstance(req_obj, dict) and "max_concurrent" in req_obj:
+                    max_per_action = int(req_obj["max_concurrent"])
+                    running_for_action = self.db.count_running_actions(action_name=action_name)
+                    if running_for_action >= max_per_action:
+                        logger.debug(f"Per-action concurrency limit for {action_name} ({running_for_action}/{max_per_action})")
+                        return False
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
         # 0) Duplicate protection (active)
         existing = self.db.query(
             """

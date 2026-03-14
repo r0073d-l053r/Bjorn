@@ -170,12 +170,21 @@ class NetKBUtils:
             return {"status": "error", "message": str(e)}
 
     def delete_all_actions(self, data=None):
-        """Clear entire action queue."""
+        """Cancel running actions then clear entire action queue."""
         try:
+            # First cancel any running/pending/scheduled actions
+            cancelled = self.shared_data.db.execute("""
+                UPDATE action_queue
+                SET status='cancelled',
+                    completed_at=CURRENT_TIMESTAMP,
+                    error_message=COALESCE(error_message,'user_cancelled')
+                WHERE status IN ('scheduled','pending','running')
+            """)
+            # Then delete everything
             deleted = self.shared_data.db.execute("DELETE FROM action_queue")
             return {
                 "status": "success",
-                "message": f"Cleared ALL actions ({deleted} entries)"
+                "message": f"Cancelled {cancelled} active, cleared {deleted} total entries"
             }
         except Exception as e:
             self.logger.error(f"delete_all_actions error: {e}")

@@ -2,6 +2,7 @@ import { ResourceTracker } from '../core/resource-tracker.js';
 import { el, toast } from '../core/dom.js';
 import { t as i18nT } from '../core/i18n.js';
 import { initSharedSidebarLayout } from '../core/sidebar-layout.js';
+import * as epdEditor from '../core/epd-editor.js';
 
 const PAGE = 'attacks';
 let tracker = null;
@@ -40,6 +41,7 @@ function markup() {
       <button class="tab-btn active" data-page="attacks">${L('attacks.tabs.attacks')}</button>
       <button class="tab-btn" data-page="comments">${L('attacks.tabs.comments')}</button>
       <button class="tab-btn" data-page="images">${L('attacks.tabs.images')}</button>
+      <button class="tab-btn" data-page="epd-layout">${Lx('attacks.tabs.epdLayout', 'EPD Layout')}</button>
     </div>
 
     <div id="attacks-sidebar" class="sidebar-page" style="display:block">
@@ -80,6 +82,8 @@ function markup() {
       <h3 style="margin:8px 0">${L('attacks.section.actionIcons')}</h3>
       <ul class="unified-list" id="actions-icons-list"></ul>
     </div>
+
+    <div id="epd-layout-sidebar" class="sidebar-page" style="display:none"></div>
   </div>
 
   <div class="attacks-main">
@@ -132,13 +136,17 @@ function markup() {
       </div>
       <div class="image-container" id="image-container"></div>
     </div>
+
+    <div id="epd-layout-page" class="page-content"></div>
   </div>`;
 }
 
 async function getJSON(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  const data = await r.json();
+  if (!tracker) throw new Error('unmounted');
+  return data;
 }
 
 async function postJSON(url, body = {}) {
@@ -591,6 +599,7 @@ function bindTabs() {
     if (page === 'attacks') await loadAttacks();
     if (page === 'comments') await loadSections();
     if (page === 'images') await Promise.all([loadImageScopes(), loadCharacters()]);
+    if (page === 'epd-layout') await epdEditor.activate(q('#epd-layout-sidebar'), q('#epd-layout-page'));
   }));
 }
 
@@ -908,6 +917,7 @@ export async function mount(container) {
   bindTabs();
   bindActions();
   syncImageModeClasses();
+  epdEditor.mount(tracker);
 
   const density = q('#density');
   if (density) {
@@ -936,11 +946,19 @@ export async function mount(container) {
 }
 
 export function unmount() {
+  epdEditor.unmount();
   for (const v of iconCache.values()) {
     if (typeof v === 'string' && v.startsWith('blob:')) URL.revokeObjectURL(v);
   }
   iconCache.clear();
   selectedImages.clear();
+  currentAttack = null;
+  selectedSection = null;
+  selectedImageScope = null;
+  selectedActionName = null;
+  editMode = false;
+  imageCache = [];
+  imageResolver = null;
   if (disposeSidebarLayout) {
     disposeSidebarLayout();
     disposeSidebarLayout = null;

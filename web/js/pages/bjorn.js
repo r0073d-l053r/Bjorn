@@ -31,10 +31,12 @@ export async function mount(container) {
   // Fetch the configured refresh delay
   try {
     const data = await api.get('/get_web_delay', { timeout: 5000, retries: 1 });
+    if (!tracker) return; /* unmounted while awaiting */
     if (data && typeof data.web_delay === 'number' && data.web_delay > 0) {
       delay = data.web_delay;
     }
   } catch (err) {
+    if (!tracker) return; /* unmounted while awaiting */
     console.warn(`[${PAGE}] Failed to fetch web_delay, using default ${DEFAULT_DELAY}ms:`, err.message);
     delay = DEFAULT_DELAY;
   }

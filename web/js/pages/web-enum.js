@@ -43,8 +43,11 @@ export async function mount(container) {
 }
 
 export function unmount() {
-  if (searchDebounceId != null) clearTimeout(searchDebounceId);
-  searchDebounceId = null;
+  if (searchDebounceId != null) {
+    if (tracker) tracker.clearTrackedTimeout(searchDebounceId);
+    else clearTimeout(searchDebounceId);
+    searchDebounceId = null;
+  }
   if (tracker) { tracker.cleanupAll(); tracker = null; }
   allData = [];
   filteredData = [];
@@ -69,10 +72,10 @@ function buildShell() {
   return el('div', { class: 'webenum-container' }, [
     /* stats bar */
     el('div', { class: 'stats-bar', id: 'we-stats' }, [
-      statItem('we-stat-total', 'Total Results'),
-      statItem('we-stat-hosts', 'Unique Hosts'),
-      statItem('we-stat-success', 'Success (2xx)'),
-      statItem('we-stat-errors', 'Errors (4xx/5xx)'),
+      statItem('we-stat-total', t('webenum.totalResults')),
+      statItem('we-stat-hosts', t('webenum.uniqueHosts')),
+      statItem('we-stat-success', t('webenum.successCount')),
+      statItem('we-stat-errors', t('webenum.errorCount')),
     ]),
     /* controls row */
     el('div', { class: 'webenum-controls' }, [
@@ -80,19 +83,19 @@ function buildShell() {
       el('div', { class: 'global-search-container' }, [
         el('input', {
           type: 'text', class: 'global-search-input', id: 'we-search',
-          placeholder: t('common.search') || 'Search host, IP, directory, status\u2026',
+          placeholder: t('webenum.searchPlaceholder'),
           oninput: onSearchInput,
         }),
         el('button', { class: 'clear-global-button', onclick: clearSearch }, ['\u2716']),
       ]),
       el('div', { class: 'webenum-main-actions' }, [
-        el('button', { class: 'vuln-btn', onclick: () => fetchAllData() }, ['Refresh']),
+        el('button', { class: 'vuln-btn', onclick: () => fetchAllData() }, [t('common.refresh')]),
       ]),
       /* dropdown filters */
       el('div', { class: 'webenum-filters' }, [
-        buildSelect('we-filter-host', 'All Hosts', onHostFilter),
-        buildSelect('we-filter-status', 'All Status', onStatusFamilyFilter),
-        buildSelect('we-filter-port', 'All Ports', onPortFilter),
+        buildSelect('we-filter-host', t('webenum.allHosts'), onHostFilter),
+        buildSelect('we-filter-status', t('webenum.allStatus'), onStatusFamilyFilter),
+        buildSelect('we-filter-port', t('webenum.allPorts'), onPortFilter),
         el('input', {
           type: 'date', class: 'webenum-date-input', id: 'we-filter-date',
           onchange: onDateFilter,
@@ -100,8 +103,8 @@ function buildShell() {
       ]),
       /* export buttons */
       el('div', { class: 'webenum-export-btns' }, [
-        el('button', { class: 'vuln-btn', onclick: () => exportData('json') }, ['Export JSON']),
-        el('button', { class: 'vuln-btn', onclick: () => exportData('csv') }, ['Export CSV']),
+        el('button', { class: 'vuln-btn', onclick: () => exportData('json') }, [t('webenum.exportJson')]),
+        el('button', { class: 'vuln-btn', onclick: () => exportData('csv') }, [t('webenum.exportCsv')]),
       ]),
     ]),
     /* status legend chips */
@@ -143,7 +146,7 @@ async function fetchAllData() {
   const loading = $('#we-table-wrap');
   if (loading) {
     empty(loading);
-    loading.appendChild(el('div', { class: 'page-loading' }, [t('common.loading') || 'Loading\u2026']));
+    loading.appendChild(el('div', { class: 'page-loading' }, [t('common.loading')]));
   }
 
   const ac = tracker ? tracker.trackAbortController() : null;
@@ -176,12 +179,13 @@ async function fetchAllData() {
 
     if (page > MAX_PAGES_FETCH) fetchedLimit = true;
   } catch (err) {
-    if (err.name === 'ApiError' && err.message === 'Aborted') return;
+    if (err.name === 'AbortError' || (err.name === 'ApiError' && err.message === 'Aborted')) return;
     console.warn(`[${PAGE}] fetch error:`, err.message);
   } finally {
     if (ac && tracker) tracker.removeAbortController(ac);
   }
 
+  if (!tracker) return; /* unmounted while fetching */
   allData = accumulated.map(normalizeRow);
   populateFilterDropdowns();
   applyFilters();
@@ -210,14 +214,14 @@ function normalizeRow(row) {
    Filter dropdowns — populate from unique values
    ══════════════════════════════════════════════════════════════ */
 function populateFilterDropdowns() {
-  populateSelect('we-filter-host', 'All Hosts',
+  populateSelect('we-filter-host', t('webenum.allHosts'),
     [...new Set(allData.map(r => r.host).filter(Boolean))].sort());
 
   const families = [...new Set(allData.map(r => statusFamily(r.status)).filter(Boolean))].sort();
-  populateSelect('we-filter-status', 'All Status', families);
+  populateSelect('we-filter-status', t('webenum.allStatus'), families);
 
   const ports = [...new Set(allData.map(r => r.port).filter(p => p > 0))].sort((a, b) => a - b);
-  populateSelect('we-filter-port', 'All Ports', ports.map(String));
+  populateSelect('we-filter-port', t('webenum.allPorts'), ports.map(String));
 }
 
 function populateSelect(id, defaultLabel, options) {
@@ -359,7 +363,7 @@ function renderTable() {
   empty(wrap);
 
   if (filteredData.length === 0) {
-    wrap.appendChild(emptyState('No web enumeration results found'));
+    wrap.appendChild(emptyState(t('webenum.noResults')));
     return;
   }
 
@@ -368,14 +372,14 @@ function renderTable() {
 
   /* column definitions */
   const columns = [
-    { key: 'host', label: 'Host' },
-    { key: 'ip', label: 'IP' },
-    { key: 'port', label: 'Port' },
-    { key: 'directory', label: 'Directory' },
-    { key: 'status', label: 'Status' },
-    { key: 'size', label: 'Size' },
-    { key: 'scan_date', label: 'Scan Date' },
-    { key: '_actions', label: 'Actions' },
+    { key: 'host', label: t('webenum.host') },
+    { key: 'ip', label: t('webenum.ip') },
+    { key: 'port', label: t('webenum.port') },
+    { key: 'directory', label: t('webenum.directory') },
+    { key: 'status', label: t('webenum.status') },
+    { key: 'size', label: t('webenum.size') },
+    { key: 'scan_date', label: t('webenum.scanDate') },
+    { key: '_actions', label: t('webenum.actions') },
   ];
 
   /* thead */
@@ -419,7 +423,7 @@ function renderTable() {
               href: url, target: '_blank', rel: 'noopener noreferrer',
               class: 'webenum-link', title: url,
               onclick: (e) => e.stopPropagation(),
-            }, ['Open'])
+            }, [t('webenum.open')])
           : el('span', { class: 'muted' }, ['-']),
       ]),
     ]);
@@ -454,32 +458,32 @@ function renderPagination() {
   /* per-page selector */
   const perPageSel = el('select', { class: 'webenum-filter-select webenum-perpage', onchange: onPerPageChange }, []);
   PER_PAGE_OPTIONS.forEach(n => {
-    const label = n === 0 ? 'All' : String(n);
+    const label = n === 0 ? t('common.all') : String(n);
     const opt = el('option', { value: String(n) }, [label]);
     if (n === itemsPerPage) opt.selected = true;
     perPageSel.appendChild(opt);
   });
   pag.appendChild(el('div', { class: 'webenum-perpage-wrap' }, [
-    el('span', { class: 'stat-label' }, ['Per page:']),
+    el('span', { class: 'stat-label' }, [t('webenum.perPage')]),
     perPageSel,
   ]));
 
   if (total <= 1 && itemsPerPage !== 0) {
     pag.appendChild(el('span', { class: 'vuln-page-info' }, [
-      `${filteredData.length} result${filteredData.length !== 1 ? 's' : ''}`,
+      t('webenum.resultCount', { count: filteredData.length }),
     ]));
     return;
   }
 
   if (itemsPerPage === 0) {
     pag.appendChild(el('span', { class: 'vuln-page-info' }, [
-      `Showing all ${filteredData.length} result${filteredData.length !== 1 ? 's' : ''}`,
+      t('webenum.showingAll', { count: filteredData.length }),
     ]));
     return;
   }
 
   /* Prev */
-  pag.appendChild(pageBtn('Prev', currentPage > 1, () => changePage(currentPage - 1)));
+  pag.appendChild(pageBtn(t('webenum.prev'), currentPage > 1, () => changePage(currentPage - 1)));
 
   /* numbered buttons */
   const start = Math.max(1, currentPage - 2);
@@ -489,11 +493,11 @@ function renderPagination() {
   }
 
   /* Next */
-  pag.appendChild(pageBtn('Next', currentPage < total, () => changePage(currentPage + 1)));
+  pag.appendChild(pageBtn(t('webenum.next'), currentPage < total, () => changePage(currentPage + 1)));
 
   /* info */
   pag.appendChild(el('span', { class: 'vuln-page-info' }, [
-    `Page ${currentPage} of ${total} (${filteredData.length} results)`,
+    t('webenum.pageInfo', { current: currentPage, total, count: filteredData.length }),
   ]));
 }
 
@@ -540,7 +544,10 @@ function onSortColumn(key) {
    Filter handlers
    ══════════════════════════════════════════════════════════════ */
 function onSearchInput(e) {
-  if (searchDebounceId != null) clearTimeout(searchDebounceId);
+  if (searchDebounceId != null) {
+    if (tracker) tracker.clearTrackedTimeout(searchDebounceId);
+    else clearTimeout(searchDebounceId);
+  }
   const val = e.target.value;
   searchDebounceId = tracker
     ? tracker.trackTimeout(() => {
@@ -631,15 +638,15 @@ function showDetailModal(row) {
   if (url) {
     actions.appendChild(el('button', { class: 'vuln-btn', onclick: () => {
       window.open(url, '_blank', 'noopener,noreferrer');
-    }}, ['Open URL']));
+    }}, [t('webenum.openUrl')]));
 
     actions.appendChild(el('button', { class: 'vuln-btn', onclick: () => {
       copyText(url);
-    }}, ['Copy URL']));
+    }}, [t('webenum.copyUrl')]));
   }
 
-  actions.appendChild(el('button', { class: 'vuln-btn', onclick: () => exportSingleResult(row, 'json') }, ['Export JSON']));
-  actions.appendChild(el('button', { class: 'vuln-btn', onclick: () => exportSingleResult(row, 'csv') }, ['Export CSV']));
+  actions.appendChild(el('button', { class: 'vuln-btn', onclick: () => exportSingleResult(row, 'json') }, [t('webenum.exportJson')]));
+  actions.appendChild(el('button', { class: 'vuln-btn', onclick: () => exportSingleResult(row, 'csv') }, [t('webenum.exportCsv')]));
 
   body.appendChild(actions);
   modal.classList.add('show');
@@ -690,7 +697,9 @@ function buildCSV(data) {
       r.host, r.ip, r.mac, r.port, r.directory, r.status,
       r.size, r.content_type, r.response_time, r.scan_date, url,
     ].map(v => {
-      const s = String(v != null ? v : '');
+      let s = String(v != null ? v : '');
+      /* protect against CSV formula injection */
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
       return s.includes(',') || s.includes('"') || s.includes('\n')
         ? `"${s.replace(/"/g, '""')}"` : s;
     });

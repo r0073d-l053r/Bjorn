@@ -1,5 +1,5 @@
 /**
- * Dashboard page module — matches web_old/index.html layout & behavior.
+ * Dashboard page module — modernized layout & behavior.
  * Visibility-aware polling, resource cleanup, safe DOM (no innerHTML).
  */
 
@@ -38,61 +38,218 @@ export function unmount() {
   if (tracker) { tracker.cleanupAll(); tracker = null; }
 }
 
-/* ======================== Layout (matches old index.html) ======================== */
+/* ======================== Layout (Redesigned) ======================== */
 
 function buildLayout() {
-  return el('div', { class: 'dashboard-container' }, [
-    // Live Ops header (tap to refresh)
-    el('section', { class: 'grid-stack', style: 'margin-bottom:12px' }, [
-      el('div', { class: 'card', id: 'liveops-card', style: 'cursor:pointer' }, [
-        el('div', { class: 'head' }, [
-          el('div', {}, [el('h2', { class: 'title' }, [t('dash.liveOps')])]),
-          el('span', { class: 'pill' }, [t('dash.lastUpdate') + ': ', el('span', { id: 'db-last-update' }, ['\u2014'])]),
-        ]),
+  return el('div', { class: 'dashboard-container modern-dash' }, [
+    // Top Bar (LiveOps + Basic System)
+    el('div', { class: 'top-bar anim-enter' }, [
+      el('div', { class: 'liveops', id: 'liveops-card' }, [
+        el('span', { class: 'pulse-dot' }, []),
+        el('span', { class: 'liveops-title' }, [t('dash.liveOps') || 'Live Ops']),
+        el('span', { class: 'liveops-time', id: 'db-last-update' }, ['\u2014']),
       ]),
+      el('div', { class: 'sys-badges' }, [
+        el('span', { class: 'badge mode-badge', id: 'sys-mode' }, [t('dash.auto')]),
+        el('span', { class: 'badge uptime-badge', id: 'sys-uptime' }, ['00:00:00']),
+      ])
     ]),
-    // Hero: Battery | Connectivity | Internet
-    el('section', { class: 'hero-grid' }, [
-      buildBatteryCard(),
-      buildConnCard(),
-      buildNetCard(),
-    ]),
-    // KPI tiles
-    buildKpiGrid(),
+
+    // Main Content Grid
+    el('div', { class: 'dash-main' }, [
+
+      // Left / Top section
+      el('div', { class: 'dash-col-left anim-enter' }, [
+
+        // Hero: Battery + System Bars
+        el('div', { class: 'dash-card hero-card' }, [
+          el('div', { class: 'hero-left' }, [buildBatteryWidget()]),
+          el('div', { class: 'hero-divider' }, []),
+          el('div', { class: 'hero-right' }, [buildSystemBarsWidget()])
+        ]),
+
+        // Connectivity Mini Grid
+        buildConnWidget(),
+
+      ]),
+
+      // Right / Bottom section
+      el('div', { class: 'dash-col-right anim-enter' }, [
+
+        // KPI Grid
+        buildKpiWidget(),
+
+        // Footer info (GPS, OS info)
+        buildFooterWidget()
+      ])
+    ])
   ]);
 }
 
-/* ======================== Battery Card ======================== */
+/* ======================== Widgets Builders ======================== */
 
-function buildBatteryCard() {
-  return el('article', { class: 'battery-card naked' }, [
-    el('div', { class: 'battery-wrap' }, [
-      createBatterySVG(),
-      el('div', { class: 'batt-center', 'aria-live': 'polite' }, [
-        el('div', { class: 'bjorn-portrait', title: 'Bjorn' }, [
-          el('img', { id: 'bjorn-icon', src: '/web/images/bjornwebicon.png', alt: 'Bjorn' }),
-          el('span', { class: 'bjorn-lvl', id: 'bjorn-level' }, ['LVL 1']),
-        ]),
-        el('div', { class: 'batt-val' }, [el('span', { id: 'sys-battery' }, ['\u2014']), '%']),
-        el('div', { class: 'batt-state', id: 'sys-battery-state' }, [
-          el('span', { id: 'sys-battery-state-text' }, ['\u2014']),
-          el('span', { class: 'batt-indicator' }, [
-            svgIcon('ico-usb', '0 0 24 24', [
-              { tag: 'path', d: 'M12 2v14' },
-              { tag: 'circle', cx: '12', cy: '20', r: '2' },
-              { tag: 'path', d: 'M7 7h5l-2-2 2-2h-5zM12 10h5l-2-2 2-2h-5z' },
-            ], true),
-            svgIcon('ico-batt', '0 0 24 24', [
-              { tag: 'rect', x: '2', y: '7', width: '18', height: '10', rx: '2' },
-              { tag: 'rect', x: '20', y: '10', width: '2', height: '4', rx: '1' },
-              { tag: 'path', d: 'M9 9l-2 4h4l-2 4' },
-            ], true),
-          ]),
+function buildBatteryWidget() {
+  return el('div', { class: 'battery-wrap' }, [
+    createBatterySVG(),
+    el('div', { class: 'batt-center', 'aria-live': 'polite' }, [
+      el('div', { class: 'bjorn-portrait', title: 'Bjorn' }, [
+        el('img', { id: 'bjorn-icon', src: '/web/images/bjornwebicon.png', alt: 'Bjorn' }),
+        el('span', { class: 'bjorn-lvl', id: 'bjorn-level' }, [t('dash.lvl', { level: 1 })]),
+      ]),
+      el('div', { class: 'batt-val' }, [el('span', { id: 'sys-battery' }, ['\u2014']), '%']),
+      el('div', { class: 'batt-state', id: 'sys-battery-state' }, [
+        el('span', { id: 'sys-battery-state-text', class: 'hide-mobile' }, ['\u2014']),
+        el('span', { class: 'batt-indicator' }, [
+          svgIcon('ico-usb', '0 0 24 24', [
+            { tag: 'path', d: 'M12 2v14' },
+            { tag: 'circle', cx: '12', cy: '20', r: '2' },
+            { tag: 'path', d: 'M7 7h5l-2-2 2-2h-5zM12 10h5l-2-2 2-2h-5z' },
+          ], true),
+          svgIcon('ico-batt', '0 0 24 24', [
+            { tag: 'rect', x: '2', y: '7', width: '18', height: '10', rx: '2' },
+            { tag: 'rect', x: '20', y: '10', width: '2', height: '4', rx: '1' },
+            { tag: 'path', d: 'M9 9l-2 4h4l-2 4' },
+          ], true),
         ]),
       ]),
     ]),
   ]);
 }
+
+function buildSystemBarsWidget() {
+  const sysRow = (label, valId, maxId, barId, extraId) => {
+    return el('div', { class: 'sys-row' }, [
+      el('div', { class: 'sys-lbl' }, [
+        label,
+        el('span', { class: 'sys-vals' }, [
+          el('span', { id: valId }, ['0']),
+          maxId ? ` / ` : '',
+          maxId ? el('span', { id: maxId }, ['0']) : '',
+          extraId ? el('span', { id: extraId, class: 'sys-extra' }, []) : ''
+        ])
+      ]),
+      el('div', { class: 'bar' }, [el('i', { id: barId })])
+    ]);
+  };
+  return el('div', { class: 'sys-bars' }, [
+    sysRow(t('dash.cpu'), 'cpu-pct', null, 'cpu-bar', null),
+    sysRow(t('dash.ram'), 'ram-used', 'ram-total', 'ram-bar', null),
+    sysRow(t('dash.disk'), 'sto-used', 'sto-total', 'sto-bar', null),
+    sysRow(t('dash.fds'), 'fds-used', 'fds-max', 'fds-bar', null)
+  ]);
+}
+
+function buildConnWidget() {
+  const usbExtra = el('div', { class: 'conn-det-wrap' }, [
+    el('div', { class: 'conn-details', id: 'usb-details' }, [
+      el('span', { id: 'usb-gadget-state' }, [t('dash.off')]),
+      el('span', { id: 'usb-lease' }, ['\u2014']),
+      el('span', { id: 'usb-mode' }, ['\u2014'])
+    ])
+  ]);
+
+  const btExtra = el('div', { class: 'conn-det-wrap' }, [
+    el('div', { class: 'conn-details', id: 'bt-details' }, [
+      el('span', { id: 'bt-gadget-state' }, [t('dash.off')]),
+      el('span', { id: 'bt-lease' }, ['\u2014']),
+      el('span', { id: 'bt-connected' }, ['\u2014'])
+    ])
+  ]);
+
+  return el('div', { class: 'dash-card net-card anim-enter' }, [
+    el('div', { class: 'net-header' }, [
+      el('div', { class: 'net-title' }, [t('dash.connectivity') || 'Connectivity']),
+      el('div', { class: 'net-badge-wrap' }, [
+        t('dash.internet') + ': ', el('span', { class: 'net-badge', id: 'net-badge' }, [t('dash.no')])
+      ])
+    ]),
+    el('div', { class: 'conn-grid' }, [
+      el('div', { class: 'conn-box', id: 'row-wifi' }, [
+        el('div', { class: 'conn-icon' }, [svgIcon(null, '0 0 24 24', [{ d: 'M2 8c5.5-4.5 14.5-4.5 20 0' }, { d: 'M5 11c3.5-3 10.5-3 14 0' }, { d: 'M8 14c1.8-1.6 6.2-1.6 8 0' }, { tag: 'circle', cx: '12', cy: '18', r: '1.5' }])]),
+        el('div', { class: 'conn-lbl' }, [t('dash.wifi')]),
+        el('div', { class: 'conn-state' }, [el('span', { class: 'state-pill', id: 'wifi-state' }, [t('dash.off')])]),
+        el('div', { class: 'conn-det-wrap' }, [el('div', { id: 'wifi-details' }, []), el('div', { id: 'wifi-under' }, [])])
+      ]),
+      el('div', { class: 'conn-box', id: 'row-eth' }, [
+        el('div', { class: 'conn-icon' }, [svgIcon(null, '0 0 24 24', [{ tag: 'rect', x: '4', y: '3', width: '16', height: '8', rx: '2' }, { d: 'M8 11v5' }, { d: 'M12 11v5' }, { d: 'M16 11v5' }, { tag: 'rect', x: '7', y: '16', width: '10', height: '5', rx: '1' }])]),
+        el('div', { class: 'conn-lbl' }, [t('dash.ethernet')]),
+        el('div', { class: 'conn-state' }, [el('span', { class: 'state-pill', id: 'eth-state' }, [t('dash.off')])]),
+        el('div', { class: 'conn-det-wrap' }, [el('div', { id: 'eth-details' }, []), el('div', { id: 'eth-under' }, [])])
+      ]),
+      el('div', { class: 'conn-box', id: 'row-usb' }, [
+        el('div', { class: 'conn-icon' }, [svgIcon(null, '0 0 24 24', [{ d: 'M12 2v14' }, { tag: 'circle', cx: '12', cy: '20', r: '2' }, { d: 'M7 7h5l-2-2 2-2h-5zM12 10h5l-2-2 2-2h-5z' }])]),
+        el('div', { class: 'conn-lbl' }, [t('dash.usb')]),
+        el('div', { class: 'conn-state' }, [el('span', { class: 'state-pill', id: 'usb-state' }, [t('dash.off')])]),
+        usbExtra
+      ]),
+      el('div', { class: 'conn-box', id: 'row-bt' }, [
+        el('div', { class: 'conn-icon' }, [svgIcon(null, '0 0 24 24', [{ d: 'M7 7l10 10-5 5V2l5 5L7 17' }])]),
+        el('div', { class: 'conn-lbl' }, [t('dash.bluetooth')]),
+        el('div', { class: 'conn-state' }, [el('span', { class: 'state-pill', id: 'bt-state' }, [t('dash.off')])]),
+        btExtra
+      ]),
+    ])
+  ]);
+}
+
+function buildKpiWidget() {
+  const kpi = (id, labelKey, valId, iconPaths, extraChild) => {
+    return el('div', { class: 'kpi-box', id }, [
+      el('div', { class: 'kpi-ico' }, [svgIcon(null, '0 0 24 24', iconPaths)]),
+      el('div', { class: 'kpi-val', id: valId }, ['0']),
+      el('div', { class: 'kpi-lbl' }, [t(labelKey) || labelKey]),
+      extraChild ? extraChild : ''
+    ]);
+  };
+
+  const kpiHosts = el('div', { class: 'kpi-box', id: 'kpi-hosts' }, [
+    el('div', { class: 'kpi-ico' }, [svgIcon(null, '0 0 24 24', [{ d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' }, { tag: 'circle', cx: '12', cy: '7', r: '4' }])]),
+    el('div', { class: 'kpi-val multi-val' }, [
+      el('span', { id: 'val-present' }, ['0']), ' / ',
+      el('span', { id: 'val-known', class: 'dim' }, ['0'])
+    ]),
+    el('div', { class: 'kpi-lbl' }, [t('dash.hostsAlive') || 'HOSTS'])
+  ]);
+
+  const kpiVulns = el('div', { class: 'kpi-box', id: 'kpi-vulns' }, [
+    el('div', { class: 'kpi-ico' }, [svgIcon(null, '0 0 24 24', [{ d: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' }, { d: 'M12 8v4' }, { d: 'M12 16h.01' }])]),
+    el('div', { class: 'kpi-val' }, [el('span', { id: 'val-vulns' }, ['0'])]),
+    el('div', { class: 'kpi-lbl' }, [t('vulns.title') || 'VULNS']),
+    el('div', { class: 'kpi-extra' }, [el('span', { id: 'vuln-delta', class: 'delta' }, ['\u2014'])])
+  ]);
+
+  return el('div', { class: 'kpi-grid' }, [
+    kpiHosts,
+    kpi('kpi-ports-alive', 'netkb.openPorts', 'val-open-ports-alive', [{ d: 'M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z' }, { d: 'M8 9.5v5.523c0 .548.243 1.07.668 1.42L12 19l3.332-2.557A2.25 2.25 0 0 0 16 15.023V9.5' }]),
+    kpi('kpi-wardrive', 'dash.wifiKnown', 'val-wardrive-known', [{ d: 'M5 12.55a11 11 0 0 1 14.08 0' }, { d: 'M1.42 9a16 16 0 0 1 21.16 0' }, { d: 'M8.53 16.11a6 6 0 0 1 6.95 0' }, { tag: 'line', x1: '12', y1: '20', x2: '12.01', y2: '20' }]),
+    kpi('kpi-zombies', 'dash.zombies', 'val-zombies', [{ d: 'M12 21a9 9 0 0 0 9-9c0-5-4-9-9-9s-9 4-9 9a9 9 0 0 0 9 9z' }, { d: 'M12 8v4' }, { d: 'M12 16h.01' }]),
+    kpi('kpi-creds', 'creds.title', 'val-creds', [{ d: 'M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4' }]),
+    kpi('kpi-files', 'dash.dataFiles', 'val-files', [{ d: 'M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z' }, { d: 'M13 2v7h7' }]),
+    kpiVulns,
+    kpi('kpi-scripts', 'dash.attackScripts', 'val-scripts', [{ d: 'M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z' }, { d: 'M10 2c1 .5 2 2 2 5' }])
+  ]);
+}
+
+function buildFooterWidget() {
+  return el('div', { class: 'dash-card footer-card anim-enter' }, [
+    el('div', { class: 'footer-col' }, [
+      el('div', { class: 'f-title' }, [t('dash.system')]),
+      el('div', { class: 'f-val', id: 'sys-os' }, [t('dash.osLabel') + ': \u2014']),
+      el('div', { class: 'f-val', id: 'sys-arch' }, [t('dash.arch') + ': \u2014']),
+      el('div', { class: 'f-val', id: 'sys-model' }, [t('dash.model') + ': \u2014']),
+      el('div', { class: 'f-val', id: 'sys-epd' }, [t('dash.waveshare') + ': \u2014']),
+    ]),
+    el('div', { class: 'footer-col gps-col' }, [
+      el('div', { class: 'f-title' }, [t('dash.gps')]),
+      el('div', { class: 'f-val gps-state', id: 'gps-state' }, [t('dash.off')]),
+      el('div', { class: 'f-val', id: 'gps-info' }, ['\u2014']),
+      el('div', { class: 'f-title mt' }, [t('dash.bjorn')]),
+      el('div', { class: 'f-val', id: 'bjorn-age' }, [t('dash.age') + ': \u2014']),
+    ])
+  ]);
+}
+
+/* ======================== SVG Helpers ======================== */
 
 function createBatterySVG() {
   const ns = 'http://www.w3.org/2000/svg';
@@ -104,7 +261,6 @@ function createBatterySVG() {
   svg.setAttribute('aria-hidden', 'true');
 
   const defs = document.createElementNS(ns, 'defs');
-  // Gradient
   const grad = document.createElementNS(ns, 'linearGradient');
   grad.id = 'batt-grad';
   grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
@@ -114,7 +270,7 @@ function createBatterySVG() {
   const s2 = document.createElementNS(ns, 'stop');
   s2.setAttribute('offset', '100%'); s2.setAttribute('stop-color', 'var(--ring2, var(--acid-2))');
   grad.appendChild(s1); grad.appendChild(s2);
-  // Glow filter
+
   const filter = document.createElementNS(ns, 'filter');
   filter.id = 'batt-glow';
   filter.setAttribute('x', '-50%'); filter.setAttribute('y', '-50%');
@@ -127,16 +283,15 @@ function createBatterySVG() {
   defs.appendChild(grad); defs.appendChild(filter);
   svg.appendChild(defs);
 
-  // Background ring
   const bg = document.createElementNS(ns, 'circle');
   bg.setAttribute('cx', '110'); bg.setAttribute('cy', '110'); bg.setAttribute('r', '92');
   bg.setAttribute('class', 'batt-bg');
-  // Foreground ring
+
   const fg = document.createElementNS(ns, 'circle');
   fg.id = 'batt-fg';
   fg.setAttribute('cx', '110'); fg.setAttribute('cy', '110'); fg.setAttribute('r', '92');
   fg.setAttribute('pathLength', '100'); fg.setAttribute('class', 'batt-fg');
-  // Scan ring (charging glow)
+
   const scan = document.createElementNS(ns, 'circle');
   scan.id = 'batt-scan';
   scan.setAttribute('cx', '110'); scan.setAttribute('cy', '110'); scan.setAttribute('r', '92');
@@ -146,7 +301,6 @@ function createBatterySVG() {
   return svg;
 }
 
-/** Tiny SVG icon builder. hidden=true sets display:none. */
 function svgIcon(id, viewBox, elems, hidden) {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
@@ -159,164 +313,6 @@ function svgIcon(id, viewBox, elems, hidden) {
     svg.appendChild(e);
   });
   return svg;
-}
-
-/* ======================== Connectivity Card ======================== */
-
-function buildConnCard() {
-  function row(id, paths) {
-    return el('div', { class: 'row', id: `row-${id}` }, [
-      el('div', { class: 'icon' }, [svgIcon(null, '0 0 24 24', paths)]),
-      el('div', { class: 'details', id: `${id}-details` }, ['\u2014']),
-      el('div', { class: 'state' }, [el('span', { class: 'state-pill', id: `${id}-state` }, ['OFF'])]),
-    ]);
-  }
-
-  return el('article', { class: 'card conn-card', id: 'conn-card' }, [
-    el('div', { class: 'head', style: 'margin-bottom:6px' }, [
-      el('span', { class: 'title', style: 'font-size:18px' }, [t('dash.connectivity')]),
-    ]),
-    row('wifi', [
-      { d: 'M2 8c5.5-4.5 14.5-4.5 20 0' }, { d: 'M5 11c3.5-3 10.5-3 14 0' },
-      { d: 'M8 14c1.8-1.6 6.2-1.6 8 0' }, { tag: 'circle', cx: '12', cy: '18', r: '1.5' },
-    ]),
-    el('div', { class: 'submeta', id: 'wifi-under' }, ['\u2014']),
-    row('eth', [
-      { tag: 'rect', x: '4', y: '3', width: '16', height: '8', rx: '2' },
-      { d: 'M8 11v5' }, { d: 'M12 11v5' }, { d: 'M16 11v5' },
-      { tag: 'rect', x: '7', y: '16', width: '10', height: '5', rx: '1' },
-    ]),
-    el('div', { class: 'submeta', id: 'eth-under' }, ['\u2014']),
-    // USB — inline detail spans with IDs
-    el('div', { class: 'row', id: 'row-usb' }, [
-      el('div', { class: 'icon' }, [svgIcon(null, '0 0 24 24', [
-        { d: 'M12 2v14' }, { tag: 'circle', cx: '12', cy: '20', r: '2' },
-        { d: 'M7 7h5l-2-2 2-2h-5zM12 10h5l-2-2 2-2h-5z' },
-      ])]),
-      el('div', { class: 'details', id: 'usb-details' }, [
-        el('span', { class: 'key' }, ['USB Gadget']), ': ',
-        el('span', { id: 'usb-gadget-state', class: 'dim' }, ['OFF']), ' \u2022 ',
-        el('span', { class: 'key' }, ['Lease']), ': ',
-        el('span', { id: 'usb-lease', class: 'dim' }, ['\u2014']), ' \u2022 ',
-        el('span', { class: 'key' }, [t('dash.mode')]), ': ',
-        el('span', { id: 'usb-mode', class: 'dim' }, ['\u2014']),
-      ]),
-      el('div', { class: 'state' }, [el('span', { class: 'state-pill', id: 'usb-state' }, ['OFF'])]),
-    ]),
-    // BT — inline detail spans with IDs
-    el('div', { class: 'row', id: 'row-bt' }, [
-      el('div', { class: 'icon' }, [svgIcon(null, '0 0 24 24', [{ d: 'M7 7l10 10-5 5V2l5 5L7 17' }])]),
-      el('div', { class: 'details', id: 'bt-details' }, [
-        el('span', { class: 'key' }, ['BT Gadget']), ': ',
-        el('span', { id: 'bt-gadget-state', class: 'dim' }, ['OFF']), ' \u2022 ',
-        el('span', { class: 'key' }, ['Lease']), ': ',
-        el('span', { id: 'bt-lease', class: 'dim' }, ['\u2014']), ' \u2022 ',
-        el('span', { class: 'key' }, ['Connected to']), ': ',
-        el('span', { id: 'bt-connected', class: 'dim' }, ['\u2014']),
-      ]),
-      el('div', { class: 'state' }, [el('span', { class: 'state-pill', id: 'bt-state' }, ['OFF'])]),
-    ]),
-  ]);
-}
-
-/* ======================== Internet Card (Globe SVG) ======================== */
-
-function buildNetCard() {
-  const globe = svgIcon(null, '0 0 64 64', [
-    { tag: 'circle', cx: '32', cy: '32', r: '28', class: 'globe-rim' },
-    { d: 'M4 32h56M32 4c10 8 10 48 0 56M32 4c-10 8-10 48 0 56', class: 'globe-lines' },
-  ]);
-  globe.setAttribute('width', '80'); globe.setAttribute('height', '80');
-  globe.setAttribute('aria-hidden', 'true');
-
-  return el('article', { class: 'card net-card' }, [
-    el('div', { class: 'head', style: 'margin-bottom:6px' }, [
-      el('span', { class: 'title', style: 'font-size:18px' }, [t('dash.internet')]),
-    ]),
-    el('div', { style: 'display:flex;align-items:center;gap:12px' }, [
-      el('div', { class: 'globe' }, [globe]),
-      el('div', {}, [el('span', { class: 'net-badge', id: 'net-badge' }, ['NO'])]),
-    ]),
-  ]);
-}
-
-/* ======================== KPI Grid ======================== */
-
-function buildKpiGrid() {
-  const bar = (id) => el('div', { class: 'bar' }, [el('i', { id: `${id}-bar` })]);
-
-  return el('section', { class: 'kpi-cards' }, [
-    el('div', { class: 'kpi', id: 'kpi-hosts' }, [
-      el('div', { class: 'label' }, [t('dash.hostsAlive')]),
-      el('div', { class: 'val' }, [el('span', { id: 'val-present' }, ['0']), ' / ', el('span', { id: 'val-known' }, ['0'])]),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-ports-alive' }, [
-      el('div', { class: 'label' }, [t('netkb.openPorts')]),
-      el('div', { class: 'val', id: 'val-open-ports-alive' }, ['0']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-wardrive' }, [
-      el('div', { class: 'label' }, [t('dash.wifiKnown')]),
-      el('div', { class: 'val', id: 'val-wardrive-known' }, ['0']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-cpu-ram' }, [
-      el('div', { class: 'submeta' }, ['CPU: ', el('b', { id: 'cpu-pct' }, ['0%'])]),
-      bar('cpu'),
-      el('div', { class: 'submeta' }, ['RAM: ', el('b', { id: 'ram-used' }, ['0']), ' / ', el('b', { id: 'ram-total' }, ['0'])]),
-      bar('ram'),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-storage' }, [
-      el('div', { class: 'label' }, [t('dash.disk')]),
-      el('div', { class: 'submeta' }, ['Used: ', el('b', { id: 'sto-used' }, ['0']), ' / ', el('b', { id: 'sto-total' }, ['0'])]),
-      bar('sto'),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-gps' }, [
-      el('div', { class: 'label' }, ['GPS']),
-      el('div', { class: 'val', id: 'gps-state' }, ['OFF']),
-      el('div', { class: 'submeta', id: 'gps-info' }, ['\u2014']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-zombies' }, [
-      el('div', { class: 'label' }, [t('dash.zombies')]),
-      el('div', { class: 'val', id: 'val-zombies' }, ['0']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-creds' }, [
-      el('div', { class: 'label' }, [t('creds.title')]),
-      el('div', { class: 'val', id: 'val-creds' }, ['0']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-files' }, [
-      el('div', { class: 'label' }, [t('dash.dataFiles')]),
-      el('div', { class: 'val', id: 'val-files' }, ['0']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-vulns' }, [
-      el('div', { class: 'label' }, [t('vulns.title')]),
-      el('div', { class: 'val' }, [el('span', { id: 'val-vulns' }, ['0'])]),
-      el('div', {}, [el('span', { class: 'delta', id: 'vuln-delta' }, ['\u2014'])]),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-scripts' }, [
-      el('div', { class: 'label' }, [t('dash.attackScripts')]),
-      el('div', { class: 'val', id: 'val-scripts' }, ['0']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-system' }, [
-      el('div', { class: 'label' }, [t('dash.system')]),
-      el('div', { class: 'submeta', id: 'sys-os' }, ['OS: \u2014']),
-      el('div', { class: 'submeta', id: 'sys-arch' }, ['Arch: \u2014']),
-      el('div', { class: 'submeta', id: 'sys-model' }, ['Model: \u2014']),
-      el('div', { class: 'submeta', id: 'sys-epd' }, ['Waveshare E-Ink: \u2014']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-mode' }, [
-      el('div', { class: 'label' }, [t('dash.mode')]),
-      el('div', { class: 'val', id: 'sys-mode' }, ['\u2014']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-uptime' }, [
-      el('div', { class: 'label' }, [t('dash.uptime')]),
-      el('div', { class: 'val', id: 'sys-uptime' }, ['\u2014']),
-      el('div', { class: 'submeta', id: 'bjorn-age' }, ['Bjorn age: \u2014']),
-    ]),
-    el('div', { class: 'kpi', id: 'kpi-fds' }, [
-      el('div', { class: 'label' }, [t('dash.fileDescriptors')]),
-      el('div', { class: 'submeta' }, [el('b', { id: 'fds-used' }, ['0']), ' / ', el('b', { id: 'fds-max' }, ['0'])]),
-      bar('fds'),
-    ]),
-  ]);
 }
 
 /* ======================== Data normalization ======================== */
@@ -391,7 +387,7 @@ function normalizeStats(payload) {
       eth_dns: conn.eth_dns || conn.dns_eth,
       usb_gadget: !!conn.usb_gadget,
       usb_phys_on: conn.usb_phys_on === true,
-      usb_mode: conn.usb_mode || 'Device',
+      usb_mode: conn.usb_mode || t('dash.device'),
       usb_lease_ip: conn.usb_lease_ip || conn.ip_neigh_lease_usb,
       bt_gadget: !!conn.bt_gadget,
       bt_radio_on: conn.bt_radio_on === true,
@@ -412,12 +408,12 @@ async function fetchBjornStats() {
 
 async function fetchAndPaintHeavy() {
   const data = await fetchBjornStats();
-  if (data) paintFull(data);
+  if (data && tracker) paintFull(data);
 }
 
 async function fetchAndPaintLight() {
   const data = await fetchBjornStats();
-  if (!data) return;
+  if (!data || !tracker) return;
   if (data.system) paintCpuRam(data.system);
   if (data.connectivity) paintConnectivity(data.connectivity);
 }
@@ -481,7 +477,6 @@ function updateRingColors(percent) {
 /* ---------- Full paint (60 s) ---------- */
 
 function paintFull(data) {
-  // Battery
   const batt = data.battery || {};
   const hasBattery = batt.present !== false;
   const percent = Math.max(0, Math.min(100, batt.level_pct ?? 0));
@@ -499,7 +494,6 @@ function paintFull(data) {
   if (scan) scan.style.opacity = charging ? 0.28 : 0.14;
   updateRingColors(displayPct);
 
-  // Battery / USB icons
   const icoUsb = document.getElementById('ico-usb');
   const icoBatt = document.getElementById('ico-batt');
   if (icoUsb && icoBatt) {
@@ -511,22 +505,19 @@ function paintFull(data) {
     if (stEl) stEl.style.color = plugged ? 'var(--acid-2)' : 'var(--ink)';
   }
 
-  // Bjorn icon / level
   if (data.bjorn_icon) {
     const img = document.getElementById('bjorn-icon');
     if (img) img.src = data.bjorn_icon;
   }
-  if (data.bjorn_level != null) setById('bjorn-level', `LVL ${data.bjorn_level}`);
+  if (data.bjorn_level != null) setById('bjorn-level', t('dash.lvl', { level: data.bjorn_level }));
 
-  // Internet badge
   const badge = document.getElementById('net-badge');
   if (badge) {
     badge.classList.remove('net-on', 'net-off');
     badge.classList.add(data.internet_access ? 'net-on' : 'net-off');
-    badge.textContent = data.internet_access ? 'YES' : 'NO';
+    badge.textContent = data.internet_access ? t('dash.yes') : t('dash.no');
   }
 
-  // KPIs
   setById('val-present', data.alive_hosts ?? 0);
   setById('val-known', data.known_hosts_total ?? 0);
   setById('val-open-ports-alive', data.open_ports_alive_total ?? 0);
@@ -537,56 +528,49 @@ function paintFull(data) {
   setById('val-scripts', data.attack_scripts ?? 0);
   setById('val-files', data.files_found ?? 0);
 
-  // Vuln delta
   const dEl = document.getElementById('vuln-delta');
   if (dEl) {
     const delta = Number(data.vulns_missing_since_last_scan ?? 0);
     dEl.classList.remove('good', 'bad');
     if (delta > 0) dEl.classList.add('good');
     if (delta < 0) dEl.classList.add('bad');
-    dEl.textContent = delta === 0 ? '= since last scan'
-      : (delta > 0 ? `\u2212${Math.abs(delta)} since last scan` : `+${Math.abs(delta)} since last scan`);
+    dEl.textContent = delta === 0 ? t('dash.equalSinceScan')
+      : (delta > 0 ? `\u2212${Math.abs(delta)} ${t('dash.sinceScan')}` : `+${Math.abs(delta)} ${t('dash.sinceScan')}`);
   }
 
-  // System bars
   const sys = data.system || {};
   paintCpuRam(sys);
 
   const stUsed = sys.storage_used_bytes ?? 0;
   const stTot = sys.storage_total_bytes ?? 0;
   setById('sto-used', fmtBytes(stUsed));
-  setById('sto-total', fmtBytes(stTot));
+  if (document.getElementById('sto-total')) setById('sto-total', fmtBytes(stTot));
   setPctBar('sto-bar', stTot ? (stUsed / stTot) * 100 : 0);
 
-  // System info
-  setById('sys-os', `OS: ${sys.os_name || '\u2014'}${sys.os_version ? ` ${sys.os_version}` : ''}`);
-  setById('sys-arch', `Arch: ${sys.arch || '\u2014'}`);
-  setById('sys-model', `Model: ${sys.model || '\u2014'}`);
+  setById('sys-os', t('dash.osLabel') + ': ' + `${sys.os_name || '\u2014'}${sys.os_version ? ` ${sys.os_version}` : ''}`);
+  setById('sys-arch', t('dash.arch') + ': ' + (sys.arch || '\u2014'));
+  setById('sys-model', t('dash.model') + ': ' + (sys.model || '\u2014'));
   const epd = sys.waveshare_epd_connected;
-  setById('sys-epd', `Waveshare E-Ink: ${epd === true ? 'ON' : epd === false ? 'OFF' : '\u2014'}${sys.waveshare_epd_type ? ` (${sys.waveshare_epd_type})` : ''}`);
+  setById('sys-epd', t('dash.waveshare') + ': ' + `${epd === true ? t('dash.on') : epd === false ? t('dash.off') : '\u2014'}${sys.waveshare_epd_type ? ` (${sys.waveshare_epd_type})` : ''}`);
 
-  // Mode + uptime
-  setById('sys-mode', (data.mode || '\u2014').toString().toUpperCase());
+  const modeStr = (data.mode || '').toString().toUpperCase();
+  setById('sys-mode', modeStr === 'AUTO' ? t('dash.auto') : modeStr === 'MANUAL' ? t('dash.manual') : modeStr || '\u2014');
   startUptime(data.uptime || '00:00:00');
 
-  // Age
-  setById('bjorn-age', data.first_init_ts ? `Bjorn age: ${humanAge(data.first_init_ts)}` : '');
+  setById('bjorn-age', data.first_init_ts ? t('dash.age') + ': ' + humanAge(data.first_init_ts) : t('dash.age') + ': \u2014');
 
-  // GPS
   const gps = data.gps || {};
-  setById('gps-state', gps.connected ? 'ON' : 'OFF');
+  setById('gps-state', gps.connected ? t('dash.on') : t('dash.off'));
   setById('gps-info', gps.connected
     ? (gps.fix_quality
-      ? `Fix: ${gps.fix_quality} \u2022 Sats: ${gps.sats ?? '\u2014'} \u2022 ${gps.lat ?? '\u2014'}, ${gps.lon ?? '\u2014'} \u2022 ${gps.speed ?? '\u2014'}`
-      : 'Fix: \u2014')
+      ? t('dash.fix') + ': ' + `${gps.fix_quality} \u2022 ` + t('dash.sats') + ': ' + `${gps.sats ?? '\u2014'} \u2022 ${gps.lat ?? '\u2014'}, ${gps.lon ?? '\u2014'} \u2022 ${gps.speed ?? '\u2014'}`
+      : t('dash.fix') + ': \u2014')
     : '\u2014');
 
-  // Connectivity
   paintConnectivity(data.connectivity);
 
-  // Timestamp
   const ts = data.timestamp ? new Date(data.timestamp * 1000) : new Date();
-  setById('db-last-update', ts.toLocaleString());
+  setById('db-last-update', ts.toLocaleTimeString());
 }
 
 /* ---------- CPU / RAM (5 s) ---------- */
@@ -599,12 +583,12 @@ function paintCpuRam(sys) {
   const ramUsed = sys.ram_used_bytes ?? 0;
   const ramTot = sys.ram_total_bytes ?? 0;
   setById('ram-used', fmtBytes(ramUsed));
-  setById('ram-total', fmtBytes(ramTot));
+  if (document.getElementById('ram-total')) setById('ram-total', fmtBytes(ramTot));
   setPctBar('ram-bar', ramTot ? (ramUsed / ramTot) * 100 : 0);
 
   if (sys.open_fds !== undefined) {
     setById('fds-used', sys.open_fds);
-    setById('fds-max', sys.max_fds ?? '');
+    if (document.getElementById('fds-max')) setById('fds-max', sys.max_fds ?? '');
     setPctBar('fds-bar', sys.max_fds ? (sys.open_fds / sys.max_fds) * 100 : 0);
   }
 }
@@ -614,49 +598,44 @@ function paintCpuRam(sys) {
 function paintConnectivity(c) {
   if (!c) return;
 
-  // WiFi
   setRowState('row-wifi', c.wifi ? 'on' : 'off');
   setRowPhys('row-wifi', c.wifi_radio_on === true);
-  setById('wifi-state', c.wifi ? 'ON' : 'OFF');
+  setById('wifi-state', c.wifi ? t('dash.on') : t('dash.off'));
   const wDet = document.getElementById('wifi-details');
   if (wDet) {
     wDet.textContent = '';
     const parts = [];
-    if (c.wifi_ssid) parts.push(detailPair('SSID', c.wifi_ssid));
-    if (c.wifi_ip) parts.push(detailPair('IP', c.wifi_ip));
+    if (c.wifi_ssid) parts.push(detailPair(t('dash.ssid'), c.wifi_ssid));
+    if (c.wifi_ip) parts.push(detailPair(t('dash.ip'), c.wifi_ip));
     if (!parts.length) { wDet.textContent = '\u2014'; }
     else parts.forEach((f, i) => { if (i) wDet.appendChild(document.createTextNode(' \u2022 ')); wDet.appendChild(f); });
   }
   setById('wifi-under', underline(c.wifi_gw, c.wifi_dns));
 
-  // Ethernet
   setRowState('row-eth', c.ethernet ? 'on' : 'off');
   setRowPhys('row-eth', c.eth_link_up === true);
-  setById('eth-state', c.ethernet ? 'ON' : 'OFF');
+  setById('eth-state', c.ethernet ? t('dash.on') : t('dash.off'));
   const eDet = document.getElementById('eth-details');
-  if (eDet) { eDet.textContent = ''; if (c.eth_ip) eDet.appendChild(detailPair('IP', c.eth_ip)); else eDet.textContent = '\u2014'; }
+  if (eDet) { eDet.textContent = ''; if (c.eth_ip) eDet.appendChild(detailPair(t('dash.ip'), c.eth_ip)); else eDet.textContent = '\u2014'; }
   setById('eth-under', underline(c.eth_gw, c.eth_dns));
 
-  // USB
   const usbG = !!c.usb_gadget;
   setRowState('row-usb', (usbG || c.usb_lease_ip) ? 'on' : 'off');
   setRowPhys('row-usb', c.usb_phys_on === true);
-  setById('usb-state', usbG ? 'ON' : 'OFF');
-  setById('usb-gadget-state', usbG ? 'ON' : 'OFF');
+  setById('usb-state', usbG ? t('dash.on') : t('dash.off'));
+  setById('usb-gadget-state', usbG ? t('dash.on') : t('dash.off'));
   setById('usb-lease', c.usb_lease_ip || '\u2014');
-  setById('usb-mode', c.usb_mode || 'Device');
+  setById('usb-mode', c.usb_mode || t('dash.device'));
 
-  // BT
   const btG = !!c.bt_gadget;
   setRowState('row-bt', (btG || c.bt_lease_ip || c.bt_connected_to) ? 'on' : 'off');
   setRowPhys('row-bt', c.bt_radio_on === true);
-  setById('bt-state', btG ? 'ON' : 'OFF');
-  setById('bt-gadget-state', btG ? 'ON' : 'OFF');
+  setById('bt-state', btG ? t('dash.on') : t('dash.off'));
+  setById('bt-gadget-state', btG ? t('dash.on') : t('dash.off'));
   setById('bt-lease', c.bt_lease_ip || '\u2014');
   setById('bt-connected', c.bt_connected_to || '\u2014');
 }
 
-/** Safe DOM: <span class="key">k</span>: <span>v</span> */
 function detailPair(k, v) {
   const f = document.createDocumentFragment();
   const ks = document.createElement('span'); ks.className = 'key'; ks.textContent = k;
@@ -668,8 +647,8 @@ function detailPair(k, v) {
 
 function underline(gw, dns) {
   const p = [];
-  if (gw) p.push(`GW: ${gw}`);
-  if (dns) p.push(`DNS: ${dns}`);
+  if (gw) p.push(t('dash.gw') + ': ' + gw);
+  if (dns) p.push(t('dash.dns') + ': ' + dns);
   return p.length ? p.join(' \u2022 ') : '\u2014';
 }
 
@@ -679,12 +658,17 @@ function startUptime(str) {
   stopUptime();
   uptimeSecs = parseUptime(str);
   tickUptime();
-  uptimeTimer = tracker?.trackInterval(() => { uptimeSecs += 1; tickUptime(); }, 1000);
+  if (tracker) {
+    uptimeTimer = tracker.trackInterval(() => { uptimeSecs += 1; tickUptime(); }, 1000);
+  }
 }
 
 function stopUptime() {
-  if (uptimeTimer && tracker) tracker.clearTrackedInterval(uptimeTimer);
-  uptimeTimer = null;
+  if (uptimeTimer != null) {
+    if (tracker) tracker.clearTrackedInterval(uptimeTimer);
+    else clearInterval(uptimeTimer);
+    uptimeTimer = null;
+  }
 }
 
 function tickUptime() { setById('sys-uptime', fmtUptime(uptimeSecs)); }

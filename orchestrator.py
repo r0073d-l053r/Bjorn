@@ -345,62 +345,138 @@ class Orchestrator:
             return 0.0
 
         # Base reward
-        reward = 50.0 if success else -5.0
-        
-        if not success:
-            # Penalize time waste on failure
-            reward -= (duration * 0.1)
-            return reward
-        
+        base_reward = 50.0 if success else -5.0
+
         # ─────────────────────────────────────────────────────────
-        # Check for credentials found (high value!)
+        # Credential bonus (high value!)
         # ─────────────────────────────────────────────────────────
+        credential_bonus = 0.0
         try:
             recent_creds = self.shared_data.db.query("""
-                SELECT COUNT(*) as cnt FROM creds 
-                WHERE mac_address=? 
+                SELECT COUNT(*) as cnt FROM creds
+                WHERE mac_address=?
                 AND first_seen > datetime('now', '-1 minute')
             """, (mac,))
-            
+
             if recent_creds and recent_creds[0]['cnt'] > 0:
                 creds_count = recent_creds[0]['cnt']
-                reward += 100 * creds_count  # 100 per credential!
-                logger.info(f"RL: +{100*creds_count} reward for {creds_count} credentials")
+                credential_bonus = 100.0 * creds_count
+                logger.info(f"RL: +{credential_bonus:.0f} reward for {creds_count} credentials")
         except Exception as e:
             logger.error(f"Error checking credentials: {e}")
-        
+
         # ─────────────────────────────────────────────────────────
-        # Check for new services discovered
+        # Information gain reward (always positive, even on failure)
         # ─────────────────────────────────────────────────────────
+        info_gain = 0.0
         try:
-            # Compare ports before/after
             ports_before = set(state_before.get('ports', []))
             ports_after = set(state_after.get('ports', []))
             new_ports = ports_after - ports_before
-            
             if new_ports:
-                reward += 15 * len(new_ports)
-                logger.info(f"RL: +{15*len(new_ports)} reward for {len(new_ports)} new ports")
+                info_gain += 15 * len(new_ports)
+                logger.info(f"RL: +{15*len(new_ports)} info_gain for {len(new_ports)} new ports")
         except Exception as e:
             logger.error(f"Error checking new ports: {e}")
-        
+
         # ─────────────────────────────────────────────────────────
         # Time efficiency bonus/penalty
         # ─────────────────────────────────────────────────────────
+        time_bonus = 0.0
         if duration < 30:
-            reward += 20  # Fast execution bonus
+            time_bonus = 20.0
         elif duration > 120:
-            reward -= 10  # Slow execution penalty
-        
+            time_bonus = -10.0
+
         # ─────────────────────────────────────────────────────────
         # Action-specific bonuses
         # ─────────────────────────────────────────────────────────
         if action_name == "SSHBruteforce" and success:
-            # Extra bonus for SSH success (difficult action)
-            reward += 30
-        
-        logger.debug(f"RL Reward calculated: {reward:.1f} for {action_name}")
-        return reward
+            credential_bonus += 30.0
+
+        # ─────────────────────────────────────────────────────────
+        # AI-02: Novelty bonus - reward exploring un-tried action+host combos
+        # ─────────────────────────────────────────────────────────
+        novelty_bonus = 0.0
+        try:
+            attempt_count = self._get_action_attempt_count(action_name, mac)
+            if attempt_count <= 1:
+                novelty_bonus = 10.0  # first try bonus
+            elif attempt_count <= 3:
+                novelty_bonus = 5.0   # still exploring
+        except Exception as e:
+            logger.debug(f"Novelty bonus calculation error: {e}")
+
+        # ─────────────────────────────────────────────────────────
+        # AI-02: Diminishing returns - penalize repeating same failed action
+        # ─────────────────────────────────────────────────────────
+        repeat_penalty = 0.0
+        if not success:
+            try:
+                consecutive_fails = self._get_consecutive_fail_count(action_name, mac)
+                repeat_penalty = min(consecutive_fails * 5.0, 25.0)  # cap at -25
+            except Exception as e:
+                logger.debug(f"Repeat penalty calculation error: {e}")
+
+        # ─────────────────────────────────────────────────────────
+        # AI-02: Duration-proportional partial credit for failed actions
+        # ─────────────────────────────────────────────────────────
+        partial_credit = 0.0
+        if not success and duration > 5:
+            partial_credit = min(duration * 0.5, 10.0)  # cap at +10
+
+        total_reward = (
+            base_reward
+            + credential_bonus
+            + info_gain
+            + time_bonus
+            + novelty_bonus
+            - repeat_penalty
+            + partial_credit
+        )
+
+        logger.debug(
+            f"RL Reward: {total_reward:.1f} for {action_name} "
+            f"(base={base_reward:.0f} cred={credential_bonus:.0f} info={info_gain:.0f} "
+            f"time={time_bonus:.0f} novelty={novelty_bonus:.0f} "
+            f"repeat_pen={repeat_penalty:.0f} partial={partial_credit:.1f})"
+        )
+        return total_reward
+
+    def _get_action_attempt_count(self, action_name: str, mac: str) -> int:
+        """AI-02: Get the total number of times this action was tried on this host."""
+        try:
+            rows = self.shared_data.db.query(
+                "SELECT COUNT(*) AS cnt FROM ml_features WHERE action_name=? AND mac_address=?",
+                (action_name, mac),
+            )
+            return int(rows[0]['cnt']) if rows else 0
+        except Exception as e:
+            logger.debug(f"_get_action_attempt_count error: {e}")
+            return 0
+
+    def _get_consecutive_fail_count(self, action_name: str, mac: str) -> int:
+        """AI-02: Count consecutive failures for this action+host, most recent first."""
+        try:
+            rows = self.shared_data.db.query(
+                """
+                SELECT success FROM ml_features
+                WHERE action_name=? AND mac_address=?
+                ORDER BY timestamp DESC
+                LIMIT 10
+                """,
+                (action_name, mac),
+            )
+            count = 0
+            for r in rows:
+                if int(r['success']) == 0:
+                    count += 1
+                else:
+                    break
+            return count
+        except Exception as e:
+            logger.debug(f"_get_consecutive_fail_count error: {e}")
+            return 0
 
     def execute_queued_action(self, queued_action: Dict[str, Any]) -> bool:
         """Execute a single queued action with RL integration"""
@@ -559,7 +635,7 @@ class Orchestrator:
 
             # Determine success
             success = (result == 'success')
-            
+
             # Update queue status based on result
             if success:
                 self.shared_data.db.update_queue_status(queue_id, 'success')
@@ -567,6 +643,16 @@ class Orchestrator:
             else:
                 self.shared_data.db.update_queue_status(queue_id, 'failed')
                 logger.warning(f"Action {action_name} failed for {ip}")
+
+            # Circuit breaker feedback (ORCH-01)
+            try:
+                cb_threshold = int(getattr(self.shared_data, 'circuit_breaker_threshold', 3))
+                if success:
+                    self.shared_data.db.record_circuit_breaker_success(action_name, mac)
+                else:
+                    self.shared_data.db.record_circuit_breaker_failure(action_name, mac, threshold=cb_threshold)
+            except Exception as cb_err:
+                logger.debug(f"Circuit breaker update skipped: {cb_err}")
 
         except Exception as e:
             logger.error(f"Error executing action {action_name}: {e}")
@@ -633,6 +719,23 @@ class Orchestrator:
 
                 logger.debug(f"Features logged for {action_name} (mode={self.shared_data.operation_mode})")
 
+                # AI-03: Feed reward to AI engine for performance tracking
+                if self.ai_engine:
+                    try:
+                        self.ai_engine.record_reward(reward)
+                    except Exception as e:
+                        logger.debug(f"AI reward recording skipped: {e}")
+
+                # AI-04: Update bootstrap scores for cold-start learning
+                if self.ai_engine:
+                    try:
+                        state_after = self._build_host_state(mac)
+                        ports = set(state_after.get('ports', []))
+                        port_profile = self.ai_engine._detect_port_profile(ports)
+                        self.ai_engine.update_bootstrap(action_name, port_profile, reward)
+                    except Exception as e:
+                        logger.debug(f"Bootstrap update skipped: {e}")
+
             except Exception as e:
                 logger.info_throttled(
                     f"Feature logging skipped: {e}",
@@ -674,6 +777,15 @@ class Orchestrator:
                     
                     # Execute the action
                     self.execute_queued_action(next_action)
+
+                    # If exit was requested during execution, reset status
+                    # immediately so the UI doesn't stay on the finished action.
+                    if self.shared_data.orchestrator_should_exit:
+                        self.shared_data.bjorn_orch_status = "IDLE"
+                        self.shared_data.bjorn_status_text = "IDLE"
+                        self.shared_data.bjorn_status_text2 = ""
+                        self.shared_data.action_target_ip = ""
+                        self.shared_data.active_action = None
                 else:
                     # IDLE mode
                     idle_time += 1
@@ -704,6 +816,16 @@ class Orchestrator:
                 time.sleep(self._loop_error_backoff)
                 self._loop_error_backoff = min(self._loop_error_backoff * 2.0, 10.0)
         
+        # ── Reset status immediately upon exit ──────────────────────
+        # This ensures the UI shows IDLE as soon as the orchestrator stops,
+        # regardless of whether Bjorn.stop_orchestrator()'s join() timed out.
+        self.shared_data.bjorn_orch_status = "IDLE"
+        self.shared_data.bjorn_status_text = "IDLE"
+        self.shared_data.bjorn_status_text2 = ""
+        self.shared_data.action_target_ip = ""
+        self.shared_data.active_action = None
+        self.shared_data.update_status("IDLE", "")
+
         # Cleanup on exit (OUTSIDE while loop)
         if self.scheduler:
             self.scheduler.stop()
@@ -712,7 +834,7 @@ class Orchestrator:
                 self.scheduler_thread.join(timeout=10.0)
                 if self.scheduler_thread.is_alive():
                     logger.warning("ActionScheduler thread did not exit cleanly")
-        
+
         logger.info("Orchestrator stopped")
 
     def _process_background_tasks(self):

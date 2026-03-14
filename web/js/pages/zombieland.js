@@ -81,7 +81,7 @@ export async function mount(container) {
     mainSelector: '.zl-main',
     storageKey: 'sidebar:zombieland',
     mobileBreakpoint: 900,
-    toggleLabel: t('common.menu') || 'Menu',
+    toggleLabel: t('common.menu'),
   });
   await refreshState();
   syncSearchClearButton();
@@ -113,16 +113,16 @@ function buildShell() {
   return el('div', { class: 'zombieland-container page-with-sidebar' }, [
     el('aside', { class: 'zl-sidebar page-sidebar' }, [
       el('div', { class: 'sidehead' }, [
-        el('div', { class: 'sidetitle' }, [t('nav.zombieland') || 'Zombieland']),
+        el('div', { class: 'sidetitle' }, [t('nav.zombieland')]),
         el('div', { class: 'spacer' }),
-        el('button', { class: 'btn', id: 'hideSidebar', 'data-hide-sidebar': '1', type: 'button' }, [t('common.hide') || 'Hide']),
+        el('button', { class: 'btn', id: 'hideSidebar', 'data-hide-sidebar': '1', type: 'button' }, [t('common.hide')]),
       ]),
       el('div', { class: 'sidecontent' }, [
         el('div', { class: 'zl-stats-grid' }, [
-          statItem('zl-stat-total', L('zombieland.totalAgents', 'Total')),
-          statItem('zl-stat-alive', L('zombieland.alive', 'Online')),
-          statItem('zl-stat-avg-cpu', 'Avg CPU'),
-          statItem('zl-stat-avg-ram', 'Avg RAM'),
+          statItem('zl-stat-total', t('zombie.total')),
+          statItem('zl-stat-alive', t('zombie.online')),
+          statItem('zl-stat-avg-cpu', t('zombie.avgCpu')),
+          statItem('zl-stat-avg-ram', t('zombie.avgRam')),
           statItem('zl-stat-c2', L('zombieland.c2Status', 'C2 Port')),
         ]),
         el('div', { class: 'zl-toolbar' }, [
@@ -222,9 +222,9 @@ function buildGenerateClientModal() {
           el('span', {}, [t('zombie.deployViaSSH')]),
         ]),
         el('div', { id: 'sshOptions', class: 'hidden form-grid' }, [
-          el('label', {}, ['SSH Host']), el('input', { id: 'sshHost', type: 'text', class: 'input' }),
-          el('label', {}, ['SSH User']), el('input', { id: 'sshUser', type: 'text', class: 'input' }),
-          el('label', {}, ['SSH Pass']), el('input', { id: 'sshPass', type: 'password', class: 'input' }),
+          el('label', {}, [t('zombie.sshHost')]), el('input', { id: 'sshHost', type: 'text', class: 'input' }),
+          el('label', {}, [t('zombie.sshUser')]), el('input', { id: 'sshUser', type: 'text', class: 'input' }),
+          el('label', {}, [t('zombie.sshPass')]), el('input', { id: 'sshPass', type: 'password', class: 'input' }),
         ]),
       ]),
       el('div', { class: 'modal-actions' }, [
@@ -263,6 +263,7 @@ async function refreshState() {
       api.get('/c2/status').catch(() => null),
       api.get('/c2/agents').catch(() => null),
     ]);
+    if (!tracker) return; /* unmounted while awaiting */
     if (status) { c2Running = !!status.running; c2Port = status.port || null; }
     if (Array.isArray(agentList)) {
       for (const a of agentList) {
@@ -281,8 +282,8 @@ async function refreshState() {
 function connectSSE() {
   if (eventSource) eventSource.close();
   eventSource = new EventSource('/c2/events');
-  eventSource.onopen = () => { sseHealthy = true; systemLog('info', 'Connected to C2 event stream'); };
-  eventSource.onerror = () => { sseHealthy = false; systemLog('error', 'C2 event stream connection lost'); };
+  eventSource.onopen = () => { sseHealthy = true; systemLog('info', t('zombie.connectedToC2')); };
+  eventSource.onerror = () => { sseHealthy = false; systemLog('error', t('zombie.c2ConnectionLost')); };
   eventSource.addEventListener('status', (e) => {
     try { const data = JSON.parse(e.data); c2Running = !!data.running; c2Port = data.port || null; updateStats(); } catch { }
   });
@@ -295,7 +296,7 @@ function connectSSE() {
       const agent = { ...existing, ...data, id, last_seen: now };
       agents.set(id, agent);
       if (computePresence(existing, now).status !== computePresence(agent, now).status) {
-        systemLog('success', `Agent ${agent.hostname || id} telemetry received.`);
+        systemLog('success', t('zombie.telemetryReceived', { name: agent.hostname || id }));
       }
       const card = $('[data-agent-id="' + id + '"]');
       if (card) { card.classList.add('pulse'); tracker.trackTimeout(() => card.classList.remove('pulse'), 600); }
@@ -385,15 +386,15 @@ function createAgentCard(agent, now) {
     el('div', { class: 'zl-card-header' }, [
       el('input', { type: 'checkbox', class: 'agent-checkbox', checked: isSelected, 'data-agent-id': id }),
       el('div', { class: 'zl-card-identity' }, [
-        el('div', { class: 'zl-card-hostname' }, [agent.hostname || 'Unknown']),
+        el('div', { class: 'zl-card-hostname' }, [agent.hostname || t('common.unknown')]),
         el('div', { class: 'zl-card-id' }, [id]),
       ]),
       el('span', { class: 'zl-pill ' + pres.status }, [pres.status]),
     ]),
     el('div', { class: 'zl-card-info' }, [
-      infoRow(t('common.os'), agent.os || 'Unknown'),
+      infoRow(t('common.os'), agent.os || t('common.unknown')),
       infoRow(t('common.ip'), agent.ip || 'N/A'),
-      infoRow('CPU/RAM', `${agent.cpu || 0}% / ${agent.mem || 0}%`),
+      infoRow(t('zombie.cpuRam'), `${agent.cpu || 0}% / ${agent.mem || 0}%`),
     ]),
     el('div', { class: 'zl-ecg-row' }, [
       createECG(id, pres.color, pres.bpm),
@@ -423,12 +424,13 @@ function updateStats() {
   const now = Date.now();
   const all = Array.from(agents.values());
   const onlineAgents = all.filter(a => computePresence(a, now).status === 'online');
-  $('#zl-stat-total').textContent = String(all.length);
-  $('#zl-stat-alive').textContent = String(onlineAgents.length);
+  const sv = (id, v) => { const e = $(`#${id}`); if (e) e.textContent = v; };
+  sv('zl-stat-total', String(all.length));
+  sv('zl-stat-alive', String(onlineAgents.length));
   const avgCPU = onlineAgents.length ? Math.round(onlineAgents.reduce((s, a) => s + (a.cpu || 0), 0) / onlineAgents.length) : 0;
   const avgRAM = onlineAgents.length ? Math.round(onlineAgents.reduce((s, a) => s + (a.mem || 0), 0) / onlineAgents.length) : 0;
-  $('#zl-stat-avg-cpu').textContent = `${avgCPU}%`;
-  $('#zl-stat-avg-ram').textContent = `${avgRAM}%`;
+  sv('zl-stat-avg-cpu', `${avgCPU}%`);
+  sv('zl-stat-avg-ram', `${avgRAM}%`);
   const c2El = $('#zl-stat-c2');
   if (c2El) {
     c2El.textContent = c2Running ? `${t('status.online')} :${c2Port || '?'}` : t('status.offline');
@@ -499,7 +501,7 @@ function onRefresh() {
 }
 
 async function onStartC2() {
-  const port = prompt(L('zombie.enterC2Port', 'Enter C2 port'), '5555');
+  const port = prompt(t('zombie.enterC2Port'), '5555');
   if (!port) return;
   try {
     await api.post('/c2/start', { port: parseInt(port) });
@@ -520,8 +522,8 @@ async function onStopC2() {
 async function onCheckStale() {
   try {
     const result = await api.get('/c2/stale_agents?threshold=300');
-    toast(`${result.count} stale agent(s) found (>5min)`);
-    systemLog('info', `Stale check: ${result.count} inactive >5min.`);
+    toast(t('zombie.staleFound', { count: result.count }));
+    systemLog('info', t('zombie.staleCheck', { count: result.count }));
   } catch (err) { toast('Failed to fetch stale agents', 'error'); }
 }
 
@@ -548,7 +550,7 @@ async function onConfirmGenerate() {
   };
   try {
     const result = await api.post('/c2/generate_client', data);
-    toast(`Client ${clientId} generated`, 'success');
+    toast(t('zombie.clientGenerated', { id: clientId }), 'success');
     if ($('#deploySSH').checked) {
       await api.post('/c2/deploy', {
         client_id: clientId,
@@ -558,7 +560,7 @@ async function onConfirmGenerate() {
         lab_user: data.lab_user,
         lab_password: data.lab_password,
       });
-      toast(`Deployment to ${$('#sshHost').value} started`);
+      toast(t('zombie.deployStarted', { host: $('#sshHost').value }));
     }
     $('#generateModal').style.display = 'none';
     if (result.filename) {
@@ -597,8 +599,8 @@ function systemLog(level, message) {
   output.scrollTop = output.scrollHeight;
 }
 
-function clearConsole() { empty($('#zl-console-output')); }
-function clearLogs() { empty($('#zl-logs-output')); }
+function clearConsole() { const e = $('#zl-console-output'); if (e) empty(e); }
+function clearLogs() { const e = $('#zl-logs-output'); if (e) empty(e); }
 
 function onCmdKeyDown(e) {
   if (e.key === 'Enter') onSendCommand();
@@ -623,7 +625,7 @@ async function onSendCommand() {
   else { targets = [target]; }
 
   if (target !== 'broadcast' && targets.length === 0) {
-    toast('No agents selected for command.', 'warning');
+    toast(t('zombie.noAgentsSelected'), 'warning');
     return;
   }
 
@@ -672,16 +674,16 @@ async function browseDirectory() {
   const path = $('#browserPath').value || '/';
   const fileList = $('#fileList');
   empty(fileList);
-  fileList.textContent = 'Loading...';
+  fileList.textContent = t('common.loading');
   try {
     await sendCommand(`ls -la ${path}`, [agentId]);
     // The result will arrive via SSE and be handled by the 'console' event listener.
     // For now, we assume it's coming to the main console. A better way would be a dedicated event.
     // This is a limitation of the current design. We can refine it later.
-    toast('Browse command sent. Check console for output.');
+    toast(t('zombie.browseCommandSent'));
   } catch (err) {
-    toast('Failed to send browse command', 'error');
-    fileList.textContent = 'Error.';
+    toast(t('zombie.browseCommandFailed'), 'error');
+    fileList.textContent = t('common.error');
   }
 }
 
@@ -699,8 +701,8 @@ function onUploadFile() {
         const filePath = `${path.endsWith('/') ? path : path + '/'}${file.name}`;
         try {
           await sendCommand(`upload ${filePath} ${base64}`, [agentId]);
-          toast(`File ${file.name} upload started.`);
-        } catch { toast('Failed to upload file.', 'error'); }
+          toast(t('zombie.uploadStarted', { name: file.name }));
+        } catch { toast(t('zombie.uploadFailed'), 'error'); }
       };
       reader.readAsBinaryString(file);
     }

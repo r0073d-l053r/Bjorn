@@ -65,6 +65,20 @@ class QueueOps:
             WHERE status='scheduled';
         """)
         
+        # Circuit breaker table for ORCH-01
+        self.base.execute("""
+            CREATE TABLE IF NOT EXISTS action_circuit_breaker (
+                action_name TEXT NOT NULL,
+                mac_address TEXT NOT NULL DEFAULT '',
+                failure_streak INTEGER NOT NULL DEFAULT 0,
+                last_failure_at TEXT,
+                circuit_status TEXT NOT NULL DEFAULT 'closed',
+                opened_at TEXT,
+                cooldown_until TEXT,
+                PRIMARY KEY (action_name, mac_address)
+            );
+        """)
+
         logger.debug("Action queue table created/verified")
     
     # =========================================================================
@@ -398,6 +412,120 @@ class QueueOps:
     # HELPER METHODS
     # =========================================================================
     
+    # =========================================================================
+    # CIRCUIT BREAKER OPERATIONS (ORCH-01)
+    # =========================================================================
+
+    def record_circuit_breaker_failure(self, action_name: str, mac: str = '',
+                                       threshold: int = 3) -> None:
+        """Increment failure streak; open circuit if streak >= threshold."""
+        now_str = self.base.query_one("SELECT datetime('now') AS ts")['ts']
+        # Upsert the row
+        self.base.execute("""
+            INSERT INTO action_circuit_breaker (action_name, mac_address, failure_streak,
+                                                last_failure_at, circuit_status)
+            VALUES (?, ?, 1, ?, 'closed')
+            ON CONFLICT(action_name, mac_address) DO UPDATE SET
+                failure_streak = failure_streak + 1,
+                last_failure_at = excluded.last_failure_at
+        """, (action_name, mac or '', now_str))
+
+        # Check if we need to open the circuit
+        row = self.base.query_one(
+            "SELECT failure_streak FROM action_circuit_breaker WHERE action_name=? AND mac_address=?",
+            (action_name, mac or '')
+        )
+        if row and row['failure_streak'] >= threshold:
+            streak = row['failure_streak']
+            cooldown_secs = min(2 ** streak * 60, 3600)
+            self.base.execute("""
+                UPDATE action_circuit_breaker
+                SET circuit_status = 'open',
+                    opened_at = ?,
+                    cooldown_until = datetime(?, '+' || ? || ' seconds')
+                WHERE action_name=? AND mac_address=?
+            """, (now_str, now_str, str(cooldown_secs), action_name, mac or ''))
+
+    def record_circuit_breaker_success(self, action_name: str, mac: str = '') -> None:
+        """Reset failure streak and close circuit on success."""
+        self.base.execute("""
+            INSERT INTO action_circuit_breaker (action_name, mac_address, failure_streak,
+                                                circuit_status)
+            VALUES (?, ?, 0, 'closed')
+            ON CONFLICT(action_name, mac_address) DO UPDATE SET
+                failure_streak = 0,
+                circuit_status = 'closed',
+                opened_at = NULL,
+                cooldown_until = NULL
+        """, (action_name, mac or ''))
+
+    def is_circuit_open(self, action_name: str, mac: str = '') -> bool:
+        """Return True if circuit is open AND cooldown hasn't expired.
+        If cooldown has expired, transition to half_open and return False."""
+        row = self.base.query_one(
+            "SELECT circuit_status, cooldown_until FROM action_circuit_breaker "
+            "WHERE action_name=? AND mac_address=?",
+            (action_name, mac or '')
+        )
+        if not row:
+            return False
+        status = row['circuit_status']
+        if status == 'closed':
+            return False
+        if status == 'open':
+            cooldown = row.get('cooldown_until')
+            if cooldown:
+                # Check if cooldown has expired
+                expired = self.base.query_one(
+                    "SELECT datetime('now') >= datetime(?) AS expired",
+                    (cooldown,)
+                )
+                if expired and expired['expired']:
+                    # Transition to half_open
+                    self.base.execute("""
+                        UPDATE action_circuit_breaker SET circuit_status='half_open'
+                        WHERE action_name=? AND mac_address=?
+                    """, (action_name, mac or ''))
+                    return False  # Allow one attempt through
+            return True  # Still in cooldown
+        # half_open: allow one attempt through
+        return False
+
+    def get_circuit_breaker_status(self, action_name: str, mac: str = '') -> Optional[Dict[str, Any]]:
+        """Return full circuit breaker status dict."""
+        row = self.base.query_one(
+            "SELECT * FROM action_circuit_breaker WHERE action_name=? AND mac_address=?",
+            (action_name, mac or '')
+        )
+        return dict(row) if row else None
+
+    def reset_circuit_breaker(self, action_name: str, mac: str = '') -> None:
+        """Manual reset of circuit breaker."""
+        self.base.execute("""
+            DELETE FROM action_circuit_breaker WHERE action_name=? AND mac_address=?
+        """, (action_name, mac or ''))
+
+    # =========================================================================
+    # CONCURRENCY OPERATIONS (ORCH-02)
+    # =========================================================================
+
+    def count_running_actions(self, action_name: Optional[str] = None) -> int:
+        """Count currently running actions, optionally filtered by action_name."""
+        if action_name:
+            row = self.base.query_one(
+                "SELECT COUNT(*) AS cnt FROM action_queue WHERE status='running' AND action_name=?",
+                (action_name,)
+            )
+        else:
+            row = self.base.query_one(
+                "SELECT COUNT(*) AS cnt FROM action_queue WHERE status='running'"
+            )
+        return int(row['cnt']) if row else 0
+
+    # =========================================================================
+    # HELPER METHODS
+    # =========================================================================
+
     def _format_ts_for_raw(self, ts_db: Optional[str]) -> str:
         """
         Convert SQLite 'YYYY-MM-DD HH:MM:SS' to 'YYYYMMDD_HHMMSS'.

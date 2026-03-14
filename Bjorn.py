@@ -235,8 +235,10 @@ class Bjorn:
         backoff_s = 1.0
         while not self.shared_data.should_exit:
             try:
-                # Manual mode must stop orchestration so the user keeps full control.
-                if self.shared_data.operation_mode == "MANUAL":
+                # Manual/Bifrost mode must stop orchestration.
+                # BIFROST: WiFi is in monitor mode, no network available for scans.
+                current_mode = self.shared_data.operation_mode
+                if current_mode in ("MANUAL", "BIFROST", "LOKI"):
                     # Avoid spamming stop requests if already stopped.
                     if self.orchestrator_thread is not None and self.orchestrator_thread.is_alive():
                         self.stop_orchestrator()
@@ -257,7 +259,7 @@ class Bjorn:
                 backoff_s = min(backoff_s * 2.0, 30.0)
 
     def check_and_start_orchestrator(self):
-        if self.shared_data.operation_mode == "MANUAL":
+        if self.shared_data.operation_mode in ("MANUAL", "BIFROST", "LOKI"):
             return
         if self.is_network_connected():
             self.wifi_connected = True
@@ -300,9 +302,14 @@ class Bjorn:
                 self.orchestrator = None
                 return
 
-            # Keep MANUAL sticky so supervisor does not auto-restart orchestration.
+            # Keep MANUAL sticky so supervisor does not auto-restart orchestration,
+            # but only if the current mode isn't already handling it.
+            # - MANUAL/BIFROST: already non-AUTO, no need to change
+            # - AUTO: let it be — orchestrator will restart naturally (e.g. after Bifrost auto-disable)
             try:
-                self.shared_data.operation_mode = "MANUAL"
+                current = self.shared_data.operation_mode
+                if current == "AI":
+                    self.shared_data.operation_mode = "MANUAL"
             except Exception:
                 pass
 
@@ -313,19 +320,26 @@ class Bjorn:
             self.shared_data.orchestrator_should_exit = True
             self.shared_data.queue_event.set() # Wake up thread
             thread.join(timeout=10.0)
-            
+
             if thread.is_alive():
                 logger.warning_throttled(
                     "Orchestrator thread did not stop gracefully",
                     key="orch_stop_not_graceful",
                     interval_s=20,
                 )
-                return
+                # Still reset status so UI doesn't stay stuck on the
+                # last action while the thread finishes in the background.
+            else:
+                self.orchestrator_thread = None
+                self.orchestrator = None
 
-            self.orchestrator_thread = None
-            self.orchestrator = None
+            # Always reset display state regardless of whether join succeeded.
             self.shared_data.bjorn_orch_status = "IDLE"
+            self.shared_data.bjorn_status_text = "IDLE"
             self.shared_data.bjorn_status_text2 = ""
+            self.shared_data.action_target_ip = ""
+            self.shared_data.active_action = None
+            self.shared_data.update_status("IDLE", "")
 
     def is_network_connected(self):
         """Checks for network connectivity with throttling and low-CPU checks."""
@@ -441,6 +455,22 @@ def handle_exit(
     except Exception:
         pass
 
+    # 2c. Stop Sentinel Watchdog
+    try:
+        engine = getattr(shared_data, 'sentinel_engine', None)
+        if engine and hasattr(engine, 'stop'):
+            engine.stop()
+    except Exception:
+        pass
+
+    # 2d. Stop Bifrost Engine
+    try:
+        engine = getattr(shared_data, 'bifrost_engine', None)
+        if engine and hasattr(engine, 'stop'):
+            engine.stop()
+    except Exception:
+        pass
+
     # 3. Stop Web Server
     try:
         if web_thread_obj and hasattr(web_thread_obj, "shutdown"):
@@ -516,6 +546,45 @@ if __name__ == "__main__":
         health_interval = int(shared_data.config.get("health_log_interval", 60))
         health_thread = HealthMonitor(shared_data, interval_s=health_interval)
         health_thread.start()
+
+        # Sentinel watchdog — start if enabled in config
+        try:
+            from sentinel import SentinelEngine
+            sentinel_engine = SentinelEngine(shared_data)
+            shared_data.sentinel_engine = sentinel_engine
+            if shared_data.config.get("sentinel_enabled", False):
+                sentinel_engine.start()
+                logger.info("Sentinel watchdog started")
+            else:
+                logger.info("Sentinel watchdog loaded (disabled)")
+        except Exception as e:
+            logger.warning("Sentinel init skipped: %s", e)
+
+        # Bifrost engine — start if enabled in config
+        try:
+            from bifrost import BifrostEngine
+            bifrost_engine = BifrostEngine(shared_data)
+            shared_data.bifrost_engine = bifrost_engine
+            if shared_data.config.get("bifrost_enabled", False):
+                bifrost_engine.start()
+                logger.info("Bifrost engine started")
+            else:
+                logger.info("Bifrost engine loaded (disabled)")
+        except Exception as e:
+            logger.warning("Bifrost init skipped: %s", e)
+
+        # Loki engine — start if enabled in config
+        try:
+            from loki import LokiEngine
+            loki_engine = LokiEngine(shared_data)
+            shared_data.loki_engine = loki_engine
+            if shared_data.config.get("loki_enabled", False):
+                loki_engine.start()
+                logger.info("Loki engine started")
+            else:
+                logger.info("Loki engine loaded (disabled)")
+        except Exception as e:
+            logger.warning("Loki init skipped: %s", e)
 
         # Signal Handlers
         exit_handler = lambda s, f: handle_exit(

@@ -24,6 +24,9 @@ let sortOrder = 1;
 let currentFilter = null;
 let searchTerm = '';
 let searchDebounce = null;
+let prevCardKeys = [];     /* track card order for incremental DOM */
+let prevFingerprints = {}; /* track card content for change detection */
+let prevDataFingerprint = ''; /* track raw data to skip unnecessary work */
 
 /* ── prefs ── */
 const getPref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -65,21 +68,35 @@ export async function mount(container) {
 }
 
 export function unmount() {
-  clearTimeout(searchDebounce);
+  if (searchDebounce != null) {
+    if (tracker) tracker.clearTrackedTimeout(searchDebounce);
+    else clearTimeout(searchDebounce);
+    searchDebounce = null;
+  }
   if (poller) { poller.stop(); poller = null; }
   if (tracker) { tracker.cleanupAll(); tracker = null; }
   originalData = [];
   searchTerm = '';
   currentFilter = null;
+  prevCardKeys = [];
+  prevFingerprints = {};
+  prevDataFingerprint = '';
 }
 
 /* ── data fetch ── */
 async function refresh() {
   try {
     const data = await api.get('/netkb_data', { timeout: 8000 });
-    originalData = Array.isArray(data) ? data : [];
+    if (!tracker) return; /* unmounted while awaiting */
+    const newData = Array.isArray(data) ? data : [];
+    /* Skip full refresh if data unchanged */
+    const fp = newData.map(d => `${d.mac}|${d.ip}|${d.hostname}|${d.alive}|${(d.ports||[]).join(',')}|${(d.actions||[]).map(a=>`${a?.name}:${a?.status}`).join(',')}`).join(';');
+    if (fp === prevDataFingerprint) return;
+    prevDataFingerprint = fp;
+    originalData = newData;
     refreshDisplay();
   } catch (err) {
+    if (err.name === 'AbortError') return;
     console.warn(`[${PAGE}]`, err.message);
   }
 }
@@ -143,13 +160,18 @@ function toggleSearchPop() {
 }
 
 function onSearchInput(e) {
-  clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => {
+  if (searchDebounce != null) {
+    if (tracker) tracker.clearTrackedTimeout(searchDebounce);
+    else clearTimeout(searchDebounce);
+  }
+  const handler = () => {
     searchTerm = e.target.value.trim().toLowerCase();
     setPref('netkb:search', e.target.value.trim());
     refreshDisplay();
     syncClearBtn();
-  }, 120);
+    searchDebounce = null;
+  };
+  searchDebounce = tracker ? tracker.trackTimeout(handler, 120) : setTimeout(handler, 120);
 }
 
 function clearSearch() {
@@ -264,45 +286,92 @@ function matchesSearch(item) {
   return false;
 }
 
-/* ── card rendering ── */
+/* ── card key + fingerprint for incremental updates ── */
+function cardKey(item) {
+  return `${item.mac || ''}_${item.ip || ''}`;
+}
+function cardFingerprint(item) {
+  const ports = (item.ports || []).filter(Boolean).join(',');
+  const acts  = (item.actions || []).map(a => `${a?.name}:${a?.status}`).join(',');
+  return `${item.hostname}|${item.ip}|${item.mac}|${item.vendor}|${item.essid}|${item.alive}|${ports}|${acts}`;
+}
+
+/* ── build a single card DOM ── */
+function buildCardEl(item) {
+  const alive = item.alive;
+  const cardClass = `card ${viewMode === 'list' ? 'list' : ''} ${alive ? 'alive' : 'not-alive'}`;
+  const title = (item.hostname && item.hostname !== 'N/A') ? item.hostname : (item.ip || 'N/A');
+
+  const sections = [];
+  if (item.ip) sections.push(fieldRow(t('netkb.ip'), 'ip', item.ip));
+  if (item.mac) sections.push(fieldRow(t('netkb.mac'), 'mac', item.mac));
+  if (item.vendor && item.vendor !== 'N/A') sections.push(fieldRow(t('netkb.vendor'), 'vendor', item.vendor));
+  if (item.essid && item.essid !== 'N/A') sections.push(fieldRow(t('netkb.essid'), 'essid', item.essid));
+  if (item.ports && item.ports.filter(Boolean).length > 0) {
+    sections.push(el('div', { class: 'card-section' }, [
+      el('strong', {}, [L('netkb.openPorts', 'Open Ports') + ':']),
+      el('div', { class: 'port-bubbles' },
+        item.ports.filter(Boolean).map(p => chip('port', String(p)))
+      ),
+    ]));
+  }
+
+  const card = el('div', { class: cardClass, 'data-card-key': cardKey(item) }, [
+    el('div', { class: 'card-content' }, [
+      el('h3', { class: 'card-title' }, [hlText(title)]),
+      ...sections,
+    ]),
+    el('div', { class: 'status-container' }, renderBadges(item.actions, item.ip)),
+  ]);
+  return card;
+}
+
+/* ── card rendering (incremental) ── */
 function renderCards(data) {
   const container = $('#netkb-card-container');
   if (!container) return;
-  empty(container);
 
   const visible = data.filter(i => showNotAlive || i.alive);
+
+  /* empty state */
   if (visible.length === 0) {
-    container.appendChild(el('div', { class: 'netkb-empty' }, [t('common.noData')]));
+    if (prevCardKeys.length > 0 || container.children.length === 0 ||
+        !container.querySelector('.netkb-empty')) {
+      empty(container);
+      container.appendChild(el('div', { class: 'netkb-empty' }, [t('common.noData')]));
+      prevCardKeys = [];
+      prevFingerprints = {};
+    }
     return;
   }
 
-  for (const item of visible) {
-    const alive = item.alive;
-    const cardClass = `card ${viewMode === 'list' ? 'list' : ''} ${alive ? 'alive' : 'not-alive'}`;
-    const title = (item.hostname && item.hostname !== 'N/A') ? item.hostname : (item.ip || 'N/A');
+  /* compute new keys + fingerprints */
+  const newKeys = visible.map(cardKey);
+  const newFP   = {};
+  visible.forEach(item => { newFP[cardKey(item)] = cardFingerprint(item); });
 
-    const sections = [];
-    if (item.ip) sections.push(fieldRow('IP', 'ip', item.ip));
-    if (item.mac) sections.push(fieldRow('MAC', 'mac', item.mac));
-    if (item.vendor && item.vendor !== 'N/A') sections.push(fieldRow('Vendor', 'vendor', item.vendor));
-    if (item.essid && item.essid !== 'N/A') sections.push(fieldRow('ESSID', 'essid', item.essid));
-    if (item.ports && item.ports.filter(Boolean).length > 0) {
-      sections.push(el('div', { class: 'card-section' }, [
-        el('strong', {}, [L('netkb.openPorts', 'Open Ports') + ':']),
-        el('div', { class: 'port-bubbles' },
-          item.ports.filter(Boolean).map(p => chip('port', String(p)))
-        ),
-      ]));
+  /* first render or structural change (different keys/order) → full rebuild */
+  const keysMatch = newKeys.length === prevCardKeys.length &&
+                    newKeys.every((k, i) => k === prevCardKeys[i]);
+
+  if (!keysMatch) {
+    /* full rebuild — order or set of items changed */
+    empty(container);
+    for (const item of visible) container.appendChild(buildCardEl(item));
+  } else {
+    /* incremental — only replace cards whose fingerprint changed */
+    const children = container.children;
+    for (let i = 0; i < visible.length; i++) {
+      const key = newKeys[i];
+      if (newFP[key] !== prevFingerprints[key]) {
+        const newCard = buildCardEl(visible[i]);
+        container.replaceChild(newCard, children[i]);
+      }
     }
-
-    container.appendChild(el('div', { class: cardClass }, [
-      el('div', { class: 'card-content' }, [
-        el('h3', { class: 'card-title' }, [hlText(title)]),
-        ...sections,
-      ]),
-      el('div', { class: 'status-container' }, renderBadges(item.actions, item.ip)),
-    ]));
   }
+
+  prevCardKeys = newKeys;
+  prevFingerprints = newFP;
 }
 
 /* ── table rendering ── */
@@ -317,15 +386,15 @@ function renderTable(data) {
   const thead = el('thead', {}, [
     el('tr', {}, [
       el('th', { onclick: thClick('hostname') }, [t('common.hostname') + ' ',
-      el('img', { src: '/web/images/filter_icon.png', class: 'filter-icon', onclick: fClick('toggleAlive'), title: 'Toggle offline', alt: 'Filter' })]),
-      el('th', { onclick: thClick('ip') }, ['IP']),
-      el('th', { onclick: thClick('mac') }, ['MAC']),
-      el('th', { onclick: thClick('essid') }, ['ESSID']),
+      el('img', { src: '/web/images/filter_icon.png', class: 'filter-icon', onclick: fClick('toggleAlive'), title: t('netkb.toggleOffline'), alt: 'Filter' })]),
+      el('th', { onclick: thClick('ip') }, [t('netkb.ip')]),
+      el('th', { onclick: thClick('mac') }, [t('netkb.mac')]),
+      el('th', { onclick: thClick('essid') }, [t('netkb.essid')]),
       el('th', { onclick: thClick('vendor') }, [t('common.vendor')]),
       el('th', { onclick: thClick('ports') }, [t('common.ports') + ' ',
-      el('img', { src: '/web/images/filter_icon.png', class: 'filter-icon', onclick: fClick('hasPorts'), title: 'Has ports', alt: 'Filter' })]),
+      el('img', { src: '/web/images/filter_icon.png', class: 'filter-icon', onclick: fClick('hasPorts'), title: t('netkb.hasPorts'), alt: 'Filter' })]),
       el('th', {}, [t('common.actions') + ' ',
-      el('img', { src: '/web/images/filter_icon.png', class: 'filter-icon', onclick: fClick('hasActions'), title: 'Has actions', alt: 'Filter' })]),
+      el('img', { src: '/web/images/filter_icon.png', class: 'filter-icon', onclick: fClick('hasActions'), title: t('netkb.hasActions'), alt: 'Filter' })]),
     ]),
   ]);
 
@@ -334,10 +403,10 @@ function renderTable(data) {
     const hostText = (item.hostname && item.hostname !== 'N/A') ? item.hostname : (item.ip || 'N/A');
     return el('tr', {}, [
       el('td', {}, [chip('host', hostText)]),
-      el('td', {}, item.ip ? [chip('ip', item.ip)] : ['N/A']),
-      el('td', {}, item.mac ? [chip('mac', item.mac)] : ['N/A']),
-      el('td', {}, (item.essid && item.essid !== 'N/A') ? [chip('essid', item.essid)] : ['N/A']),
-      el('td', {}, (item.vendor && item.vendor !== 'N/A') ? [chip('vendor', item.vendor)] : ['N/A']),
+      el('td', {}, item.ip ? [chip('ip', item.ip)] : [t('netkb.na')]),
+      el('td', {}, item.mac ? [chip('mac', item.mac)] : [t('netkb.na')]),
+      el('td', {}, (item.essid && item.essid !== 'N/A') ? [chip('essid', item.essid)] : [t('netkb.na')]),
+      el('td', {}, (item.vendor && item.vendor !== 'N/A') ? [chip('vendor', item.vendor)] : [t('netkb.na')]),
       el('td', {}, [el('div', { class: 'port-bubbles' },
         (item.ports || []).filter(Boolean).map(p => chip('port', String(p))))]),
       el('td', {}, [el('div', { class: 'status-container' }, renderBadges(item.actions, item.ip))]),
@@ -372,7 +441,7 @@ function renderBadges(actions, ip) {
   }
 
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const label = s => ({ success: 'Success', failed: 'Failed', fail: 'Failed', running: 'Running', pending: 'Pending', expired: 'Expired', cancelled: 'Cancelled' })[s] || s;
+  const label = s => ({ success: t('netkb.success'), failed: t('netkb.failed'), fail: t('netkb.failed'), running: t('netkb.running'), pending: t('netkb.pending'), expired: t('netkb.expired'), cancelled: t('netkb.cancelled') })[s] || s;
 
   return Array.from(map.values())
     .sort((a, b) => b.parsed.ts - a.parsed.ts)
@@ -392,7 +461,7 @@ function renderBadges(actions, ip) {
       }, [
         el('div', { class: 'badge-header' }, [hlText(a.name)]),
         el('div', { class: 'badge-status' }, [label(s)]),
-        el('div', { class: 'badge-timestamp' }, [el('div', {}, [date]), el('div', {}, [`at ${time}`])]),
+        el('div', { class: 'badge-timestamp' }, [el('div', {}, [date]), el('div', {}, [`${t('netkb.at')} ${time}`])]),
       ]);
     });
 }

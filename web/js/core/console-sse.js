@@ -41,6 +41,8 @@ const LEVEL_CLASSES = {
 let evtSource = null;
 let reconnectCount = 0;
 let reconnectTimer = null;
+let healthyMessageCount = 0;
+const HEALTHY_THRESHOLD = 5;  // messages needed before resetting reconnect counter
 
 let isUserScrolling = false;
 let autoScroll = true;
@@ -364,7 +366,11 @@ function connectSSE() {
   evtSource = new EventSource('/stream_logs');
 
   evtSource.onmessage = (evt) => {
-    reconnectCount = 0;  // healthy connection resets counter
+    // Only reset reconnect counter after sustained healthy connection
+    healthyMessageCount++;
+    if (healthyMessageCount >= HEALTHY_THRESHOLD) {
+      reconnectCount = 0;
+    }
 
     const raw = evt.data;
     if (!raw) return;
@@ -405,6 +411,7 @@ function connectSSE() {
   };
 
   evtSource.onerror = () => {
+    healthyMessageCount = 0;
     disconnectSSE();
     scheduleReconnect();
   };

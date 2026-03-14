@@ -26,11 +26,6 @@ const logsByAction = new Map(); // actionId -> string[]
 const pollingTimers = new Map(); // actionId -> timeoutId
 const autoClearPane = [false, false, false, false];
 
-function tx(key, fallback) {
-  const v = t(key);
-  return v === key ? fallback : v;
-}
-
 function isMobile() {
   return window.matchMedia('(max-width: 860px)').matches;
 }
@@ -45,7 +40,7 @@ export async function mount(container) {
     sidebarSelector: '.al-sidebar',
     mainSelector: '#actionsLauncher',
     storageKey: 'sidebar:actions',
-    toggleLabel: tx('common.menu', 'Menu'),
+    toggleLabel: t('common.menu'),
   });
 
   bindStaticEvents();
@@ -61,6 +56,9 @@ export function unmount() {
     sidebarLayoutCleanup();
     sidebarLayoutCleanup = null;
   }
+
+  clearTimeout(onResizeDebounced._t);
+  onResizeDebounced._t = null;
 
   for (const tmr of pollingTimers.values()) clearTimeout(tmr);
   pollingTimers.clear();
@@ -83,14 +81,14 @@ export function unmount() {
 
 function buildShell() {
   const sideTabs = el('div', { class: 'tabs-container' }, [
-    el('button', { class: 'tab-btn active', id: 'tabBtnActions', type: 'button' }, [tx('actions.tabs.actions', 'Actions')]),
-    el('button', { class: 'tab-btn', id: 'tabBtnArgs', type: 'button' }, [tx('actions.tabs.arguments', 'Arguments')]),
+    el('button', { class: 'tab-btn active', id: 'tabBtnActions', type: 'button' }, [t('actions.tabs.actions')]),
+    el('button', { class: 'tab-btn', id: 'tabBtnArgs', type: 'button' }, [t('actions.tabs.arguments')]),
   ]);
 
   const sideHeader = el('div', { class: 'sideheader' }, [
     el('div', { class: 'al-side-meta' }, [
-      el('div', { class: 'sidetitle' }, [tx('nav.actions', 'Actions')]),
-      el('button', { class: 'al-btn', id: 'hideSidebar', 'data-hide-sidebar': '1', type: 'button' }, [tx('common.hide', 'Hide')]),
+      el('div', { class: 'sidetitle' }, [t('actions.title')]),
+      el('button', { class: 'al-btn', id: 'hideSidebar', 'data-hide-sidebar': '1', type: 'button' }, [t('common.hide')]),
     ]),
     sideTabs,
     el('div', { class: 'al-search' }, [
@@ -98,7 +96,7 @@ function buildShell() {
         id: 'searchInput',
         class: 'al-input',
         type: 'text',
-        placeholder: tx('actions.searchPlaceholder', 'Search actions...'),
+        placeholder: t('actions.searchPlaceholder'),
       }),
     ]),
   ]);
@@ -109,8 +107,8 @@ function buildShell() {
 
   const argsSidebar = el('div', { id: 'tab-arguments', class: 'sidebar-page', style: 'display:none' }, [
     el('div', { class: 'section' }, [
-      el('div', { class: 'h' }, [tx('actions.args.title', 'Arguments')]),
-      el('div', { class: 'sub' }, [tx('actions.args.subtitle', 'Auto-generated from action definitions')]),
+      el('div', { class: 'h' }, [t('actions.args.title')]),
+      el('div', { class: 'sub' }, [t('actions.args.subtitle')]),
     ]),
     el('div', { id: 'argBuilder', class: 'builder' }),
     el('div', { class: 'section' }, [
@@ -118,7 +116,7 @@ function buildShell() {
         id: 'freeArgs',
         class: 'ctl',
         type: 'text',
-        placeholder: tx('actions.args.free', 'Additional arguments (e.g., --verbose --debug)'),
+        placeholder: t('actions.args.free'),
       }),
     ]),
     el('div', { id: 'presetChips', class: 'chips' }),
@@ -242,7 +240,7 @@ async function loadActions() {
       empty(q('#presetChips'));
     }
   } catch (err) {
-    toast(`${tx('common.error', 'Error')}: ${err.message}`, 2600, 'error');
+    toast(`${t('common.error')}: ${err.message}`, 2600, 'error');
     actions = [];
   }
 }
@@ -267,7 +265,7 @@ function normalizeAction(raw) {
     module: raw.b_module || raw.module || id,
     bClass: raw.b_class || id,
     category: (raw.b_action || raw.category || 'normal').toLowerCase(),
-    description: raw.description || tx('actions.description', 'Description'),
+    description: raw.description || t('common.description'),
     args,
     icon: raw.b_icon || `/actions_icons/${encodeURIComponent(raw.b_class || id)}.png`,
     version: raw.b_version || '',
@@ -292,7 +290,7 @@ function renderActionsList() {
   });
 
   if (!filtered.length) {
-    container.appendChild(el('div', { class: 'sub' }, [tx('actions.noActions', 'No actions found')]));
+    container.appendChild(el('div', { class: 'sub' }, [t('actions.noActions')]));
     return;
   }
 
@@ -333,10 +331,10 @@ function statusChipClass(status) {
 }
 
 function statusChipText(status) {
-  if (status === 'running') return tx('actions.running', 'Running');
-  if (status === 'success') return tx('common.success', 'Success');
-  if (status === 'error') return tx('common.error', 'Error');
-  return tx('common.ready', 'Ready');
+  if (status === 'running') return t('actions.running');
+  if (status === 'success') return t('common.success');
+  if (status === 'error') return t('common.error');
+  return t('common.ready');
 }
 
 function onActionSelected(actionId) {
@@ -378,13 +376,13 @@ function renderArguments(action) {
 
   const metaBits = [];
   if (action.version) metaBits.push(`v${action.version}`);
-  if (action.author) metaBits.push(`by ${action.author}`);
+  if (action.author) metaBits.push(t('actions.byAuthor', { author: action.author }));
 
   if (metaBits.length || action.docsUrl) {
     const top = el('div', { style: 'display:flex;justify-content:space-between;gap:8px;align-items:center' }, [
       el('div', { class: 'sub' }, [metaBits.join(' • ')]),
       action.docsUrl
-        ? el('a', { class: 'al-btn', href: action.docsUrl, target: '_blank', rel: 'noopener noreferrer' }, ['Docs'])
+        ? el('a', { class: 'al-btn', href: action.docsUrl, target: '_blank', rel: 'noopener noreferrer' }, [t('actions.docs')])
         : null,
     ]);
     builder.appendChild(top);
@@ -392,7 +390,7 @@ function renderArguments(action) {
 
   const entries = Object.entries(action.args || {});
   if (!entries.length) {
-    builder.appendChild(el('div', { class: 'sub' }, [tx('actions.args.none', 'No configurable arguments')]));
+    builder.appendChild(el('div', { class: 'sub' }, [t('actions.args.none')]));
   }
 
   for (const [key, cfgRaw] of entries) {
@@ -409,7 +407,7 @@ function renderArguments(action) {
   const presets = Array.isArray(action.examples) ? action.examples : [];
   for (let i = 0; i < presets.length; i++) {
     const p = presets[i];
-    const label = p.name || p.title || `Preset ${i + 1}`;
+    const label = p.name || p.title || t('actions.preset', { n: i + 1 });
     const btn = el('button', { class: 'chip2', type: 'button' }, [label]);
     tracker.trackEventListener(btn, 'click', () => applyPreset(p));
     chips.appendChild(btn);
@@ -493,7 +491,7 @@ function applyPreset(preset) {
     else input.value = String(v ?? '');
   }
 
-  toast(tx('actions.toast.presetApplied', 'Preset applied'), 1400, 'success');
+  toast(t('actions.toast.presetApplied'), 1400, 'success');
 }
 
 function collectArguments() {
@@ -551,33 +549,33 @@ function renderConsoles() {
         },
       }) : null,
       el('div', { class: 'titleBlock' }, [
-        el('div', { class: 'titleLine' }, [el('strong', {}, [action ? action.name : tx('actions.emptyPane', '— Empty Pane —')])]),
+        el('div', { class: 'titleLine' }, [el('strong', {}, [action ? action.name : t('actions.emptyPane')])]),
         action ? el('div', { class: 'metaLine' }, [
           action.version ? el('span', { class: 'chip' }, ['v' + action.version]) : null,
-          action.author ? el('span', { class: 'chip' }, ['by ' + action.author]) : null,
+          action.author ? el('span', { class: 'chip' }, [t('actions.byAuthor', { author: action.author })]) : null,
         ]) : null,
       ]),
     ]);
 
     const paneBtns = el('div', { class: 'paneBtns' });
     if (!action) {
-      const assignBtn = el('button', { class: 'al-btn', type: 'button' }, [tx('actions.assign', 'Assign')]);
+      const assignBtn = el('button', { class: 'al-btn', type: 'button' }, [t('actions.assign')]);
       tracker.trackEventListener(assignBtn, 'click', () => setAssignTarget(i));
       paneBtns.appendChild(assignBtn);
     } else {
-      const runBtn = el('button', { class: 'al-btn', type: 'button' }, [tx('common.run', 'Run')]);
+      const runBtn = el('button', { class: 'al-btn', type: 'button' }, [t('common.run')]);
       tracker.trackEventListener(runBtn, 'click', () => runActionInPane(i));
 
-      const stopBtn = el('button', { class: 'al-btn warn', type: 'button' }, [tx('common.stop', 'Stop')]);
+      const stopBtn = el('button', { class: 'al-btn warn', type: 'button' }, [t('common.stop')]);
       tracker.trackEventListener(stopBtn, 'click', () => stopActionInPane(i));
 
-      const clearBtn = el('button', { class: 'al-btn', type: 'button' }, [tx('console.clear', 'Clear')]);
+      const clearBtn = el('button', { class: 'al-btn', type: 'button' }, [t('common.clear')]);
       tracker.trackEventListener(clearBtn, 'click', () => clearActionLogs(action.id));
 
-      const exportBtn = el('button', { class: 'al-btn', type: 'button' }, ['⬇ Export']);
+      const exportBtn = el('button', { class: 'al-btn', type: 'button' }, ['\u2B07 ' + t('actions.exportLogs')]);
       tracker.trackEventListener(exportBtn, 'click', () => exportActionLogs(action.id, action.name));
 
-      const autoBtn = el('button', { class: 'al-btn', type: 'button' }, [autoClearPane[i] ? 'Auto-clear ON' : 'Auto-clear OFF']);
+      const autoBtn = el('button', { class: 'al-btn', type: 'button' }, [autoClearPane[i] ? t('actions.autoClearOn') : t('actions.autoClearOff')]);
       if (autoClearPane[i]) autoBtn.classList.add('warn');
       tracker.trackEventListener(autoBtn, 'click', () => {
         autoClearPane[i] = !autoClearPane[i];
@@ -622,13 +620,13 @@ function renderPaneLog(index, actionId) {
   empty(logEl);
 
   if (!actionId) {
-    logEl.appendChild(el('div', { class: 'logline dim' }, [tx('actions.logs.empty', 'Select an action to see logs')]));
+    logEl.appendChild(el('div', { class: 'logline dim' }, [t('actions.selectAction')]));
     return;
   }
 
   const lines = logsByAction.get(actionId) || [];
   if (!lines.length) {
-    logEl.appendChild(el('div', { class: 'logline dim' }, [tx('actions.logs.waiting', 'Waiting for logs...')]));
+    logEl.appendChild(el('div', { class: 'logline dim' }, [t('actions.waitingLogs')]));
     return;
   }
 
@@ -671,14 +669,15 @@ function highlightPane(index) {
   const pane = q(`.pane[data-index="${index}"]`);
   if (!pane) return;
   pane.classList.add('paneHighlight');
-  setTimeout(() => pane.classList.remove('paneHighlight'), 900);
+  if (tracker) tracker.trackTimeout(() => pane.classList.remove('paneHighlight'), 900);
+  else setTimeout(() => pane.classList.remove('paneHighlight'), 900);
 }
 
 async function runActionInPane(index) {
   const actionId = panes[index] || activeActionId;
   const action = actions.find((a) => a.id === actionId);
   if (!action) {
-    toast(tx('actions.toast.selectActionFirst', 'Select an action first'), 1600, 'warning');
+    toast(t('actions.toast.selectActionFirst'), 1600, 'warning');
     return;
   }
 
@@ -690,7 +689,7 @@ async function runActionInPane(index) {
   renderConsoles();
 
   const args = collectArguments();
-  appendActionLog(action.id, tx('actions.toast.startingAction', 'Starting {{name}}...').replace('{{name}}', action.name));
+  appendActionLog(action.id, t('actions.toast.startingAction', { name: action.name }));
 
   try {
     const res = await api.post('/run_script', { script_name: action.module || action.id, args });
@@ -701,7 +700,7 @@ async function runActionInPane(index) {
     appendActionLog(action.id, `Error: ${err.message}`);
     renderActionsList();
     renderConsoles();
-    toast(`${tx('common.error', 'Error')}: ${err.message}`, 2600, 'error');
+    toast(`${t('common.error')}: ${err.message}`, 2600, 'error');
   }
 }
 
@@ -716,11 +715,11 @@ async function stopActionInPane(index) {
 
     action.status = 'ready';
     stopOutputPolling(action.id);
-    appendActionLog(action.id, tx('actions.toast.stoppedByUser', 'Stopped by user'));
+    appendActionLog(action.id, t('actions.toast.stoppedByUser'));
     renderActionsList();
     renderConsoles();
   } catch (err) {
-    toast(`${tx('actions.toast.failedToStop', 'Failed to stop')}: ${err.message}`, 2600, 'error');
+    toast(`${t('actions.toast.failedToStop')}: ${err.message}`, 2600, 'error');
   }
 }
 
@@ -737,7 +736,7 @@ function clearActionLogs(actionId) {
 function exportActionLogs(actionId, actionName = 'action') {
   const logs = logsByAction.get(actionId) || [];
   if (!logs.length) {
-    toast(tx('actions.toast.noLogsToExport', 'No logs to export'), 1600, 'warning');
+    toast(t('actions.toast.noLogsToExport'), 1600, 'warning');
     return;
   }
 
@@ -790,7 +789,7 @@ function startOutputPolling(actionId) {
         appendActionLog(actionId, `Error: ${data.last_error}`);
       } else {
         action.status = 'success';
-        appendActionLog(actionId, tx('actions.logs.completed', 'Script completed'));
+        appendActionLog(actionId, t('actions.logs.completed'));
       }
 
       stopOutputPolling(actionId);

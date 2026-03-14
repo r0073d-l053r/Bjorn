@@ -1,0 +1,274 @@
+/* ===== BACKUP PAGE (NEW SPA LAYOUT) ===== */
+.page-backup {
+  padding: 10px;
+}
+
+.page-backup {
+  padding: 10px;
+}
+
+.page-backup .backup-sidebar,
+.page-backup .backup-main {
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--grad-card);
+  box-shadow: var(--shadow);
+}
+
+.page-backup .backup-sidebar {
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.page-backup .backup-sidehead {
+  border-bottom: 1px dashed var(--c-border);
+  padding-bottom: 8px;
+}
+
+.page-backup .backup-side-title {
+  margin: 0;
+  color: var(--acid);
+  font-size: 14px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.page-backup .backup-nav-item {
+  width: 100%;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--panel) 88%, transparent);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  cursor: pointer;
+  transition: .18s;
+  text-align: left;
+}
+
+.page-backup .backup-nav-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.page-backup .backup-nav-item.active {
+  border-color: color-mix(in oklab, var(--acid) 45%, var(--c-border));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--acid-2) 30%, transparent);
+}
+
+.page-backup .backup-nav-icon {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .2);
+}
+
+.page-backup .backup-nav-label {
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+
+.page-backup .backup-main {
+  padding: 14px;
+  overflow: auto;
+}
+
+.page-backup .backup-title {
+  margin: 0 0 12px 0;
+}
+
+.page-backup .backup-form {
+  margin-bottom: 14px;
+}
+
+.page-backup .backup-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.page-backup .backup-form-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.page-backup .backup-input {
+  flex: 1;
+  min-width: 220px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-panel);
+  color: var(--ink);
+  padding: 10px 12px;
+}
+
+.page-backup .backup-subtitle {
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.page-backup .backup-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+}
+
+.page-backup .backup-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.page-backup .backup-table th,
+.page-backup .backup-table td {
+  padding: 10px;
+  border-bottom: 1px dashed var(--c-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.page-backup .backup-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.page-backup .backup-default-pill {
+  margin-left: 8px;
+}
+
+.page-backup .backup-empty {
+  padding: 22px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.page-backup .backup-update-message {
+  background: color-mix(in oklab, var(--ok) 18%, transparent);
+  border: 1px solid color-mix(in oklab, var(--ok) 40%, var(--c-border));
+  border-radius: 999px;
+  padding: 10px 14px;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.page-backup .backup-version-lines {
+  display: grid;
+  gap: 4px;
+}
+
+.page-backup .backup-update-available {
+  color: var(--acid);
+  font-weight: 700;
+}
+
+.page-backup .backup-update-ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.page-backup .backup-update-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.page-backup .backup-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, .6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.page-backup .backup-modal {
+  width: min(480px, 95vw);
+  background: var(--grad-card);
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow-hover);
+}
+
+.page-backup .backup-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.page-backup .backup-modal-title {
+  margin: 0;
+}
+
+.page-backup .backup-modal-help {
+  color: var(--muted);
+  margin: 8px 0 10px 0;
+}
+
+.page-backup .backup-keep {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.page-backup .backup-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--c-border);
+}
+
+.page-backup .backup-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(0, 0, 0, .6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-backup .backup-spinner {
+  width: 52px;
+  height: 52px;
+  border: 4px solid transparent;
+  border-top-color: var(--accent-2);
+  border-right-color: var(--accent-2);
+  border-radius: 50%;
+  animation: bak-spin .9s linear infinite;
+}
+
+/* Integrated layout provided by shared.css page-with-sidebar */
+.page-backup.page-with-sidebar {
+  --page-sidebar-w: 280px;
+  min-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 60px) - 24px);
+}
+
+.page-backup.page-with-sidebar .backup-sidebar {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.page-backup.page-with-sidebar .backup-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

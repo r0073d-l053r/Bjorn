@@ -980,7 +980,7 @@ body.console-docked .app-container {
 .cfg-host {
   display: grid;
   gap: 10px;
-  max-height: 56vh;
+  max-height: min(56vh, calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 140px));
   overflow: auto;
   padding-right: 4px;
 }
@@ -1137,16 +1137,59 @@ body.console-docked .app-container {
   width: 100%;
 }
 
+/* Config sub-tab navigation */
+.cfg-subtabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--c-panel-2) 60%, transparent);
+  border: 1px solid var(--c-border);
+  overflow-x: auto;
+  flex-wrap: wrap;
+}
+
+.cfg-subtab {
+  flex: 1 1 auto;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.cfg-subtab:hover {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--c-panel) 50%, transparent);
+}
+
+.cfg-subtab.active {
+  color: var(--acid);
+  background: var(--c-panel);
+  border-color: var(--c-border-strong);
+  box-shadow: var(--shadow);
+}
+
 /* Inline switch (modal lists) */
 .switch {
   position: relative;
+  display: inline-block;
   width: 46px;
   height: 26px;
+  min-width: 46px;
+  flex-shrink: 0;
   background: var(--switch-track);
   border: 1px solid var(--c-border-hi);
   border-radius: 99px;
   cursor: pointer;
   box-shadow: inset 0 0 0 1px var(--glow-mid);
+  vertical-align: middle;
 }
 
 .switch::after {
@@ -1170,6 +1213,11 @@ body.console-docked .app-container {
   transform: translateX(20px);
 }
 
+/* Suppress ::after thumb when .slider span is used (settings config toggles) */
+.switch:has(.slider)::after {
+  display: none;
+}
+
 /* Sheet (WiFi/BT dialogs) */
 .sheet-backdrop {
   position: fixed;
@@ -1178,7 +1226,7 @@ body.console-docked .app-container {
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 75;
+  z-index: 95;
 }
 
 .sheet-backdrop.show {
@@ -1284,6 +1332,20 @@ body.console-docked .app-container {
   .cfg-number .cfg-number-input {
     min-width: 50px;
     max-width: 100%;
+  }
+
+  .cfg-subtabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 2px;
+    padding: 3px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cfg-subtab {
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    font-size: 11px;
   }
 }
 
@@ -1600,6 +1662,20 @@ input[type="color"].theme-input {
   font-size: 12px;
   resize: vertical;
   margin-bottom: 8px;
+}
+
+.theme-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--c-border);
+}
+
+.theme-actions .btn {
+  flex: 1 1 auto;
+  min-width: 80px;
 }
 
 /* ---- Toast notifications ---- */

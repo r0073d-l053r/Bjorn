@@ -2,6 +2,8 @@
  * Actions Studio runtime for SPA mode.
  * Keeps graph behavior from original studio while running inside route mount/unmount lifecycle.
  */
+import { t } from '../core/i18n.js';
+
 export function mountStudioRuntime(__root) {
   const tracked = [];
   const nativeAdd = EventTarget.prototype.addEventListener;
@@ -132,15 +134,15 @@ async function saveToStudio(){
   state.nodes.forEach((n,id)=> data.nodes.push({id,...n}));
   try{
     const r = await fetch(`${API_BASE}/studio/save`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    if(!r.ok) throw 0; toast('Sauvegardé','success');
+    if(!r.ok) throw 0; toast(t('studio.saved'),'success');
   }catch{
     localStorage.setItem('bjorn_studio_backup', JSON.stringify(data));
-    toast('Sauvegarde locale (DB indisponible)','warn');
+    toast(t('studio.localBackup'),'warn');
   }
 }
 async function applyToRuntime(){
-  try{ const r = await fetch(`${API_BASE}/studio/apply`,{method:'POST'}); if(!r.ok) throw 0; toast('Appliqué au runtime','success'); }
-  catch{ toast('Apply runtime échoué','error'); }
+  try{ const r = await fetch(`${API_BASE}/studio/apply`,{method:'POST'}); if(!r.ok) throw 0; toast(t('studio.applied'),'success'); }
+  catch{ toast(t('studio.applyFailed'),'error'); }
 }
 
 /* ===================== Helpers UI ===================== */
@@ -199,7 +201,7 @@ function buildPalette(){
   if (!visibleCount) {
     const empty = document.createElement('div');
     empty.className = 'small';
-    empty.textContent = 'No actions match this filter.';
+    empty.textContent = t('studio.noActionsMatch');
     list.appendChild(empty);
   }
   const total = arr.length;
@@ -237,13 +239,13 @@ function buildHostPalette(){
   if (!visibleReal) {
     const empty = document.createElement('div');
     empty.className = 'small';
-    empty.textContent = 'No real hosts match this filter.';
+    empty.textContent = t('studio.noRealHostsMatch');
     real.appendChild(empty);
   }
   if (!visibleTest) {
     const empty = document.createElement('div');
     empty.className = 'small';
-    empty.textContent = 'No test hosts yet.';
+    empty.textContent = t('studio.noTestHostsYet');
     test.appendChild(empty);
   }
   const allHosts = [...state.hosts.values()];
@@ -848,7 +850,7 @@ function autoLayout(){
   // à la fin d'autoLayout():
   repelLayout(6, 0.4); // applique aussi le snap vertical des hosts
 
-  toast('Auto-layout appliqué','success');
+  toast(t('studio.autoLayoutApplied'),'success');
 }
 
 /* ===================== Inspectors ===================== */
@@ -1240,8 +1242,8 @@ $('#mAutoLayout')?.addEventListener('click',()=>{ $('#mainMenu').style.display='
 $('#mRepel')?.addEventListener('click',()=>{ $('#mainMenu').style.display='none'; repelLayout(); });
 $('#mFit')?.addEventListener('click',()=>{ $('#mainMenu').style.display='none'; fitToScreen(); });
 $('#mHelp')?.addEventListener('click',()=>{ $('#mainMenu').style.display='none'; setHelpModalOpen(true); });
-$('#mImportdbActions').addEventListener('click',()=>{ $('#mainMenu').style.display='none'; toast('Import Actions DB - TODO','warn'); });
-$('#mImportdbActionsStudio').addEventListener('click',()=>{ $('#mainMenu').style.display='none'; toast('Import Studio DB - TODO','warn'); });
+$('#mImportdbActions').addEventListener('click',()=>{ $('#mainMenu').style.display='none'; toast(t('studio.importActionsDb') + ' - TODO','warn'); });
+$('#mImportdbActionsStudio').addEventListener('click',()=>{ $('#mainMenu').style.display='none'; toast(t('studio.importStudioDb') + ' - TODO','warn'); });
 $('#btnHideCanvasHint')?.addEventListener('click',()=>{
   const p = loadPrefs();
   savePrefsNow({ ...p, hideCanvasHint: true });
@@ -1299,7 +1301,7 @@ $('#btnUpdateAction').addEventListener('click',()=>{
   const tt=$('#t_type').value, tp=$('#t_param').value.trim(); a.b_trigger=tp?`${tt}:${tp}`:tt;
 
   const el=$(`[data-id="${state.selected}"]`); if(el){ el.className=`node ${a.b_action==='global'?'global':''}`; el.querySelector('.badge').textContent=a.b_action||'normal'; el.querySelector('.v.trigger').textContent=summTrig(a.b_trigger||''); el.querySelector('.v.requires').textContent=requireSummary(a); }
-  LinkEngine.render(); toast('Action mise à jour','success');
+  LinkEngine.render(); toast(t('studio.actionUpdated'),'success');
 });
 $('#btnDeleteNode').addEventListener('click',()=>{ if(state.selected) deleteNode(state.selected); });
 
@@ -1308,7 +1310,7 @@ $('#btnUpdateHost').addEventListener('click',()=>{
   h.hostname=$('#h_hostname').value.trim(); h.ips=$('#h_ips').value.trim(); h.ports=$('#h_ports').value.trim(); h.alive=parseInt($('#h_alive').value);
   h.essid=$('#h_essid').value.trim(); h.services=$('#h_services').value.trim(); h.vulns=$('#h_vulns').value.trim(); h.creds=$('#h_creds').value.trim();
   const el=$(`[data-id="${state.selected}"]`); if(el){ el.querySelector('.nname').textContent=h.hostname||h.ips||h.mac_address; const rows=el.querySelectorAll('.nbody .row .v'); if(rows[0]) rows[0].textContent=h.ips||'—'; if(rows[1]) rows[1].textContent=h.ports||'—'; if(rows[2]) rows[2].textContent=h.alive?'🟢':'🔴'; }
-  LinkEngine.render(); toast('Host mis à jour','success');
+  LinkEngine.render(); toast(t('studio.hostUpdated'),'success');
 });
 $('#btnDeleteHost').addEventListener('click',()=>{ if(state.selected) deleteNode(state.selected); });
 
@@ -1320,16 +1322,16 @@ window.addHostToCanvas=function(mac){
   else{ const rect=$('#center').getBoundingClientRect(); const x=80; const y=(rect.height/2 - state.pan.y)/state.pan.scale - 60; addHostNode(h,x,y); LinkEngine.render(); }
 };
 window.deleteTestHost=function(mac){
-  if(!confirm('Delete this test host?')) return;
-  state.hosts.delete(mac); const ids=[]; state.nodes.forEach((n,id)=>{ if(n.type==='host'&&n.data.mac_address===mac) ids.push(id); }); ids.forEach(id=>deleteNode(id)); buildHostPalette(); toast('Test host supprimé','success');
+  if(!confirm(t('studio.deleteTestHost'))) return;
+  state.hosts.delete(mac); const ids=[]; state.nodes.forEach((n,id)=>{ if(n.type==='host'&&n.data.mac_address===mac) ids.push(id); }); ids.forEach(id=>deleteNode(id)); buildHostPalette(); toast(t('studio.testHostDeleted'),'success');
 };
 window.openHostModal=function(){ $('#hostModal').classList.add('show'); };
 window.closeHostModal=function(){ $('#hostModal').classList.remove('show'); };
 window.createTestHost=function(){
   const mac=$('#new_mac').value.trim() || `AA:BB:CC:${Math.random().toString(16).slice(2,8).toUpperCase()}`;
-  if(state.hosts.has(mac)){ toast('MAC existe déjà','error'); return; }
+  if(state.hosts.has(mac)){ toast(t('studio.macExists'),'error'); return; }
   const host={ mac_address:mac, hostname:$('#new_hostname').value.trim()||'test-host', ips:$('#new_ips').value.trim()||'', ports:$('#new_ports').value.trim()||'', services:$('#new_services').value.trim()||'[]', vulns:$('#new_vulns').value.trim()||'', creds:$('#new_creds').value.trim()||'[]', alive:parseInt($('#new_alive').value)||1, is_simulated:1 };
-  state.hosts.set(mac,host); buildHostPalette(); closeHostModal(); toast('Test host créé','success'); addHostToCanvas(mac);
+  state.hosts.set(mac,host); buildHostPalette(); closeHostModal(); toast(t('studio.testHostCreated'),'success'); addHostToCanvas(mac);
 };
 $('#btnCreateHost').addEventListener('click',openHostModal);
 $('#mAddHost').addEventListener('click',openHostModal);
@@ -1426,7 +1428,7 @@ async function init(){
   applyPanZoom();
   LinkEngine.render();
   updateStats();
-  toast('Studio loaded','success');
+  toast(t('studio.saved'),'success');
 }
 
 init();
