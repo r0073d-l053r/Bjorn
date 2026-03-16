@@ -20,6 +20,7 @@ let events   = [];
 let rules    = [];
 let devices  = [];
 let unreadCount = 0;
+let notifierCfg = {};  // { discord_webhook: '...', webhook_url: '...', ... }
 let sideTab  = 'rules';   // 'rules' | 'devices' | 'notifiers'
 
 /* ── Lifecycle ─────────────────────────────────────────── */
@@ -41,6 +42,7 @@ export function unmount() {
   events = [];
   rules = [];
   devices = [];
+  notifierCfg = {};
 }
 
 /* ── Shell ─────────────────────────────────────────────── */
@@ -248,17 +250,19 @@ function bindEvents() {
 
 async function refresh() {
   try {
-    const [statusData, eventsData, rulesData, devicesData] = await Promise.all([
+    const [statusData, eventsData, rulesData, devicesData, notifData] = await Promise.all([
       api.get('/api/sentinel/status'),
       api.get('/api/sentinel/events?limit=100'),
       api.get('/api/sentinel/rules'),
       api.get('/api/sentinel/devices'),
+      api.get('/api/sentinel/notifiers').catch(() => null),
     ]);
     sentinelEnabled = statusData.enabled;
     events = eventsData.events || [];
     unreadCount = eventsData.unread_count || 0;
     rules = rulesData.rules || [];
     devices = devicesData.devices || [];
+    if (notifData?.notifiers) notifierCfg = notifData.notifiers;
     paint();
   } catch (err) {
     console.warn('[sentinel] refresh error:', err.message);
@@ -743,6 +747,7 @@ function paintNotifiers(container) {
           type: f.type || 'text',
           'data-notifier': f.key,
           placeholder: f.placeholder,
+          value: notifierCfg[f.key] || '',
           class: 'sentinel-notifier-input',
         }),
       ])

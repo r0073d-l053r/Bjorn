@@ -151,6 +151,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/api/sentinel/rules': wu.sentinel.get_rules,
             '/api/sentinel/devices': wu.sentinel.get_devices,
             '/api/sentinel/arp': wu.sentinel.get_arp_table,
+            '/api/sentinel/notifiers': wu.sentinel.get_notifier_config,
 
             # BIFROST
             '/api/bifrost/status': wu.bifrost.get_status,

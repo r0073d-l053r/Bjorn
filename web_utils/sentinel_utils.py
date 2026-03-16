@@ -219,12 +219,40 @@ class SentinelUtils:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    # Mapping from frontend notifier keys to config keys
+    _NOTIFIER_KEY_MAP = {
+        "discord_webhook": "sentinel_discord_webhook",
+        "webhook_url":     "sentinel_webhook_url",
+        "email_smtp_host": "sentinel_email_smtp_host",
+        "email_smtp_port": "sentinel_email_smtp_port",
+        "email_username":  "sentinel_email_username",
+        "email_password":  "sentinel_email_password",
+        "email_from":      "sentinel_email_from",
+        "email_to":        "sentinel_email_to",
+    }
+
+    def get_notifier_config(self, handler) -> None:
+        """GET /api/sentinel/notifiers — return current notifier config."""
+        cfg = self.shared_data.config
+        notifiers = {}
+        for frontend_key, cfg_key in self._NOTIFIER_KEY_MAP.items():
+            val = cfg.get(cfg_key, "")
+            if val:
+                notifiers[frontend_key] = val
+        self._send_json(handler, {"status": "ok", "notifiers": notifiers})
+
     def save_notifier_config(self, data: Dict) -> Dict:
         """POST /api/sentinel/notifiers — save notification channel config."""
         try:
-            # Store notifier configs in shared_data for persistence
             notifiers = data.get("notifiers", {})
-            self.shared_data.sentinel_notifiers = notifiers
+            cfg = self.shared_data.config
+
+            # Map frontend keys to config keys and persist
+            for frontend_key, cfg_key in self._NOTIFIER_KEY_MAP.items():
+                cfg[cfg_key] = notifiers.get(frontend_key, "")
+
+            self.shared_data.config = cfg
+            self.shared_data.save_config()
 
             # Re-register notifiers on the engine
             engine = self._engine

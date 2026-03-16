@@ -154,9 +154,12 @@ class LLMUtils:
             "llm_orchestrator_mode", "llm_orchestrator_interval_s",
             "llm_orchestrator_max_actions", "llm_orchestrator_allowed_actions",
             "llm_orchestrator_skip_if_no_change", "llm_orchestrator_log_reasoning",
+            "llm_orchestrator_skip_scheduler",
             # Personality & prompt keys
             "llm_system_prompt_chat", "llm_system_prompt_comment",
             "llm_user_name", "llm_user_bio",
+            # EPD
+            "epd_buttons_enabled",
         }
         _int_keys = {
             "llm_timeout_s", "llm_max_tokens", "llm_comment_max_tokens",
@@ -167,6 +170,7 @@ class LLMUtils:
             "llm_enabled", "llm_comments_enabled", "llm_comments_log", "llm_chat_enabled",
             "llm_laruche_discovery", "llm_chat_tools_enabled",
             "llm_orchestrator_skip_if_no_change", "llm_orchestrator_log_reasoning",
+            "llm_orchestrator_skip_scheduler", "epd_buttons_enabled",
         }
         try:
             cfg = self.shared_data.config
@@ -299,7 +303,9 @@ class LLMUtils:
             # Orchestrator
             "llm_orchestrator_mode", "llm_orchestrator_interval_s",
             "llm_orchestrator_max_actions", "llm_orchestrator_skip_if_no_change",
-            "llm_orchestrator_log_reasoning",
+            "llm_orchestrator_log_reasoning", "llm_orchestrator_skip_scheduler",
+            # EPD
+            "epd_buttons_enabled",
             # Personality & prompts
             "llm_system_prompt_chat", "llm_system_prompt_comment",
             "llm_user_name", "llm_user_bio",

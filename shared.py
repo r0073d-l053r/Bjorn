@@ -450,6 +450,12 @@ class SharedData:
             "sentinel_discord_webhook": "",
             "sentinel_webhook_url": "",
             "sentinel_email_enabled": False,
+            "sentinel_email_smtp_host": "",
+            "sentinel_email_smtp_port": "",
+            "sentinel_email_username": "",
+            "sentinel_email_password": "",
+            "sentinel_email_from": "",
+            "sentinel_email_to": "",
 
             # Bifrost (Pwnagotchi Mode)
             "__title_bifrost__": "Bifrost (Pwnagotchi Mode)",

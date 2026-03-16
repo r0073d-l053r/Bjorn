@@ -56,6 +56,10 @@ function buildShell() {
 
           toggleRow('llm_enabled',          t('llm_cfg.enable_bridge')),
           toggleRow('llm_comments_enabled', t('llm_cfg.epd_comments')),
+          toggleRow('llm_comments_log',    'Log comments to console'),
+          toggleRow('llm_chat_enabled',    'Enable LLM chat'),
+          toggleRow('llm_chat_tools_enabled', 'Enable tools in chat (function calling)'),
+          toggleRow('epd_buttons_enabled', 'EPD physical buttons'),
 
           fieldEl(t('llm_cfg.backend'), el('select', { id: 'llm_backend', class: 'llmcfg-select' }, [
             el('option', { value: 'auto' },    ['Auto (LaRuche → Ollama → API)']),
@@ -125,6 +129,12 @@ function buildShell() {
                 min: '20', max: '200', value: '80' })),
           ]),
 
+          el('div', { class: 'llmcfg-row' }, [
+            fieldEl('Chat history size',
+              el('input', { type: 'number', id: 'llm_chat_history_size', class: 'llmcfg-input',
+                min: '2', max: '100', value: '20' })),
+          ]),
+
           el('div', { class: 'llmcfg-status-row', id: 'llm-status-row' }),
 
           el('div', { class: 'llmcfg-actions' }, [
@@ -159,6 +169,7 @@ function buildShell() {
 
           toggleRow('llm_orchestrator_log_reasoning',  'Log reasoning to chat history'),
           toggleRow('llm_orchestrator_skip_if_no_change', 'Skip cycle when nothing changed'),
+          toggleRow('llm_orchestrator_skip_scheduler', 'Skip scheduler (LLM-only mode)'),
 
           el('div', { class: 'llmcfg-status-row', id: 'orch-status-row' }),
 
@@ -315,10 +326,15 @@ async function loadAll() {
 }
 
 function applyLLMConfig(cfg) {
-  const boolKeys = ['llm_enabled', 'llm_comments_enabled', 'llm_laruche_discovery'];
+  const boolKeys = [
+    'llm_enabled', 'llm_comments_enabled', 'llm_comments_log',
+    'llm_chat_enabled', 'llm_chat_tools_enabled',
+    'llm_laruche_discovery', 'epd_buttons_enabled',
+  ];
   const textKeys = ['llm_backend', 'llm_laruche_url', 'llm_ollama_url',
     'llm_api_provider', 'llm_api_model', 'llm_api_base_url',
     'llm_timeout_s', 'llm_max_tokens', 'llm_comment_max_tokens',
+    'llm_chat_history_size',
     'llm_user_name', 'llm_user_bio',
     'llm_system_prompt_chat', 'llm_system_prompt_comment'];
 
@@ -423,7 +439,8 @@ function applyLLMConfig(cfg) {
   const orchMax = $('#llm_orchestrator_max_actions', root);
   if (orchMax && cfg.llm_orchestrator_max_actions !== undefined) orchMax.value = cfg.llm_orchestrator_max_actions;
 
-  for (const k of ['llm_orchestrator_log_reasoning', 'llm_orchestrator_skip_if_no_change']) {
+  for (const k of ['llm_orchestrator_log_reasoning', 'llm_orchestrator_skip_if_no_change',
+    'llm_orchestrator_skip_scheduler']) {
     const cb = $(('#' + k), root);
     if (cb) cb.checked = !!cfg[k];
   }
@@ -556,7 +573,11 @@ function populateModelSelect(selectEl, models, currentValue) {
 async function saveLLM() {
   const payload = {};
 
-  for (const k of ['llm_enabled', 'llm_comments_enabled', 'llm_laruche_discovery']) {
+  for (const k of [
+    'llm_enabled', 'llm_comments_enabled', 'llm_comments_log',
+    'llm_chat_enabled', 'llm_chat_tools_enabled',
+    'llm_laruche_discovery', 'epd_buttons_enabled',
+  ]) {
     const el = $(('#' + k), root);
     payload[k] = el ? el.checked : false;
   }
@@ -566,7 +587,8 @@ async function saveLLM() {
     const el = $(('#' + k), root);
     if (el) payload[k] = el.value;
   }
-  for (const k of ['llm_timeout_s', 'llm_max_tokens', 'llm_comment_max_tokens']) {
+  for (const k of ['llm_timeout_s', 'llm_max_tokens', 'llm_comment_max_tokens',
+    'llm_chat_history_size']) {
     const el = $(('#' + k), root);
     if (el) payload[k] = parseInt(el.value) || undefined;
   }
@@ -642,7 +664,8 @@ async function saveOrch() {
     const inp = $(('#' + k), root);
     if (inp) payload[k] = parseInt(inp.value) || undefined;
   }
-  for (const k of ['llm_orchestrator_log_reasoning', 'llm_orchestrator_skip_if_no_change']) {
+  for (const k of ['llm_orchestrator_log_reasoning', 'llm_orchestrator_skip_if_no_change',
+    'llm_orchestrator_skip_scheduler']) {
     const cb = $(('#' + k), root);
     if (cb) payload[k] = cb.checked;
   }
