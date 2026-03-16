@@ -19,7 +19,7 @@ from logger import Logger
 logger = Logger(name="bluetooth_utils.py", level=logging.DEBUG)
 
 # Constants
-BT_SCAN_DURATION_S = 3
+BT_SCAN_DURATION_S = 6
 BT_PAIR_TIMEOUT_S = 60
 BT_CONNECT_SETTLE_S = 2
 BT_CONFIG_PATH = "/home/bjorn/.settings_bjorn/bt.json"
@@ -42,8 +42,14 @@ class BluetoothUtils:
         self._config_lock = threading.Lock()
 
     def _ensure_bluetooth_service(self):
-        """Check if bluetooth service is running, if not start and enable it."""
+        """Check if bluetooth service is running, unblock rfkill, start if needed."""
         try:
+            # Unblock Bluetooth via rfkill (handles soft-block that causes "Failed" errors)
+            subprocess.run(
+                ["sudo", "rfkill", "unblock", "bluetooth"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+
             res = subprocess.run(
                 ["systemctl", "is-active", "bluetooth"],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
@@ -148,6 +154,25 @@ class BluetoothUtils:
         else:
             self.logger.info("auto_bt_connect service restarted successfully")
 
+    def _reset_adapter(self):
+        """Power-cycle the Bluetooth adapter to recover from error states."""
+        try:
+            self.logger.info("Resetting Bluetooth adapter (power cycle)...")
+            self.adapter_props.Set("org.bluez.Adapter1", "Powered", dbus.Boolean(False))
+            time.sleep(1)
+            # Re-unblock in case rfkill re-blocked on power off
+            subprocess.run(
+                ["sudo", "rfkill", "unblock", "bluetooth"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            self.adapter_props.Set("org.bluez.Adapter1", "Powered", dbus.Boolean(True))
+            time.sleep(0.5)
+            self.logger.info("Bluetooth adapter reset complete.")
+        except Exception as e:
+            self.logger.error(f"Adapter reset failed: {e}")
+            # Force full re-init on next call
+            self.bluetooth_initialized = False
+
     def scan_bluetooth(self, handler):
         """Scan for Bluetooth devices."""
         try:
@@ -175,7 +200,14 @@ class BluetoothUtils:
                         self.adapter_methods.StartDiscovery()
                         discovery_started = True
                     except dbus.exceptions.DBusException as e2:
-                        self.logger.warning(f"Retry also failed ({e2}), returning cached devices")
+                        # Last resort: full adapter reset
+                        self.logger.warning(f"Retry failed ({e2}), attempting adapter reset")
+                        try:
+                            self._reset_adapter()
+                            self.adapter_methods.StartDiscovery()
+                            discovery_started = True
+                        except dbus.exceptions.DBusException as e3:
+                            self.logger.warning(f"All retries failed ({e3}), returning cached devices")
 
             if discovery_started:
                 time.sleep(BT_SCAN_DURATION_S)
@@ -190,9 +222,15 @@ class BluetoothUtils:
                         rssi = int(rssi) if rssi is not None else -999
                     except (ValueError, TypeError):
                         rssi = -999
+                    # Prefer Alias (cached friendly name) over Name (advertised only)
+                    address = str(dev.get("Address", ""))
+                    name = str(dev.get("Alias", "")) or str(dev.get("Name", ""))
+                    # If Alias is just the MAC address, BlueZ hasn't resolved the name
+                    if not name or name == address:
+                        name = "Unknown"
                     devices.append({
-                        "name": str(dev.get("Name", "Unknown")),
-                        "address": str(dev.get("Address", "")),
+                        "name": name,
+                        "address": address,
                         "paired": bool(dev.get("Paired", False)),
                         "trusted": bool(dev.get("Trusted", False)),
                         "connected": bool(dev.get("Connected", False)),
