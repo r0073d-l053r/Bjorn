@@ -81,6 +81,10 @@ function buildShell() {
               class: 'sentinel-toggle', id: 'sentinel-clear',
               style: 'padding:3px 8px;font-size:0.65rem',
             }, [t('sentinel.clearAll')]),
+            el('button', {
+              class: 'sentinel-toggle sentinel-ai-btn', id: 'sentinel-ai-summary',
+              style: 'padding:3px 8px;font-size:0.65rem;display:none',
+            }, ['\uD83E\uDDE0 AI Summary']),
           ]),
         ]),
         el('div', { class: 'sentinel-panel-body', id: 'sentinel-events' }, [
@@ -218,6 +222,25 @@ function bindEvents() {
       saveDevice(devSave.dataset.devSave);
       return;
     }
+
+    // AI Analyze event
+    const aiAnalyze = e.target.closest('[data-ai-analyze]');
+    if (aiAnalyze) {
+      analyzeEvent(parseInt(aiAnalyze.dataset.aiAnalyze));
+      return;
+    }
+
+    // AI Summary
+    if (e.target.closest('#sentinel-ai-summary')) {
+      summarizeEvents();
+      return;
+    }
+
+    // AI Generate rule
+    if (e.target.closest('#sentinel-ai-gen-rule')) {
+      generateRuleFromAI();
+      return;
+    }
   });
 }
 
@@ -314,6 +337,10 @@ function paintEvents() {
   if (!container) return;
   empty(container);
 
+  // Show AI Summary button when there are enough unread events
+  const aiSumBtn = $('#sentinel-ai-summary', root);
+  if (aiSumBtn) aiSumBtn.style.display = unreadCount > 3 ? '' : 'none';
+
   if (events.length === 0) {
     container.appendChild(
       el('div', {
@@ -338,6 +365,12 @@ function paintEvents() {
           el('span', { class: 'sentinel-event-title' }, [escapeHtml(ev.title)]),
         ]),
         el('div', { style: 'display:flex;align-items:center;gap:6px;flex-shrink:0' }, [
+          el('button', {
+            class: 'sentinel-toggle sentinel-ai-btn',
+            'data-ai-analyze': ev.id,
+            style: 'padding:1px 6px;font-size:0.55rem',
+            title: 'AI Analyze',
+          }, ['\uD83E\uDDE0']),
           el('span', { class: 'sentinel-event-time' }, [formatTime(ev.timestamp)]),
           ...(isUnread ? [
             el('button', {
@@ -360,6 +393,7 @@ function paintEvents() {
             [ev.ip_address])
         ] : []),
       ]),
+      el('div', { class: 'sentinel-ai-result', id: `ai-result-${ev.id}` }),
     ]);
     container.appendChild(card);
   }
@@ -382,12 +416,16 @@ function paintSidebar() {
 /* ── Rules ─────────────────────────────────────────────── */
 
 function paintRules(container) {
-  // Add rule button
+  // Add rule button + AI generate
   container.appendChild(
-    el('button', {
-      class: 'sentinel-toggle', id: 'sentinel-add-rule',
-      style: 'align-self:flex-start;margin-bottom:4px',
-    }, ['+ ' + t('sentinel.addRule')])
+    el('div', { style: 'display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap' }, [
+      el('button', {
+        class: 'sentinel-toggle', id: 'sentinel-add-rule',
+      }, ['+ ' + t('sentinel.addRule')]),
+      el('button', {
+        class: 'sentinel-toggle sentinel-ai-btn', id: 'sentinel-ai-gen-rule',
+      }, ['\uD83E\uDDE0 Generate Rule']),
+    ])
   );
 
   if (rules.length === 0) {
@@ -730,6 +768,81 @@ async function saveNotifiers() {
     await api.post('/api/sentinel/notifiers', { notifiers });
     toast(t('sentinel.notifiersSaved'), 2000, 'success');
   } catch (err) { toast(err.message, 3000, 'error'); }
+}
+
+/* ── AI Functions ──────────────────────────────────────── */
+
+async function analyzeEvent(eventId) {
+  const resultEl = $(`#ai-result-${eventId}`, root);
+  if (!resultEl) return;
+
+  // Toggle: if already showing, hide
+  if (resultEl.classList.contains('active')) {
+    resultEl.classList.remove('active');
+    return;
+  }
+
+  resultEl.textContent = '\u23F3 Analyzing...';
+  resultEl.classList.add('active');
+
+  try {
+    const res = await api.post('/api/sentinel/analyze', { event_ids: [eventId] });
+    if (res?.status === 'ok') {
+      resultEl.textContent = res.analysis;
+    } else {
+      resultEl.textContent = '\u274C ' + (res?.message || 'Analysis failed');
+    }
+  } catch (e) {
+    resultEl.textContent = '\u274C Error: ' + e.message;
+  }
+}
+
+async function summarizeEvents() {
+  const btn = $('#sentinel-ai-summary', root);
+  if (btn) btn.textContent = '\u23F3 Summarizing...';
+
+  try {
+    const res = await api.post('/api/sentinel/summarize', {});
+    if (res?.status === 'ok') {
+      // Show summary at the top of the event feed
+      const container = $('#sentinel-events', root);
+      if (container) {
+        const existing = container.querySelector('.sentinel-ai-summary');
+        if (existing) existing.remove();
+        const summary = el('div', { class: 'sentinel-ai-summary' }, [
+          el('div', { style: 'font-weight:600;font-size:0.7rem;margin-bottom:4px;color:var(--acid)' },
+            ['\uD83E\uDDE0 AI Summary']),
+          el('div', { style: 'font-size:0.7rem;white-space:pre-wrap' }, [res.summary]),
+        ]);
+        container.insertBefore(summary, container.firstChild);
+      }
+      toast('Summary generated');
+    } else {
+      toast('Summary failed: ' + (res?.message || 'unknown'), 3000, 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 3000, 'error');
+  } finally {
+    if (btn) btn.textContent = '\uD83E\uDDE0 AI Summary';
+  }
+}
+
+async function generateRuleFromAI() {
+  const desc = prompt('Describe the rule you want (e.g. "alert when a new device joins my network"):');
+  if (!desc || !desc.trim()) return;
+
+  toast('\u23F3 Generating rule...');
+  try {
+    const res = await api.post('/api/sentinel/suggest-rule', { description: desc.trim() });
+    if (res?.status === 'ok' && res.rule) {
+      showRuleEditor(res.rule);
+      toast('Rule generated — review and save');
+    } else {
+      toast('Could not generate rule: ' + (res?.message || res?.raw || 'unknown'), 4000, 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 3000, 'error');
+  }
 }
 
 /* ── Helpers ───────────────────────────────────────────── */

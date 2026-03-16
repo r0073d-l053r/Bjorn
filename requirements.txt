@@ -9,3 +9,9 @@ pysmb==1.2.10
 pymysql==1.1.1
 sqlalchemy==2.0.36
 python-nmap==0.7.1
+
+# ── LLM / MCP / Discovery ─────────────────────────────────────────────
+zeroconf>=0.131.0            # LaRuche/LAND auto-discovery via mDNS
+#
+# Optional — install to unlock extra features:
+# mcp[cli]>=1.0.0           # MCP server (pip install "mcp[cli]")

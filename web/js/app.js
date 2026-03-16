@@ -63,6 +63,8 @@ function bootUI() {
   router.route('/bifrost', () => import('./pages/bifrost.js'));
   router.route('/loki', () => import('./pages/loki.js'));
   router.route('/bjorn', () => import('./pages/bjorn.js'));
+  router.route('/llm-chat',   () => import('./pages/llm-chat.js'));
+  router.route('/llm-config', () => import('./pages/llm-config.js'));
 
   // 404 fallback
   router.setNotFound((container, path) => {
@@ -415,7 +417,9 @@ const PAGES = [
   { path: '/bifrost', icon: 'network.png', label: 'nav.bifrost' },
   { path: '/loki', icon: 'actions_launcher.png', label: 'nav.loki' },
   { path: '/ai-dashboard', icon: 'ai_dashboard.png', label: 'nav.ai_dashboard' },
-  { path: '/bjorn-debug', icon: 'database.png', label: 'Bjorn Debug' },
+  { path: '/bjorn-debug', icon: 'database.png',    label: 'Bjorn Debug' },
+  { path: '/llm-chat',   icon: 'ai.png',           label: 'nav.llm_chat' },
+  { path: '/llm-config', icon: 'ai_dashboard.png', label: 'nav.llm_config' },
 ];
 
 function wireLauncher() {

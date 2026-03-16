@@ -108,6 +108,7 @@
       </span>
       <button class="btn" id="modeToggle" aria-pressed="true">Auto</button>
       <button class="btn" id="attackToggle">Attack &#9662;</button>
+      <button class="btn" id="consoleBubbleToggle" title="Toggle bubble mode">&#x1F4AC;</button>
       <button class="btn" id="clearLogs" data-i18n="console.clear">Clear</button>
       <button class="btn" id="closeConsole">X</button>
       <div id="consoleFontRow" class="console-fontrow">
@@ -117,6 +118,10 @@
       </div>
     </div>
     <div class="console-body" id="logout" role="log" aria-live="polite"></div>
+    <div class="console-footer" id="console-chat-footer" style="display:none">
+      <textarea id="consoleInput" class="console-input" placeholder="Chat with Bjorn..." rows="1"></textarea>
+      <button id="consoleSend" class="console-send-btn">&#x27A4;</button>
+    </div>
   </section>
 
   <!-- QuickPanel (WiFi/Bluetooth management) -->

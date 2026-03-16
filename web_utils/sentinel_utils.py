@@ -257,6 +257,170 @@ class SentinelUtils:
                 use_tls=config.get("email_tls", True),
             ))
 
+    # ── LLM-powered endpoints ────────────────────────────────────────────
+
+    def analyze_events(self, data: Dict) -> Dict:
+        """POST /api/sentinel/analyze — AI analysis of selected events."""
+        try:
+            event_ids = data.get("event_ids", [])
+            if not event_ids:
+                return {"status": "error", "message": "event_ids required"}
+
+            # Fetch events
+            placeholders = ",".join("?" for _ in event_ids)
+            rows = self.shared_data.db.query(
+                f"SELECT * FROM sentinel_events WHERE id IN ({placeholders})",
+                [int(i) for i in event_ids],
+            ) or []
+            if not rows:
+                return {"status": "error", "message": "No events found"}
+
+            # Gather device info for context
+            macs = set()
+            ips = set()
+            for ev in rows:
+                meta = {}
+                try:
+                    meta = json.loads(ev.get("metadata", "{}") or "{}")
+                except Exception:
+                    pass
+                if meta.get("mac"):
+                    macs.add(meta["mac"])
+                if meta.get("ip"):
+                    ips.add(meta["ip"])
+
+            devices = []
+            if macs:
+                mac_ph = ",".join("?" for _ in macs)
+                devices = self.shared_data.db.query(
+                    f"SELECT * FROM sentinel_devices WHERE mac_address IN ({mac_ph})",
+                    list(macs),
+                ) or []
+
+            from llm_bridge import LLMBridge
+            bridge = LLMBridge()
+
+            system = (
+                "You are a cybersecurity analyst reviewing sentinel alerts from Bjorn, "
+                "a network security AI. Analyze the events below and provide: "
+                "1) A severity assessment (critical/high/medium/low/info), "
+                "2) A concise analysis of what happened, "
+                "3) Concrete recommendations. "
+                "Be technical and actionable. Respond in plain text, keep it under 300 words."
+            )
+
+            prompt = (
+                f"Events:\n{json.dumps(rows, indent=2, default=str)}\n\n"
+                f"Known devices:\n{json.dumps(devices, indent=2, default=str)}\n\n"
+                "Analyze these security events."
+            )
+
+            response = bridge.complete(
+                [{"role": "user", "content": prompt}],
+                max_tokens=600,
+                system=system,
+                timeout=30,
+            )
+            return {"status": "ok", "analysis": response or "(no response)"}
+
+        except Exception as e:
+            logger.error("analyze_events error: %s", e)
+            return {"status": "error", "message": str(e)}
+
+    def summarize_events(self, data: Dict) -> Dict:
+        """POST /api/sentinel/summarize — AI summary of recent unread events."""
+        try:
+            limit = min(int(data.get("limit", 50)), 100)
+            rows = self.shared_data.db.query(
+                "SELECT * FROM sentinel_events WHERE acknowledged = 0 "
+                "ORDER BY timestamp DESC LIMIT ?",
+                [limit],
+            ) or []
+
+            if not rows:
+                return {"status": "ok", "summary": "No unread events to summarize."}
+
+            from llm_bridge import LLMBridge
+            bridge = LLMBridge()
+
+            system = (
+                "You are a cybersecurity analyst. Summarize the security events below. "
+                "Group by type, identify patterns, flag critical items. "
+                "Be concise — max 200 words. Use bullet points."
+            )
+
+            prompt = (
+                f"{len(rows)} unread sentinel events:\n"
+                f"{json.dumps(rows, indent=2, default=str)}\n\n"
+                "Summarize these events and identify patterns."
+            )
+
+            response = bridge.complete(
+                [{"role": "user", "content": prompt}],
+                max_tokens=500,
+                system=system,
+                timeout=30,
+            )
+            return {"status": "ok", "summary": response or "(no response)"}
+
+        except Exception as e:
+            logger.error("summarize_events error: %s", e)
+            return {"status": "error", "message": str(e)}
+
+    def suggest_rule(self, data: Dict) -> Dict:
+        """POST /api/sentinel/suggest-rule — AI generates a rule from description."""
+        try:
+            description = (data.get("description") or "").strip()
+            if not description:
+                return {"status": "error", "message": "description required"}
+
+            from llm_bridge import LLMBridge
+            bridge = LLMBridge()
+
+            system = (
+                "You are a security rule generator. Given a user description, generate a Bjorn sentinel rule "
+                "as JSON. The rule schema is:\n"
+                '{"name": "string", "trigger_type": "new_device|arp_spoof|port_change|service_change|'
+                'dhcp_server|rogue_ap|high_traffic|vulnerability", "conditions": {"key": "value"}, '
+                '"logic": "AND|OR", "actions": ["notify_web","notify_discord","notify_email","notify_webhook"], '
+                '"cooldown_s": 60, "enabled": 1}\n'
+                "Respond with ONLY the JSON object, no markdown fences, no explanation."
+            )
+
+            prompt = f"Generate a sentinel rule for: {description}"
+
+            response = bridge.complete(
+                [{"role": "user", "content": prompt}],
+                max_tokens=400,
+                system=system,
+                timeout=20,
+            )
+
+            if not response:
+                return {"status": "error", "message": "No LLM response"}
+
+            # Try to parse the JSON
+            try:
+                # Strip markdown fences if present
+                clean = response.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                if clean.endswith("```"):
+                    clean = clean[:-3]
+                clean = clean.strip()
+                if clean.startswith("json"):
+                    clean = clean[4:].strip()
+
+                rule = json.loads(clean)
+                return {"status": "ok", "rule": rule}
+            except json.JSONDecodeError:
+                return {"status": "ok", "rule": None, "raw": response,
+                        "message": "LLM response was not valid JSON"}
+
+        except Exception as e:
+            logger.error("suggest_rule error: %s", e)
+            return {"status": "error", "message": str(e)}
+
     # ── Helpers ─────────────────────────────────────────────────────────
 
     def _send_json(self, handler, data, status=200):

@@ -156,19 +156,48 @@ class BluetoothUtils:
             self.adapter_props.Set("org.bluez.Adapter1", "Discoverable", dbus.Boolean(True))
             self.adapter_props.Set("org.bluez.Adapter1", "DiscoverableTimeout", dbus.UInt32(BT_DISCOVERABLE_TIMEOUT))
 
-            self.adapter_methods.StartDiscovery()
-            time.sleep(BT_SCAN_DURATION_S)
+            # StartDiscovery can fail if already running or adapter is busy
+            discovery_started = False
+            try:
+                self.adapter_methods.StartDiscovery()
+                discovery_started = True
+            except dbus.exceptions.DBusException as e:
+                err_name = e.get_dbus_name() if hasattr(e, 'get_dbus_name') else str(e)
+                if "InProgress" in str(err_name) or "Busy" in str(err_name):
+                    self.logger.info("Discovery already in progress, continuing with existing scan")
+                    discovery_started = True
+                else:
+                    # Try stopping and restarting
+                    self.logger.warning(f"StartDiscovery failed ({err_name}), attempting stop+restart")
+                    try:
+                        self.adapter_methods.StopDiscovery()
+                        time.sleep(0.5)
+                        self.adapter_methods.StartDiscovery()
+                        discovery_started = True
+                    except dbus.exceptions.DBusException as e2:
+                        self.logger.warning(f"Retry also failed ({e2}), returning cached devices")
+
+            if discovery_started:
+                time.sleep(BT_SCAN_DURATION_S)
+
             objects = self.manager_interface.GetManagedObjects()
             devices = []
             for path, ifaces in objects.items():
                 if "org.bluez.Device1" in ifaces:
                     dev = ifaces["org.bluez.Device1"]
+                    rssi = dev.get("RSSI", None)
+                    try:
+                        rssi = int(rssi) if rssi is not None else -999
+                    except (ValueError, TypeError):
+                        rssi = -999
                     devices.append({
                         "name": str(dev.get("Name", "Unknown")),
                         "address": str(dev.get("Address", "")),
                         "paired": bool(dev.get("Paired", False)),
                         "trusted": bool(dev.get("Trusted", False)),
-                        "connected": bool(dev.get("Connected", False))
+                        "connected": bool(dev.get("Connected", False)),
+                        "rssi": rssi,
+                        "icon": str(dev.get("Icon", "")),
                     })
 
             try:

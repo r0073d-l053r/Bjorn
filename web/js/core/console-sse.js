@@ -48,6 +48,9 @@ let isUserScrolling = false;
 let autoScroll = true;
 let lineBuffer = [];     // lines held while user is scrolled up
 let isDocked = false;
+let consoleMode = 'log'; // 'log' | 'bubble'
+const CONSOLE_SESSION_ID = 'console';
+const LS_CONSOLE_MODE = 'bjorn_console_mode';
 
 /* Cached DOM refs (populated in init) */
 let elConsole = null;
@@ -194,6 +197,34 @@ function ensureDockButton() {
  * @returns {string} HTML string
  */
 function processLogLine(line) {
+  // 0. Bjorn comments — green line with icon + optional (LLM) badge
+  const cmLLM = line.match(/\[LLM_COMMENT\]\s*\(([^)]*)\)\s*(.*)/);
+  const cmTPL = !cmLLM && line.match(/\[COMMENT\]\s*\(([^)]*)\)\s*(.*)/);
+  if (cmLLM || cmTPL) {
+    const isLLM = !!cmLLM;
+    const m = cmLLM || cmTPL;
+    const status = m[1];
+    const text   = m[2];
+
+    // Bubble mode — render as chat bubble
+    if (consoleMode === 'bubble') {
+      const cls = isLLM ? 'console-bubble-bjorn llm' : 'console-bubble-bjorn';
+      return `<div class="${cls}"><img src="/web/images/icon-60x60.png" class="comment-icon" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:4px">${text}</div>`;
+    }
+
+    const badge  = isLLM ? '<span class="comment-llm-badge">LLM</span>' : '';
+    return `<span class="comment-line">${badge}<span class="comment-status">${status}</span> <img src="/web/images/icon-60x60.png" class="comment-icon" alt=""> ${text}</span>`;
+  }
+
+  // 0b. User chat messages (from console chat) — bubble mode
+  const userChat = line.match(/\[USER_CHAT\]\s*(.*)/);
+  if (userChat) {
+    if (consoleMode === 'bubble') {
+      return `<div class="console-bubble-user">${userChat[1]}</div>`;
+    }
+    return `<span class="comment-line"><span class="comment-status">YOU</span> ${userChat[1]}</span>`;
+  }
+
   // 1. Highlight *.py filenames
   line = line.replace(
     /\b([\w\-]+\.py)\b/g,
@@ -900,6 +931,34 @@ export function init() {
     elFontInput.addEventListener('input', () => setFont(elFontInput.value));
   }
 
+  /* -- Bubble mode toggle ------------------------------------------ */
+  try { consoleMode = localStorage.getItem(LS_CONSOLE_MODE) || 'log'; } catch { /* ignore */ }
+  syncBubbleMode();
+
+  const bubbleBtn = $('#consoleBubbleToggle');
+  if (bubbleBtn) {
+    bubbleBtn.addEventListener('click', () => {
+      consoleMode = consoleMode === 'log' ? 'bubble' : 'log';
+      try { localStorage.setItem(LS_CONSOLE_MODE, consoleMode); } catch { /* ignore */ }
+      syncBubbleMode();
+    });
+  }
+
+  /* -- Console chat input ----------------------------------------- */
+  const chatFooter = $('#console-chat-footer');
+  const chatInput = $('#consoleInput');
+  const chatSend = $('#consoleSend');
+
+  if (chatInput && chatSend) {
+    chatSend.addEventListener('click', () => sendConsoleChat(chatInput));
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendConsoleChat(chatInput);
+      }
+    });
+  }
+
   /* -- Close / Clear ----------------------------------------------- */
   const btnClose = $('#closeConsole');
   if (btnClose) btnClose.addEventListener('click', closeConsole);
@@ -1002,4 +1061,55 @@ async function checkAutostart() {
   // Keep console closed by default when the web UI loads.
   // It can still be opened manually by the user.
   closeConsole();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Bubble mode & console chat                                        */
+/* ------------------------------------------------------------------ */
+
+function syncBubbleMode() {
+  const bubbleBtn = $('#consoleBubbleToggle');
+  const chatFooter = $('#console-chat-footer');
+  const consoleEl = $('#console');
+
+  if (bubbleBtn) {
+    bubbleBtn.textContent = consoleMode === 'bubble' ? '\uD83D\uDCDD' : '\uD83D\uDCAC';
+    bubbleBtn.title = consoleMode === 'bubble' ? 'Switch to log mode' : 'Switch to bubble mode';
+  }
+  if (chatFooter) {
+    chatFooter.style.display = consoleMode === 'bubble' ? '' : 'none';
+  }
+  if (consoleEl) {
+    consoleEl.classList.toggle('bubble-mode', consoleMode === 'bubble');
+  }
+}
+
+async function sendConsoleChat(inputEl) {
+  if (!inputEl) return;
+  const msg = inputEl.value.trim();
+  if (!msg) return;
+  inputEl.value = '';
+
+  // Show user message in console
+  if (consoleMode === 'bubble') {
+    appendLogHtml(`<div class="console-bubble-user">${msg}</div>`);
+  } else {
+    appendLogHtml(`<span class="comment-line"><span class="comment-status">YOU</span> ${msg}</span>`);
+  }
+
+  // Call LLM
+  try {
+    const data = await api.post('/api/llm/chat', { message: msg, session_id: CONSOLE_SESSION_ID });
+    if (data?.status === 'ok' && data.response) {
+      if (consoleMode === 'bubble') {
+        appendLogHtml(`<div class="console-bubble-bjorn llm"><img src="/web/images/icon-60x60.png" class="comment-icon" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:4px">${data.response}</div>`);
+      } else {
+        appendLogHtml(`<span class="comment-line"><span class="comment-llm-badge">LLM</span><span class="comment-status">BJORN</span> <img src="/web/images/icon-60x60.png" class="comment-icon" alt=""> ${data.response}</span>`);
+      }
+    } else {
+      appendLogHtml(`<span class="loglvl error">Chat error: ${data?.message || 'unknown'}</span>`);
+    }
+  } catch (e) {
+    appendLogHtml(`<span class="loglvl error">Chat error: ${e.message}</span>`);
+  }
 }

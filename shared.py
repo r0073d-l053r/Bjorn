@@ -488,6 +488,56 @@ class SharedData:
             "loki_typing_speed_max": 0,
             "loki_scripts_path": "/root/loki/scripts",
             "loki_auto_run": "",
+
+            # LLM Bridge
+            "__title_llm__": "LLM Bridge",
+            "llm_enabled": False,
+            "llm_comments_enabled": False,      # Use LLM to generate EPD comments (fallback to DB if disabled/fails)
+            "llm_comments_log": False,           # Log LLM-generated EPD comments to logger.info
+            "llm_chat_enabled": True,            # Enable /chat.html interface
+            "llm_backend": "auto",               # auto | laruche | ollama | api
+            "llm_laruche_discovery": True,       # Auto-discover LaRuche nodes via mDNS
+            "llm_laruche_url": "",               # Manual LaRuche node URL (overrides discovery)
+            "llm_laruche_model": "",             # Model to use on LaRuche (empty = node default)
+            "llm_ollama_url": "http://127.0.0.1:11434",
+            "llm_ollama_model": "phi3:mini",
+            "llm_api_provider": "anthropic",     # anthropic | openai | openrouter
+            "llm_api_key": "",
+            "llm_api_model": "claude-haiku-4-5-20251001",
+            "llm_api_base_url": "",              # Custom base URL (OpenRouter / local proxy)
+            "llm_timeout_s": 30,
+            "llm_max_tokens": 500,
+            "llm_comment_max_tokens": 80,        # Keep short for EPD display
+            "llm_chat_history_size": 20,
+            "llm_chat_tools_enabled": False,     # Enable MCP tool-calling from chat UI
+
+            # LLM Orchestrator
+            "__title_llm_orch__": "LLM Orchestrator",
+            "llm_orchestrator_mode": "none",           # none | advisor | autonomous
+            "llm_orchestrator_interval_s": 60,         # Seconds between autonomous cycles
+            "llm_orchestrator_max_actions": 3,         # Max actions queued per autonomous cycle
+            "llm_orchestrator_allowed_actions": [],    # Whitelist (empty = inherit mcp_allowed_tools)
+            "llm_orchestrator_skip_scheduler": False,   # True = disable scheduler trigger eval (LLM-only mode)
+            "llm_orchestrator_skip_if_no_change": True, # True = skip LLM cycle when nothing new (save tokens)
+            "llm_orchestrator_log_reasoning": False,    # True = log full LLM reasoning + push to chat history
+
+            # MCP Server
+            "__title_mcp__": "MCP Server",
+            "mcp_enabled": False,
+            "mcp_transport": "http",             # http | stdio
+            "mcp_port": 8765,
+            "mcp_allowed_tools": [
+                "get_hosts", "get_vulnerabilities", "get_credentials",
+                "get_action_history", "get_status", "run_action", "query_db"
+            ],
+
+            # EPD Buttons (disabled by default — not all users have buttons)
+            "__title_epd_buttons__": "EPD Buttons",
+            "epd_buttons_enabled": False,
+            "epd_button_a_pin": 5,
+            "epd_button_b_pin": 6,
+            "epd_button_c_pin": 13,
+            "epd_button_d_pin": 19,
         }
 
     @property

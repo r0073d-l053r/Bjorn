@@ -586,6 +586,25 @@ if __name__ == "__main__":
         except Exception as e:
             logger.warning("Loki init skipped: %s", e)
 
+        # LLM Bridge — warm up singleton (starts LaRuche mDNS discovery if enabled)
+        try:
+            from llm_bridge import LLMBridge
+            LLMBridge()  # Initialise singleton, kicks off background discovery
+            logger.info("LLM Bridge initialised")
+        except Exception as e:
+            logger.warning("LLM Bridge init skipped: %s", e)
+
+        # MCP Server — start if enabled in config
+        try:
+            import mcp_server
+            if shared_data.config.get("mcp_enabled", False):
+                mcp_server.start()
+                logger.info("MCP server started")
+            else:
+                logger.info("MCP server loaded (disabled — enable via Settings)")
+        except Exception as e:
+            logger.warning("MCP server init skipped: %s", e)
+
         # Signal Handlers
         exit_handler = lambda s, f: handle_exit(
             s,

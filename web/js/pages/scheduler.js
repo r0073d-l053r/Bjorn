@@ -382,6 +382,35 @@ function startClock() {
   clockTimer = setInterval(updateCountdowns, 1000);
 }
 
+/* ── origin badge resolver ── */
+function _resolveOrigin(r) {
+  const md = r.metadata || {};
+  const trigger = (r.trigger_source || md.trigger_source || '').toLowerCase();
+  const method = (md.decision_method || '').toLowerCase();
+  const origin = (md.decision_origin || '').toLowerCase();
+
+  // LLM orchestrator (autonomous or advisor)
+  if (trigger === 'llm_autonomous' || origin === 'llm' || method === 'llm_autonomous')
+    return { label: 'LLM', cls: 'llm' };
+  if (trigger === 'llm_advisor' || method === 'llm_advisor')
+    return { label: 'LLM Advisor', cls: 'llm' };
+  // AI model (ML-based decision)
+  if (method === 'ai_confirmed' || method === 'ai_boosted' || origin === 'ai_confirmed')
+    return { label: 'AI', cls: 'ai' };
+  // MCP (external tool call)
+  if (trigger === 'mcp' || trigger === 'mcp_tool')
+    return { label: 'MCP', cls: 'mcp' };
+  // Manual (UI or API)
+  if (trigger === 'ui' || trigger === 'manual' || trigger === 'api')
+    return { label: 'Manual', cls: 'manual' };
+  // Scheduler heuristic (default)
+  if (trigger === 'scheduler' || trigger === 'trigger_event' || method === 'heuristic')
+    return { label: 'Heuristic', cls: 'heuristic' };
+  // Fallback: show trigger if known
+  if (trigger) return { label: trigger, cls: 'heuristic' };
+  return null;
+}
+
 /* ── card ── */
 function cardEl(r) {
   const cs = r._computed_status;
@@ -406,6 +435,12 @@ function cardEl(r) {
     ]),
     el('span', { class: `badge status-${cs}` }, [cs]),
   ]));
+
+  /* origin badge — shows who queued this action */
+  const origin = _resolveOrigin(r);
+  if (origin) {
+    children.push(el('div', { class: 'originBadge origin-' + origin.cls }, [origin.label]));
+  }
 
   /* chips */
   const chips = [];

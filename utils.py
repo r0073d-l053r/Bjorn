@@ -25,6 +25,7 @@ class WebUtils:
         "sentinel": ("web_utils.sentinel_utils", "SentinelUtils"),
         "bifrost": ("web_utils.bifrost_utils", "BifrostUtils"),
         "loki": ("web_utils.loki_utils", "LokiUtils"),
+        "llm_utils": ("web_utils.llm_utils", "LLMUtils"),
     }
 
 

@@ -291,6 +291,42 @@
   background: var(--c-cancel);
 }
 
+/* Origin badge — who queued this action */
+.scheduler-container .originBadge {
+  display: inline-block;
+  font-size: .68rem;
+  letter-spacing: .5px;
+  padding: .1rem .5rem;
+  border-radius: 2px;
+  font-weight: 600;
+  margin-bottom: .2rem;
+}
+.scheduler-container .origin-llm {
+  background: color-mix(in oklab, var(--danger) 18%, transparent);
+  color: var(--danger);
+  border: 1px solid color-mix(in oklab, var(--danger) 35%, transparent);
+}
+.scheduler-container .origin-ai {
+  background: color-mix(in oklab, var(--accent-2, #a78bfa) 15%, transparent);
+  color: var(--accent-2, #a78bfa);
+  border: 1px solid color-mix(in oklab, var(--accent-2, #a78bfa) 30%, transparent);
+}
+.scheduler-container .origin-mcp {
+  background: color-mix(in oklab, var(--acid) 12%, transparent);
+  color: var(--acid);
+  border: 1px solid color-mix(in oklab, var(--acid) 25%, transparent);
+}
+.scheduler-container .origin-manual {
+  background: color-mix(in oklab, var(--ok) 12%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in oklab, var(--ok) 25%, transparent);
+}
+.scheduler-container .origin-heuristic {
+  background: color-mix(in oklab, var(--muted) 12%, transparent);
+  color: var(--muted);
+  border: 1px solid color-mix(in oklab, var(--muted) 25%, transparent);
+}
+
 /* Collapsed */
 .scheduler-container .card.collapsed .kv,
 .scheduler-container .card.collapsed .tags,
@@ -334,8 +370,7 @@
   height: 80px;
   object-fit: contain;
   border-radius: 6px;
-  background: var(--panel);
-  border: 1px solid var(--c-border);
+
 }
 
 .scheduler-container .card.status-running .actionIcon {

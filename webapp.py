@@ -172,6 +172,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             # EPD Layout
             '/api/epd/layout': wu.system_utils.epd_get_layout,
             '/api/epd/layouts': wu.system_utils.epd_list_layouts,
+
+            # LLM Bridge
+            '/api/llm/status': wu.llm_utils.get_llm_status,
+            '/api/llm/config': wu.llm_utils.get_llm_config,
+            '/api/llm/reasoning': wu.llm_utils.get_llm_reasoning,
+
+            # MCP Server
+            '/api/mcp/status': wu.llm_utils.get_mcp_status,
         }
 
         if debug_enabled:
@@ -203,6 +211,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/clear_logs': wu.system_utils.clear_logs,
             '/clear_netkb': wu.system_utils.clear_netkb,
             '/erase_bjorn_memories': wu.system_utils.erase_bjorn_memories,
+            '/upload_potfile': wu.network_utils.upload_potfile,
             '/create_preconfigured_file': wu.network_utils.create_preconfigured_file,
             '/delete_preconfigured_file': wu.network_utils.delete_preconfigured_file,
             '/clear_shared_config_json': wu.index_utils.clear_shared_config_json,
@@ -297,6 +306,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/api/sentinel/rule/delete': wu.sentinel.delete_rule,
             '/api/sentinel/device': wu.sentinel.update_device,
             '/api/sentinel/notifiers': wu.sentinel.save_notifier_config,
+            '/api/sentinel/analyze': wu.sentinel.analyze_events,
+            '/api/sentinel/summarize': wu.sentinel.summarize_events,
+            '/api/sentinel/suggest-rule': wu.sentinel.suggest_rule,
             # BIFROST
             '/api/bifrost/toggle': wu.bifrost.toggle_bifrost,
             '/api/bifrost/mode': wu.bifrost.set_mode,
@@ -313,6 +325,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/api/loki/quick': wu.loki.quick_type,
             '/api/loki/install': wu.loki.install_gadget,
             '/api/loki/reboot': wu.loki.reboot,
+            # LLM Bridge
+            '/api/llm/chat': wu.llm_utils.handle_chat,
+            '/api/llm/clear_history': wu.llm_utils.clear_chat_history,
+            '/api/llm/config': wu.llm_utils.save_llm_config,
+            # MCP Server
+            '/api/mcp/toggle': wu.llm_utils.toggle_mcp,
+            '/api/mcp/config': wu.llm_utils.save_mcp_config,
         }
 
         if debug_enabled:
@@ -369,6 +388,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             # EPD Layout
             '/api/epd/layout': lambda h, d: wu.system_utils.epd_save_layout(h, d),
             '/api/epd/layout/reset': lambda h, d: wu.system_utils.epd_reset_layout(h, d),
+
             # Legacy aliases
             'reboot': lambda h, _: wu.system_utils.reboot_system(h),
             'shutdown': lambda h, _: wu.system_utils.shutdown_system(h),
@@ -685,6 +705,12 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith('/c2/download_client/'):
             filename = unquote(self.path.split('/c2/download_client/')[-1])
             self.web_utils.c2.c2_download_client(self, filename)
+            return
+        elif self.path.startswith('/api/llm/models'):
+            from urllib.parse import parse_qs, urlparse
+            query = parse_qs(urlparse(self.path).query)
+            params = {k: v[0] for k, v in query.items()}
+            self.web_utils.llm_utils.get_llm_models(self, params)
             return
         elif self.path.startswith('/c2/stale_agents'):
             from urllib.parse import parse_qs, urlparse

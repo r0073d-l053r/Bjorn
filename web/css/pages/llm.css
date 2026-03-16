@@ -1,0 +1,425 @@
+/* ==========================================================================
+   llm.css — LLM Chat & LLM Config SPA pages
+   ========================================================================== */
+
+/* ── LLM Chat ─────────────────────────────────────────────────────────── */
+
+.llmc-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px));
+  font-family: 'Courier New', Courier, monospace;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 0;
+}
+
+.llmc-header {
+  background: var(--c-panel);
+  border-bottom: 1px solid var(--c-border);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.llmc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-off);
+  flex-shrink: 0;
+}
+.llmc-dot.online  { background: var(--ok); }
+.llmc-dot.offline { background: var(--danger); }
+
+.llmc-title {
+  font-size: 13px;
+  color: var(--acid);
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.llmc-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.llmc-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--c-border);
+  color: var(--muted);
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .15s, color .15s;
+}
+.llmc-btn-ghost:hover { border-color: var(--acid); color: var(--ink); }
+.llmc-btn-ghost.active { border-color: var(--accent-2); color: var(--accent-2); background: color-mix(in oklab, var(--accent-2) 8%, transparent); }
+
+.llmc-clear-btn { margin-left: auto; }
+
+.llmc-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.llmc-msg {
+  max-width: 88%;
+  padding: 9px 13px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.llmc-msg.user {
+  background: color-mix(in oklab, var(--ok) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--ok) 25%, transparent);
+  align-self: flex-end;
+  color: color-mix(in oklab, var(--ok) 85%, var(--ink) 15%);
+}
+.llmc-msg.assistant {
+  background: color-mix(in oklab, var(--accent-2) 6%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent-2) 20%, transparent);
+  align-self: flex-start;
+}
+.llmc-msg.system {
+  background: transparent;
+  border: 1px dashed var(--c-border);
+  align-self: center;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.llmc-msg-role {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 3px;
+  letter-spacing: 1px;
+}
+.llmc-msg.user      .llmc-msg-role { color: color-mix(in oklab, var(--ok) 70%, var(--muted)); }
+.llmc-msg.assistant .llmc-msg-role { color: var(--acid); }
+
+.llmc-thinking {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 16px;
+  border-left: 2px solid var(--danger);
+  font-family: 'Courier New', monospace;
+  flex-shrink: 0;
+}
+
+.llmc-disabled-msg {
+  text-align: center;
+  padding: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.llmc-disabled-msg a { color: var(--acid); }
+
+.llmc-input-row {
+  background: var(--c-panel);
+  border-top: 1px solid var(--c-border);
+  padding: 10px 12px;
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.llmc-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--c-border);
+  color: var(--ink);
+  padding: 9px 12px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  resize: none;
+  outline: none;
+  height: 44px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.llmc-input:focus { border-color: var(--acid); }
+
+.llmc-send-btn {
+  background: var(--danger);
+  border: none;
+  color: white;
+  padding: 0 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 1px;
+  transition: background .15s;
+}
+.llmc-send-btn:hover    { background: color-mix(in oklab, var(--danger) 80%, white 20%); }
+.llmc-send-btn:disabled { background: var(--muted-off); cursor: not-allowed; }
+
+/* ── LLM Config ───────────────────────────────────────────────────────── */
+
+.llmcfg-page {
+  font-family: 'Courier New', Courier, monospace;
+  color: var(--ink);
+  background: var(--bg);
+  min-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px));
+}
+
+.llmcfg-header {
+  background: var(--c-panel);
+  border-bottom: 1px solid var(--c-border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.llmcfg-title {
+  font-size: 13px;
+  color: var(--acid);
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.llmcfg-nav-link {
+  margin-left: auto;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 11px;
+}
+.llmcfg-nav-link:hover { color: var(--ink); }
+
+.llmcfg-container {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.llmcfg-section {
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.llmcfg-section-title {
+  padding: 10px 14px;
+  background: var(--c-panel-2);
+  border-bottom: 1px solid var(--c-border);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--acid);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.llmcfg-badge {
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 2px;
+}
+.llmcfg-badge.on  { background: var(--ok); color: #000; }
+.llmcfg-badge.off { background: var(--c-border); color: var(--muted); }
+
+.llmcfg-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.llmcfg-subsection-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  border-top: 1px solid var(--c-border);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.llmcfg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.llmcfg-label {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.llmcfg-input,
+.llmcfg-select {
+  background: var(--bg);
+  border: 1px solid var(--c-border);
+  color: var(--ink);
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+  width: 100%;
+}
+.llmcfg-input:focus,
+.llmcfg-select:focus { border-color: var(--acid); }
+.llmcfg-input[type="password"] { letter-spacing: 2px; }
+
+.llmcfg-row {
+  display: flex;
+  gap: 10px;
+}
+.llmcfg-row .llmcfg-field { flex: 1; }
+
+.llmcfg-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.llmcfg-toggle-label {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.llmcfg-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.llmcfg-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.llmcfg-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--c-border-strong);
+  transition: .2s;
+  cursor: pointer;
+}
+.llmcfg-slider::before {
+  content: '';
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  top: 3px;
+  background: var(--muted-off);
+  transition: .2s;
+}
+.llmcfg-toggle input:checked + .llmcfg-slider          { background: var(--danger); }
+.llmcfg-toggle input:checked + .llmcfg-slider::before   { transform: translateX(20px); background: white; }
+
+.llmcfg-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 7px;
+  padding-top: 4px;
+}
+.llmcfg-tool-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.llmcfg-tool-item input[type="checkbox"] { accent-color: var(--acid); }
+
+.llmcfg-status-row {
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--c-border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+.llmcfg-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.llmcfg-btn {
+  padding: 7px 16px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid var(--c-border);
+  background: transparent;
+  color: var(--ink);
+  letter-spacing: 1px;
+  transition: border-color .15s, color .15s;
+}
+.llmcfg-btn:hover { border-color: var(--acid); color: var(--acid); }
+.llmcfg-btn.primary { background: var(--danger); border-color: var(--danger); color: white; }
+.llmcfg-btn.primary:hover { background: color-mix(in oklab, var(--danger) 80%, white 20%); border-color: inherit; color: white; }
+.llmcfg-btn.compact { padding: 5px 10px; flex-shrink: 0; }
+
+/* LaRuche discovery row */
+.llmcfg-url-row { display: flex; gap: 6px; align-items: center; }
+.llmcfg-url-row .llmcfg-input { flex: 1; }
+
+/* Model selector row */
+.llmcfg-model-row { display: flex; gap: 6px; align-items: center; }
+.llmcfg-model-row .llmcfg-select { flex: 1; }
+
+.llmcfg-discovery-row {
+  font-size: 11px;
+  padding: 4px 0;
+  min-height: 18px;
+}
+.llmcfg-disc-found     { color: var(--ok); }
+.llmcfg-disc-searching { color: var(--muted); }
+.llmcfg-disc-off       { color: var(--danger); opacity: .7; }
+
+/* LaRuche default model info */
+.llmcfg-laruche-default {
+  font-size: 11px;
+  padding: 2px 0 0;
+  min-height: 14px;
+}
+.llmcfg-laruche-default-label {
+  color: var(--muted);
+}
+.llmcfg-laruche-default-value {
+  color: #facc15;
+  font-weight: 600;
+}
+
+/* Personality & Prompts textarea */
+.llmcfg-textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  color: var(--ink);
+  padding: 7px 10px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.llmcfg-textarea:focus { border-color: var(--acid); }
+.llmcfg-textarea::placeholder { color: var(--muted); opacity: 0.5; font-size: 0.65rem; }
+.llmcfg-reset-btn {
+  margin-top: 4px;
+  font-size: 0.6rem;
+  padding: 2px 8px;
+  opacity: 0.6;
+}
+.llmcfg-reset-btn:hover { opacity: 1; }

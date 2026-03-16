@@ -133,19 +133,44 @@ class ActionScheduler:
                 # Keep queue consistent with current enable/disable flags.
                 self._cancel_queued_disabled_actions()
 
-                # 1) Promote scheduled actions that are due
+                # 1) Promote scheduled actions that are due (always — queue hygiene)
                 self._promote_scheduled_to_pending()
 
-                # 2) Publish next scheduled occurrences for interval actions
-                self._publish_all_upcoming()
+                # When LLM autonomous mode owns scheduling, skip trigger evaluation
+                # so it doesn't compete with or duplicate LLM decisions.
+                # BUT: if the queue is empty, the heuristic scheduler resumes as fallback
+                # to prevent deadlock when the LLM fails to produce valid actions.
+                _llm_wants_skip = bool(
+                    self.shared_data.config.get("llm_orchestrator_skip_scheduler", False)
+                    and self.shared_data.config.get("llm_orchestrator_mode") == "autonomous"
+                    and self.shared_data.config.get("llm_enabled", False)
+                )
+                _queue_empty = False
+                if _llm_wants_skip:
+                    try:
+                        row = self.shared_data.db.query_one(
+                            "SELECT COUNT(*) AS cnt FROM action_queue WHERE status IN ('pending','running','scheduled')"
+                        )
+                        _queue_empty = (row and int(row["cnt"]) == 0)
+                    except Exception:
+                        pass
+                _llm_skip = _llm_wants_skip and not _queue_empty
 
-                # 3) Evaluate global on_start actions
-                self._evaluate_global_actions()
+                if not _llm_skip:
+                    if _llm_wants_skip and _queue_empty:
+                        logger.info("Scheduler: LLM queue empty — heuristic fallback active")
+                    # 2) Publish next scheduled occurrences for interval actions
+                    self._publish_all_upcoming()
 
-                # 4) Evaluate per-host triggers
-                self.evaluate_all_triggers()
+                    # 3) Evaluate global on_start actions
+                    self._evaluate_global_actions()
 
-                # 5) Queue maintenance
+                    # 4) Evaluate per-host triggers
+                    self.evaluate_all_triggers()
+                else:
+                    logger.debug("Scheduler: trigger evaluation skipped (LLM autonomous owns scheduling)")
+
+                # 5) Queue maintenance (always — starvation prevention + cleanup)
                 self.cleanup_queue()
                 self.update_priorities()
 

@@ -70,9 +70,17 @@ class Orchestrator:
                 self.data_consolidator = None
                 self.ai_enabled = False
         
+        # ┌─────────────────────────────────────────────────────────┐
+        # │ LLM Orchestrator (advisor / autonomous)                 │
+        # └─────────────────────────────────────────────────────────┘
+        self.llm_orchestrator = None
+        self._init_llm_orchestrator()
+
         # Load all available actions
         self.load_actions()
         logger.info(f"Actions loaded: {list(self.actions.keys())}")
+        # Expose loaded action names so LLM orchestrator can discover them
+        self.shared_data.loaded_action_names = list(self.actions.keys())
 
     def _is_enabled_value(self, value: Any) -> bool:
         """Robust parser for b_enabled values coming from DB."""
@@ -217,6 +225,35 @@ class Orchestrator:
                 key="orch_ai_enable_failed",
                 interval_s=300.0,
             )
+
+    def _init_llm_orchestrator(self) -> None:
+        """Initialise LLMOrchestrator if a mode is configured and LLM is enabled."""
+        try:
+            mode = self.shared_data.config.get("llm_orchestrator_mode", "none")
+            enabled = self.shared_data.config.get("llm_enabled", False)
+            if mode == "none" or not enabled:
+                return
+            from llm_orchestrator import LLMOrchestrator
+            self.llm_orchestrator = LLMOrchestrator(self.shared_data)
+            self.llm_orchestrator.start()
+        except Exception as e:
+            logger.debug(f"LLM Orchestrator init skipped: {e}")
+
+    def _sync_llm_orchestrator(self) -> None:
+        """React to runtime changes of llm_orchestrator_mode / llm_enabled."""
+        mode = self.shared_data.config.get("llm_orchestrator_mode", "none")
+        enabled = self.shared_data.config.get("llm_enabled", False)
+
+        if mode == "none" or not enabled:
+            if self.llm_orchestrator:
+                self.llm_orchestrator.stop()
+                self.llm_orchestrator = None
+            return
+
+        if self.llm_orchestrator is None:
+            self._init_llm_orchestrator()
+        else:
+            self.llm_orchestrator.restart_if_mode_changed()
 
     def _disable_ai_components(self) -> None:
         """Drop AI-specific helpers when leaving AI mode.
@@ -765,6 +802,7 @@ class Orchestrator:
             try:
                 # Allow live mode switching from the UI without restarting the process.
                 self._sync_ai_components()
+                self._sync_llm_orchestrator()
 
                 # Get next action from queue
                 next_action = self.get_next_action()
@@ -827,6 +865,9 @@ class Orchestrator:
         self.shared_data.update_status("IDLE", "")
 
         # Cleanup on exit (OUTSIDE while loop)
+        if self.llm_orchestrator:
+            self.llm_orchestrator.stop()
+
         if self.scheduler:
             self.scheduler.stop()
             self.shared_data.queue_event.set()
@@ -839,6 +880,13 @@ class Orchestrator:
 
     def _process_background_tasks(self):
         """Run periodic tasks like consolidation, upload retries, and model updates (AI mode only)."""
+        # LLM advisor mode — runs regardless of AI mode
+        if self.llm_orchestrator and self.shared_data.config.get("llm_orchestrator_mode") == "advisor":
+            try:
+                self.llm_orchestrator.advise()
+            except Exception as e:
+                logger.debug(f"LLM advisor background call error: {e}")
+
         if not (self.ai_enabled and self.shared_data.operation_mode == "AI"):
             return
 

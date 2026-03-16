@@ -364,3 +364,32 @@
     align-items: flex-start;
   }
 }
+
+/* ── AI Sentinel elements ─────────────────────────────── */
+.sentinel-ai-btn {
+  background: rgba(168, 85, 247, .1) !important;
+  border-color: rgba(168, 85, 247, .3) !important;
+  color: #c084fc !important;
+}
+.sentinel-ai-btn:hover {
+  background: rgba(168, 85, 247, .2) !important;
+}
+.sentinel-ai-result {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: rgba(168, 85, 247, .06);
+  border: 1px solid rgba(168, 85, 247, .15);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  display: none;
+}
+.sentinel-ai-result.active { display: block; }
+.sentinel-ai-summary {
+  padding: 8px;
+  background: rgba(59, 130, 246, .06);
+  border: 1px solid rgba(59, 130, 246, .15);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}

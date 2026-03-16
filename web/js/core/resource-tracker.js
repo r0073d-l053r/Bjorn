@@ -45,6 +45,11 @@ export class ResourceTracker {
     this._listeners.push({ target, event, handler, options });
   }
 
+  /** Shorthand alias for trackEventListener. */
+  on(target, event, handler, options) {
+    return this.trackEventListener(target, event, handler, options);
+  }
+
   /* -- AbortControllers (for fetch) -- */
   trackAbortController() {
     const ac = new AbortController();

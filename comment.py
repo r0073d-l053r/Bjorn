@@ -319,6 +319,9 @@ class CommentAI:
         """
         Return a comment if status changed or delay expired.
 
+        When llm_comments_enabled=True in config, tries LLM first;
+        falls back to the database/template system on any failure.
+
         Args:
             status: logical status name (e.g., "IDLE", "SSHBruteforce", "NetworkScanner").
             lang: language override (e.g., "fr"); if None, auto priority is used.
@@ -331,14 +334,36 @@ class CommentAI:
         status = status or "IDLE"
 
         status_changed = (status != self.last_status)
-        if status_changed or (current_time - self.last_comment_time >= self.comment_delay):
+        if not status_changed and (current_time - self.last_comment_time < self.comment_delay):
+            return None
+
+        # --- Try LLM if enabled ---
+        text: Optional[str] = None
+        llm_generated = False
+        if getattr(self.shared_data, "llm_comments_enabled", False):
+            try:
+                from llm_bridge import LLMBridge
+                text = LLMBridge().generate_comment(status, params)
+                if text:
+                    llm_generated = True
+            except Exception as e:
+                logger.debug(f"LLM comment failed, using fallback: {e}")
+
+        # --- Fallback: database / template system (original behaviour) ---
+        if not text:
             text = self._pick_text(status, lang, params)
-            if text:
-                self.last_status = status
-                self.last_comment_time = current_time
-                self.comment_delay = self._new_delay()
-                logger.debug(f"Next comment delay: {self.comment_delay}s")
-                return text
+
+        if text:
+            self.last_status = status
+            self.last_comment_time = current_time
+            self.comment_delay = self._new_delay()
+            logger.debug(f"Next comment delay: {self.comment_delay}s")
+            # Log comments
+            if llm_generated:
+                logger.info(f"[LLM_COMMENT] ({status}) {text}")
+            else:
+                logger.info(f"[COMMENT] ({status}) {text}")
+            return text
         return None
 
 
