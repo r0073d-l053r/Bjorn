@@ -1,12 +1,4 @@
-# scanning.py – Network scanner (DB-first, no stubs)
-# - Host discovery (nmap -sn -PR)
-# - Resolve MAC/hostname (per-host threads) -> DB (hosts table)
-# - Port scan (multi-threads) -> DB (merge ports by MAC)
-# - Mark alive=0 for hosts not seen this run
-# - Update stats (stats table)
-# - Light logging (milestones) without flooding
-# - WAL checkpoint(TRUNCATE) + PRAGMA optimize at end of scan
-# - NEW: No DB insert without a real MAC. Unresolved IPs are kept in-memory for this run.
+"""scanning.py - Network scanner: nmap host discovery, port scan, MAC resolve, all DB-backed."""
 
 import os
 import threading

@@ -1,9 +1,5 @@
-# demo_action.py
-# Demonstration Action: wrapped in a DemoAction class
+"""demo_action.py - Minimal template action that prints its arguments."""
 
-# ---------------------------------------------------------------------------
-# Metadata (compatible with sync_actions / Neo launcher)
-# ---------------------------------------------------------------------------
 b_class       = "DemoAction"
 b_module      = "demo_action"
 b_enabled     = 1
@@ -14,6 +10,19 @@ b_description = "Demonstration action: simply prints the received arguments."
 b_author      = "Template"
 b_version     = "0.1.0"
 b_icon        = "demo_action.png"
+b_status = "demo_action"
+b_port = None
+b_service = "[]"
+b_trigger = None
+b_parent = None
+b_priority = 0
+b_cooldown = 0
+b_rate_limit = None
+b_timeout = 60
+b_max_retries = 0
+b_stealth_level = 10
+b_risk_level = "low"
+b_tags = ["demo", "template", "test"]
 
 b_examples = [
     {
@@ -129,6 +138,8 @@ def _list_net_ifaces() -> list[str]:
             names.update(ifname for ifname in psutil.net_if_addrs().keys() if ifname != "lo")
         except Exception:
             pass
+    if os.name == "nt":
+        return ["Ethernet", "Wi-Fi"]
     try:
         for n in os.listdir("/sys/class/net"):
             if n and n != "lo":
@@ -183,7 +194,8 @@ class DemoAction:
     def execute(self, ip=None, port=None, row=None, status_key=None):
         """Called by the orchestrator. This demo only prints arguments."""
         self.shared_data.bjorn_orch_status = "DemoAction"
-        self.shared_data.comment_params = {"ip": ip, "port": port}
+        # EPD live status
+        self.shared_data.comment_params = {"status": "running"}
 
         print("=== DemoAction :: executed ===")
         print(f" IP/Target: {ip}:{port}")

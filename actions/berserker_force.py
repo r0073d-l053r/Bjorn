@@ -1,19 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-berserker_force.py -- Service resilience / stress testing (Pi Zero friendly, orchestrator compatible).
+"""berserker_force.py - Rate-limited service stress testing with degradation analysis.
 
-What it does:
-- Phase 1 (Baseline):     Measures TCP connect response times per port (3 samples each).
-- Phase 2 (Stress Test):  Runs a rate-limited load test using TCP connect, optional SYN probes
-                           (scapy), HTTP probes (urllib), or mixed mode.
-- Phase 3 (Post-stress):  Re-measures baseline to detect degradation.
-- Phase 4 (Analysis):     Computes per-port degradation percentages, writes a JSON report.
-
-This is NOT a DoS tool.  It sends measured, rate-limited probes and records how the
-target's response times change under light load.  Max 50 req/s to stay RPi-safe.
-
-Output is saved to data/output/stress/<ip>_<timestamp>.json
+Measures baseline response times, applies light load (max 50 req/s), then reports per-port degradation.
 """
 
 import json
@@ -115,8 +104,8 @@ b_examples = [
 b_docs_url = "docs/actions/BerserkerForce.md"
 
 # -------------------- Constants -----------------------------------------------
-_DATA_DIR   = "/home/bjorn/Bjorn/data"
-OUTPUT_DIR  = os.path.join(_DATA_DIR, "output", "stress")
+_DATA_DIR   = None  # Resolved at runtime via shared_data.data_dir
+OUTPUT_DIR  = None  # Resolved at runtime via shared_data.data_dir
 
 _BASELINE_SAMPLES   = 3       # TCP connect samples per port for baseline
 _CONNECT_TIMEOUT_S  = 2.0     # socket connect timeout
@@ -428,15 +417,16 @@ class BerserkerForce:
 
     def _save_report(self, ip: str, mode: str, duration_s: int, rate: int, analysis: Dict) -> str:
         """Write the JSON report and return the file path."""
+        output_dir = os.path.join(self.shared_data.data_dir, "output", "stress")
         try:
-            os.makedirs(OUTPUT_DIR, exist_ok=True)
+            os.makedirs(output_dir, exist_ok=True)
         except Exception as exc:
-            logger.warning(f"Could not create output dir {OUTPUT_DIR}: {exc}")
+            logger.warning(f"Could not create output dir {output_dir}: {exc}")
 
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
         safe_ip = ip.replace(":", "_").replace(".", "_")
         filename = f"{safe_ip}_{ts}.json"
-        filepath = os.path.join(OUTPUT_DIR, filename)
+        filepath = os.path.join(output_dir, filename)
 
         report = {
             "tool": "berserker_force",

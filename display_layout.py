@@ -1,7 +1,5 @@
-"""
-Display Layout Engine for multi-size EPD support.
-Provides data-driven layout definitions per display model.
-"""
+"""display_layout.py - Data-driven layout definitions for multi-size e-paper displays."""
+
 import json
 import os
 import logging

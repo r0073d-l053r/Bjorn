@@ -1,5 +1,4 @@
-# db_utils/comments.py
-# Comment and status message operations
+"""comments.py - Comment and status message operations."""
 
 import json
 import os

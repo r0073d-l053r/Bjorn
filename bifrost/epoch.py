@@ -1,5 +1,5 @@
-"""
-Bifrost — Epoch tracking.
+"""epoch.py - Bifrost epoch tracking and reward signals.
+
 Ported from pwnagotchi/ai/epoch.py + pwnagotchi/ai/reward.py.
 """
 import time
@@ -17,7 +17,7 @@ NUM_CHANNELS = 14  # 2.4 GHz channels
 # ── Reward function (from pwnagotchi/ai/reward.py) ──────────────
 
 class RewardFunction:
-    """Reward signal for RL — higher is better."""
+    """Reward signal for RL - higher is better."""
 
     def __call__(self, epoch_n, state):
         eps = 1e-20
@@ -181,7 +181,7 @@ class BifrostEpoch:
             self.num_slept += inc
 
     def next(self):
-        """Transition to next epoch — compute reward, update streaks, reset counters."""
+        """Transition to next epoch - compute reward, update streaks, reset counters."""
         # Update activity streaks
         if not self.any_activity and not self.did_handshakes:
             self.inactive_for += 1

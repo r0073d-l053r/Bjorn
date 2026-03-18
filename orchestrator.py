@@ -1,5 +1,4 @@
-# orchestrator.py
-# Action queue consumer for Bjorn - executes actions from the scheduler queue
+"""orchestrator.py - Action queue consumer: pulls scheduled actions and executes them."""
 
 import importlib
 import time
@@ -156,7 +155,26 @@ class Orchestrator:
             module_name = action["b_module"]
             b_class = action["b_class"]
 
-            # 🔴 Skip disabled actions
+            # Skip custom user scripts (manual-only, not part of the orchestrator loop)
+            if action.get("b_action") == "custom" or module_name.startswith("custom/"):
+                continue
+
+            # Plugin actions — loaded via plugin_manager, not importlib
+            if action.get("b_action") == "plugin" or module_name.startswith("plugins/"):
+                try:
+                    mgr = getattr(self.shared_data, 'plugin_manager', None)
+                    if mgr and b_class in mgr._instances:
+                        instance = mgr._instances[b_class]
+                        instance.action_name = b_class
+                        instance.port = action.get("b_port")
+                        instance.b_parent_action = action.get("b_parent")
+                        self.actions[b_class] = instance
+                        logger.info(f"Loaded plugin action: {b_class}")
+                except Exception as e:
+                    logger.error(f"Failed to load plugin action {b_class}: {e}")
+                continue
+
+            # Skip disabled actions
             if not int(action.get("b_enabled", 1)):
                 logger.info(f"Skipping disabled action: {b_class}")
                 continue
@@ -523,7 +541,7 @@ class Orchestrator:
         ip = queued_action['ip']
         port = queued_action['port']
 
-        # Parse metadata once — used throughout this function
+        # Parse metadata once - used throughout this function
         metadata = json.loads(queued_action.get('metadata', '{}'))
         source = str(metadata.get('decision_method', 'unknown'))
         source_label = f"[{source.upper()}]" if source != 'unknown' else ""
@@ -691,6 +709,13 @@ class Orchestrator:
             except Exception as cb_err:
                 logger.debug(f"Circuit breaker update skipped: {cb_err}")
 
+            # Notify script scheduler for conditional triggers
+            if self.shared_data.script_scheduler:
+                try:
+                    self.shared_data.script_scheduler.notify_action_complete(action_name, mac, success)
+                except Exception:
+                    pass
+
         except Exception as e:
             logger.error(f"Error executing action {action_name}: {e}")
             self.shared_data.db.update_queue_status(queue_id, 'failed', str(e))
@@ -744,7 +769,7 @@ class Orchestrator:
                         'port': port,
                         'action': action_name,
                         'queue_id': queue_id,
-                        # metadata already parsed — no second json.loads
+                        # metadata already parsed - no second json.loads
                         'metadata': metadata,
                         # Tag decision source so the training pipeline can weight
                         # human choices (MANUAL would be logged if orchestrator
@@ -781,7 +806,20 @@ class Orchestrator:
                 )
         elif self.feature_logger and state_before:
             logger.debug(f"Feature logging disabled for {action_name} (excluded from AI learning)")
-        
+
+        # Dispatch plugin hooks
+        try:
+            mgr = getattr(self.shared_data, 'plugin_manager', None)
+            if mgr:
+                mgr.dispatch(
+                    "on_action_complete",
+                    action_name=action_name,
+                    success=success,
+                    target={"mac": mac, "ip": ip, "port": port},
+                )
+        except Exception:
+            pass
+
         return success
     
     def run(self):
@@ -839,8 +877,10 @@ class Orchestrator:
                             logger.debug(f"Queue empty, idling... ({idle_time}s)")
                     
                     # Event-driven wait (max 5s to check for exit signals)
-                    self.shared_data.queue_event.wait(timeout=5)
+                    # Clear before wait to avoid lost-wake race condition:
+                    # if set() fires between wait() returning and clear(), the signal is lost.
                     self.shared_data.queue_event.clear()
+                    self.shared_data.queue_event.wait(timeout=5)
 
                 # Periodically process background tasks (even if busy)
                 current_time = time.time()
@@ -880,7 +920,7 @@ class Orchestrator:
 
     def _process_background_tasks(self):
         """Run periodic tasks like consolidation, upload retries, and model updates (AI mode only)."""
-        # LLM advisor mode — runs regardless of AI mode
+        # LLM advisor mode - runs regardless of AI mode
         if self.llm_orchestrator and self.shared_data.config.get("llm_orchestrator_mode") == "advisor":
             try:
                 self.llm_orchestrator.advise()

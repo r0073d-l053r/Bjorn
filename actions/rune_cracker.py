@@ -82,7 +82,11 @@ class RuneCracker:
                 return hashlib.sha512(password.encode()).hexdigest()
             elif h_type == 'ntlm':
                 # NTLM is MD4(UTF-16LE(password))
-                return hashlib.new('md4', password.encode('utf-16le')).hexdigest()
+                try:
+                    return hashlib.new('md4', password.encode('utf-16le')).hexdigest()
+                except ValueError:
+                    # MD4 not available in this Python build (e.g., FIPS mode)
+                    return None
         except Exception as e:
             logger.debug(f"Hashing error ({h_type}): {e}")
         return None
@@ -107,6 +111,8 @@ class RuneCracker:
                         }
                         logger.success(f"Cracked {h_type}: {hv[:8]}... -> {password}")
                         self.shared_data.log_milestone(b_class, "Cracked", f"{h_type} found!")
+                        # EPD live status update
+                        self.shared_data.comment_params = {"hashes": str(len(self.hashes)), "cracked": str(len(self.cracked))}
 
         progress.advance()
 
@@ -115,7 +121,8 @@ class RuneCracker:
         input_file = str(getattr(self.shared_data, "rune_cracker_input", ""))
         wordlist_path = str(getattr(self.shared_data, "rune_cracker_wordlist", ""))
         self.hash_type = getattr(self.shared_data, "rune_cracker_type", None)
-        output_dir = getattr(self.shared_data, "rune_cracker_output", "/home/bjorn/Bjorn/data/output/hashes")
+        _fallback_dir = os.path.join(getattr(self.shared_data, "data_dir", "/home/bjorn/Bjorn/data"), "output", "hashes")
+        output_dir = getattr(self.shared_data, "rune_cracker_output", _fallback_dir)
 
         if not input_file or not os.path.exists(input_file):
             # Fallback: Check for latest odin_recon or other hashes if running in generic mode
@@ -127,6 +134,8 @@ class RuneCracker:
                 logger.error(f"Input file not found: {input_file}")
                 return "failed"
 
+        # Reset per-run state to prevent accumulation across reused instances
+        self.cracked.clear()
         # Load hashes
         self.hashes.clear()
         try:
@@ -150,6 +159,8 @@ class RuneCracker:
 
         logger.info(f"RuneCracker: Loaded {len(self.hashes)} hashes. Starting engine...")
         self.shared_data.log_milestone(b_class, "Initialization", f"Loaded {len(self.hashes)} hashes")
+        # EPD live status
+        self.shared_data.comment_params = {"hashes": str(len(self.hashes)), "cracked": "0"}
 
         # Prepare password plan
         dict_passwords = []
@@ -167,34 +178,38 @@ class RuneCracker:
         self.shared_data.log_milestone(b_class, "Bruteforce", f"Testing {len(all_candidates)} candidates")
 
         try:
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                for pwd in all_candidates:
-                    if self.shared_data.orchestrator_should_exit:
-                        executor.shutdown(wait=False)
-                        return "interrupted"
-                    executor.submit(self._crack_password_worker, pwd, progress)
-        except Exception as e:
-            logger.error(f"Cracking engine error: {e}")
-            return "failed"
+            try:
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    for pwd in all_candidates:
+                        if self.shared_data.orchestrator_should_exit:
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            return "interrupted"
+                        executor.submit(self._crack_password_worker, pwd, progress)
+            except Exception as e:
+                logger.error(f"Cracking engine error: {e}")
+                return "failed"
 
-        # Save results
-        if self.cracked:
-            os.makedirs(output_dir, exist_ok=True)
-            out_file = os.path.join(output_dir, f"cracked_{int(time.time())}.json")
-            with open(out_file, 'w', encoding="utf-8") as f:
-                json.dump({
-                    "target_file": input_file,
-                    "total_hashes": len(self.hashes),
-                    "cracked_count": len(self.cracked),
-                    "results": self.cracked
-                }, f, indent=4)
-            logger.success(f"Cracked {len(self.cracked)} hashes! Results: {out_file}")
-            self.shared_data.log_milestone(b_class, "Complete", f"Cracked {len(self.cracked)} hashes")
-            return "success"
-        
-        logger.info("Cracking finished. No matches found.")
-        self.shared_data.log_milestone(b_class, "Finished", "No passwords found")
-        return "success" # Still success even if 0 cracked, as it finished the task
+            # Save results
+            if self.cracked:
+                os.makedirs(output_dir, exist_ok=True)
+                out_file = os.path.join(output_dir, f"cracked_{int(time.time())}.json")
+                with open(out_file, 'w', encoding="utf-8") as f:
+                    json.dump({
+                        "target_file": input_file,
+                        "total_hashes": len(self.hashes),
+                        "cracked_count": len(self.cracked),
+                        "results": self.cracked
+                    }, f, indent=4)
+                logger.success(f"Cracked {len(self.cracked)} hashes! Results: {out_file}")
+                self.shared_data.log_milestone(b_class, "Complete", f"Cracked {len(self.cracked)} hashes")
+                return "success"
+
+            logger.info("Cracking finished. No matches found.")
+            self.shared_data.log_milestone(b_class, "Finished", "No passwords found")
+            return "success" # Still success even if 0 cracked, as it finished the task
+        finally:
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}
 
 if __name__ == "__main__":
     # Minimal CLI for testing

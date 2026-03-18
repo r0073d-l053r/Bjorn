@@ -1,15 +1,4 @@
-"""
-ssh_bruteforce.py - This script performs a brute force attack on SSH services (port 22)
-to find accessible accounts using various user credentials. It logs the results of
-successful connections.
-
-SQL version (minimal changes):
-- Targets still provided by the orchestrator (ip + port)
-- IP -> (MAC, hostname) mapping read from DB 'hosts'
-- Successes saved into DB.creds (service='ssh') with robust fallback upsert
-- Action status recorded in DB.action_results (via SSHBruteforce.execute)
-- Paramiko noise silenced; ssh.connect avoids agent/keys to reduce hangs
-"""
+"""ssh_bruteforce.py - SSH bruteforce with DB-backed credential storage (paramiko)."""
 
 import os
 import paramiko
@@ -22,7 +11,6 @@ from queue import Queue
 from shared import SharedData
 from logger import Logger
 
-# Configure the logger
 logger = Logger(name="ssh_bruteforce.py", level=logging.DEBUG)
 
 # Silence Paramiko internals
@@ -30,7 +18,7 @@ for _name in ("paramiko", "paramiko.transport", "paramiko.client", "paramiko.hos
               "paramiko.kex", "paramiko.auth_handler"):
     logging.getLogger(_name).setLevel(logging.CRITICAL)
 
-# Define the necessary global variables
+# Module metadata
 b_class   = "SSHBruteforce"
 b_module  = "ssh_bruteforce"
 b_status  = "brute_force_ssh"
@@ -38,9 +26,9 @@ b_port    = 22
 b_service = '["ssh"]'
 b_trigger = 'on_any:["on_service:ssh","on_new_port:22"]'
 b_parent  = None
-b_priority = 70   # tu peux ajuster la priorité si besoin
-b_cooldown = 1800            # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_priority = 70
+b_cooldown = 1800            # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
 
 
 class SSHBruteforce:

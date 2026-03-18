@@ -1,10 +1,4 @@
-"""
-smb_bruteforce.py — SMB bruteforce (DB-backed, no CSV/JSON, no rich)
-- Cibles fournies par l’orchestrateur (ip, port)
-- IP -> (MAC, hostname) depuis DB.hosts
-- Succès enregistrés dans DB.creds (service='smb'), 1 ligne PAR PARTAGE (database=<share>)
-- Conserve la logique de queue/threads et les signatures. Plus de rich/progress.
-"""
+"""smb_bruteforce.py - SMB bruteforce with per-share credential storage in DB."""
 
 import os
 import threading
@@ -28,14 +22,14 @@ b_parent = None
 b_service = '["smb"]'
 b_trigger = 'on_any:["on_service:smb","on_new_port:445"]'
 b_priority = 70  
-b_cooldown = 1800            # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_cooldown = 1800            # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
 
 IGNORED_SHARES = {'print$', 'ADMIN$', 'IPC$', 'C$', 'D$', 'E$', 'F$'}
 
 
 class SMBBruteforce:
-    """Wrapper orchestrateur -> SMBConnector."""
+    """Orchestrator wrapper -> SMBConnector."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
@@ -43,23 +37,22 @@ class SMBBruteforce:
         logger.info("SMBConnector initialized.")
 
     def bruteforce_smb(self, ip, port):
-        """Lance le bruteforce SMB pour (ip, port)."""
+        """Run SMB bruteforce for (ip, port)."""
         return self.smb_bruteforce.run_bruteforce(ip, port)
 
     def execute(self, ip, port, row, status_key):
-        """Point d’entrée orchestrateur (retour 'success' / 'failed')."""
+        """Orchestrator entry point (returns ‘success’ / ‘failed’)."""
         self.shared_data.bjorn_orch_status = "SMBBruteforce"
         success, results = self.bruteforce_smb(ip, port)
         return 'success' if success else 'failed'
 
 
 class SMBConnector:
-    """Gère les tentatives SMB, la persistance DB et le mapping IP→(MAC, Hostname)."""
+    """Handles SMB attempts, DB persistence, and IP->(MAC, Hostname) mapping."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
 
-        # Wordlists inchangées
         self.users = self._read_lines(shared_data.users_file)
         self.passwords = self._read_lines(shared_data.passwords_file)
 
@@ -71,7 +64,7 @@ class SMBConnector:
         self.results: List[List[str]] = []  # [mac, ip, hostname, share, user, password, port]
         self.queue = Queue()
 
-    # ---------- util fichiers ----------
+    # ---------- file utils ----------
     @staticmethod
     def _read_lines(path: str) -> List[str]:
         try:
@@ -267,7 +260,7 @@ class SMBConnector:
         for t in threads:
             t.join()
 
-        # Fallback smbclient -L si rien trouvé
+        # Fallback smbclient -L if nothing found
         if not success_flag[0]:
             logger.info(f"No success via SMBConnection. Trying smbclient -L for {adresse_ip}")
             for user in self.users:
@@ -290,7 +283,7 @@ class SMBConnector:
 
     # ---------- persistence DB ----------
     def save_results(self):
-        # insère self.results dans creds (service='smb'), database = <share>
+        # Insert results into creds (service='smb'), database = <share>
         for mac, ip, hostname, share, user, password, port in self.results:
             try:
                 self.shared_data.db.insert_cred(
@@ -301,7 +294,7 @@ class SMBConnector:
                     user=user,
                     password=password,
                     port=port,
-                    database=share,     # utilise la colonne 'database' pour distinguer les shares
+                    database=share,     # uses 'database' column to distinguish shares
                     extra=None
                 )
             except Exception as e:
@@ -315,12 +308,12 @@ class SMBConnector:
         self.results = []
 
     def removeduplicates(self):
-        # plus nécessaire avec l'index unique; conservé pour compat.
+        # No longer needed with unique index; kept for compat
         pass
 
 
 if __name__ == "__main__":
-    # Mode autonome non utilisé en prod; on laisse simple
+    # Standalone mode not used in prod
     try:
         sd = SharedData()
         smb_bruteforce = SMBBruteforce(sd)

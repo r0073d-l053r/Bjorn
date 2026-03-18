@@ -1,11 +1,4 @@
-# Resource exhaustion testing tool for network and service stress analysis.
-# Saves settings in `/home/bjorn/.settings_bjorn/berserker_force_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -t, --target      Target IP or hostname to test.
-# -p, --ports       Ports to test (comma-separated, default: common ports).
-# -m, --mode        Test mode (syn, udp, http, mixed, default: mixed).
-# -r, --rate        Packets per second (default: 100).
-# -o, --output      Output directory (default: /home/bjorn/Bjorn/data/output/stress).
+"""berserker_force.py - Network stress testing via SYN/UDP/HTTP floods (scapy-based)."""
 
 import os
 import json

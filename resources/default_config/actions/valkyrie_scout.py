@@ -1,11 +1,4 @@
-# Web application scanner for discovering hidden paths and vulnerabilities.
-# Saves settings in `/home/bjorn/.settings_bjorn/valkyrie_scout_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -u, --url         Target URL to scan (overrides saved value).
-# -w, --wordlist    Path to directory wordlist (default: built-in list).
-# -o, --output      Output directory (default: /home/bjorn/Bjorn/data/output/webscan).
-# -t, --threads     Number of concurrent threads (default: 10).
-# -d, --delay       Delay between requests in seconds (default: 0.1).
+"""valkyrie_scout.py - Web app scanner for hidden paths and directory enumeration."""
 
 import os
 import json

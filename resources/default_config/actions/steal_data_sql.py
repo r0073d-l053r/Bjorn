@@ -1,13 +1,4 @@
-"""
-steal_data_sql.py — SQL data looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (SQLBruteforce).
-- DB.creds (service='sql') provides (user,password, database?).
-- We connect first without DB to enumerate tables (excluding system schemas),
-  then connect per schema to export CSVs.
-- Output under: {data_stolen_dir}/sql/{mac}_{ip}/{schema}/{schema_table}.csv
-"""
+"""steal_data_sql.py - SQL data exfiltration: enumerate schemas and dump tables to CSV."""
 
 import os
 import logging

@@ -1,6 +1,4 @@
-"""
-Sentinel web API endpoints.
-"""
+"""sentinel_utils.py - Sentinel web API endpoints."""
 import json
 import logging
 from typing import Dict
@@ -21,7 +19,7 @@ class SentinelUtils:
     # ── GET endpoints (handler signature) ───────────────────────────────
 
     def get_status(self, handler):
-        """GET /api/sentinel/status — overall sentinel state + unread count."""
+        """GET /api/sentinel/status - overall sentinel state + unread count."""
         engine = self._engine
         if engine:
             data = engine.get_status()
@@ -30,7 +28,7 @@ class SentinelUtils:
         self._send_json(handler, data)
 
     def get_events(self, handler):
-        """GET /api/sentinel/events — recent events with optional filters."""
+        """GET /api/sentinel/events - recent events with optional filters."""
         try:
             from urllib.parse import urlparse, parse_qs
             qs = parse_qs(urlparse(handler.path).query)
@@ -68,7 +66,7 @@ class SentinelUtils:
         return sql, params
 
     def get_rules(self, handler):
-        """GET /api/sentinel/rules — all rules."""
+        """GET /api/sentinel/rules - all rules."""
         try:
             rows = self.shared_data.db.query(
                 "SELECT * FROM sentinel_rules ORDER BY id"
@@ -79,7 +77,7 @@ class SentinelUtils:
             self._send_json(handler, {"rules": []})
 
     def get_devices(self, handler):
-        """GET /api/sentinel/devices — known device baselines."""
+        """GET /api/sentinel/devices - known device baselines."""
         try:
             rows = self.shared_data.db.query(
                 "SELECT * FROM sentinel_devices ORDER BY last_seen DESC"
@@ -90,7 +88,7 @@ class SentinelUtils:
             self._send_json(handler, {"devices": []})
 
     def get_arp_table(self, handler):
-        """GET /api/sentinel/arp — ARP cache for spoof analysis."""
+        """GET /api/sentinel/arp - ARP cache for spoof analysis."""
         try:
             rows = self.shared_data.db.query(
                 "SELECT * FROM sentinel_arp_cache ORDER BY last_seen DESC LIMIT 200"
@@ -103,7 +101,7 @@ class SentinelUtils:
     # ── POST endpoints (JSON data signature) ────────────────────────────
 
     def toggle_sentinel(self, data: Dict) -> Dict:
-        """POST /api/sentinel/toggle — enable/disable sentinel."""
+        """POST /api/sentinel/toggle - enable/disable sentinel."""
         enabled = bool(data.get("enabled", False))
         self.shared_data.sentinel_enabled = enabled
         engine = self._engine
@@ -115,7 +113,7 @@ class SentinelUtils:
         return {"status": "ok", "enabled": enabled}
 
     def acknowledge_event(self, data: Dict) -> Dict:
-        """POST /api/sentinel/ack — acknowledge single or all events."""
+        """POST /api/sentinel/ack - acknowledge single or all events."""
         try:
             event_id = data.get("id")
             if data.get("all"):
@@ -134,7 +132,7 @@ class SentinelUtils:
             return {"status": "error", "message": str(e)}
 
     def clear_events(self, data: Dict) -> Dict:
-        """POST /api/sentinel/clear — clear all events."""
+        """POST /api/sentinel/clear - clear all events."""
         try:
             self.shared_data.db.execute("DELETE FROM sentinel_events")
             return {"status": "ok", "message": "Events cleared"}
@@ -142,7 +140,7 @@ class SentinelUtils:
             return {"status": "error", "message": str(e)}
 
     def upsert_rule(self, data: Dict) -> Dict:
-        """POST /api/sentinel/rule — create or update a rule."""
+        """POST /api/sentinel/rule - create or update a rule."""
         try:
             rule = data.get("rule", data)
             if not rule.get("name") or not rule.get("trigger_type"):
@@ -182,7 +180,7 @@ class SentinelUtils:
             return {"status": "error", "message": str(e)}
 
     def delete_rule(self, data: Dict) -> Dict:
-        """POST /api/sentinel/rule/delete — delete a rule."""
+        """POST /api/sentinel/rule/delete - delete a rule."""
         try:
             rule_id = data.get("id")
             if not rule_id:
@@ -195,7 +193,7 @@ class SentinelUtils:
             return {"status": "error", "message": str(e)}
 
     def update_device(self, data: Dict) -> Dict:
-        """POST /api/sentinel/device — update device baseline."""
+        """POST /api/sentinel/device - update device baseline."""
         try:
             mac = data.get("mac_address", "").lower()
             if not mac:
@@ -232,7 +230,7 @@ class SentinelUtils:
     }
 
     def get_notifier_config(self, handler) -> None:
-        """GET /api/sentinel/notifiers — return current notifier config."""
+        """GET /api/sentinel/notifiers - return current notifier config."""
         cfg = self.shared_data.config
         notifiers = {}
         for frontend_key, cfg_key in self._NOTIFIER_KEY_MAP.items():
@@ -242,7 +240,7 @@ class SentinelUtils:
         self._send_json(handler, {"status": "ok", "notifiers": notifiers})
 
     def save_notifier_config(self, data: Dict) -> Dict:
-        """POST /api/sentinel/notifiers — save notification channel config."""
+        """POST /api/sentinel/notifiers - save notification channel config."""
         try:
             notifiers = data.get("notifiers", {})
             cfg = self.shared_data.config
@@ -288,7 +286,7 @@ class SentinelUtils:
     # ── LLM-powered endpoints ────────────────────────────────────────────
 
     def analyze_events(self, data: Dict) -> Dict:
-        """POST /api/sentinel/analyze — AI analysis of selected events."""
+        """POST /api/sentinel/analyze - AI analysis of selected events."""
         try:
             event_ids = data.get("event_ids", [])
             if not event_ids:
@@ -356,7 +354,7 @@ class SentinelUtils:
             return {"status": "error", "message": str(e)}
 
     def summarize_events(self, data: Dict) -> Dict:
-        """POST /api/sentinel/summarize — AI summary of recent unread events."""
+        """POST /api/sentinel/summarize - AI summary of recent unread events."""
         try:
             limit = min(int(data.get("limit", 50)), 100)
             rows = self.shared_data.db.query(
@@ -374,7 +372,7 @@ class SentinelUtils:
             system = (
                 "You are a cybersecurity analyst. Summarize the security events below. "
                 "Group by type, identify patterns, flag critical items. "
-                "Be concise — max 200 words. Use bullet points."
+                "Be concise - max 200 words. Use bullet points."
             )
 
             prompt = (
@@ -396,7 +394,7 @@ class SentinelUtils:
             return {"status": "error", "message": str(e)}
 
     def suggest_rule(self, data: Dict) -> Dict:
-        """POST /api/sentinel/suggest-rule — AI generates a rule from description."""
+        """POST /api/sentinel/suggest-rule - AI generates a rule from description."""
         try:
             description = (data.get("description") or "").strip()
             if not description:

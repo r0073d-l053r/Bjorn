@@ -1,12 +1,4 @@
-"""
-steal_files_telnet.py — Telnet file looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (TelnetBruteforce).
-- Credentials read from DB.creds (service='telnet'); we try each pair.
-- Files found via 'find / -type f', then retrieved with 'cat'.
-- Output under: {data_stolen_dir}/telnet/{mac}_{ip}/...
-"""
+"""steal_files_telnet.py - Telnet file exfiltration using DB creds from TelnetBruteforce."""
 
 import os
 import telnetlib
@@ -110,7 +102,7 @@ class StealFilesTelnet:
             if password:
                 tn.read_until(b"Password: ", timeout=5)
                 tn.write(password.encode('ascii') + b"\n")
-            # prompt detection (naïf mais identique à l'original)
+            # Naive prompt detection (same as original)
             time.sleep(2)
             self.telnet_connected = True
             logger.info(f"Connected to {ip} via Telnet as {username}")

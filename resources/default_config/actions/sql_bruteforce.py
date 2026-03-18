@@ -1,11 +1,4 @@
-"""
-sql_bruteforce.py — MySQL bruteforce (DB-backed, no CSV/JSON, no rich)
-- Cibles: (ip, port) par l’orchestrateur
-- IP -> (MAC, hostname) via DB.hosts
-- Connexion sans DB puis SHOW DATABASES; une entrée par DB trouvée
-- Succès -> DB.creds (service='sql', database=<db>)
-- Conserve la logique (pymysql, queue/threads)
-"""
+"""sql_bruteforce.py - MySQL bruteforce with per-database credential storage (pymysql)."""
 
 import os
 import pymysql
@@ -28,11 +21,11 @@ b_parent = None
 b_service = '["sql"]'
 b_trigger = 'on_any:["on_service:sql","on_new_port:3306"]'
 b_priority = 70  
-b_cooldown = 1800            # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_cooldown = 1800            # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
 
 class SQLBruteforce:
-    """Wrapper orchestrateur -> SQLConnector."""
+    """Orchestrator wrapper -> SQLConnector."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
@@ -40,22 +33,21 @@ class SQLBruteforce:
         logger.info("SQLConnector initialized.")
 
     def bruteforce_sql(self, ip, port):
-        """Lance le bruteforce SQL pour (ip, port)."""
+        """Run SQL bruteforce for (ip, port)."""
         return self.sql_bruteforce.run_bruteforce(ip, port)
 
     def execute(self, ip, port, row, status_key):
-        """Point d’entrée orchestrateur (retour 'success' / 'failed')."""
+        """Orchestrator entry point (returns ‘success’ / ‘failed’)."""
         success, results = self.bruteforce_sql(ip, port)
         return 'success' if success else 'failed'
 
 
 class SQLConnector:
-    """Gère les tentatives SQL (MySQL), persistance DB, mapping IP→(MAC, Hostname)."""
+    """Handles SQL (MySQL) attempts, DB persistence, IP->(MAC, Hostname) mapping."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
 
-        # Wordlists inchangées
         self.users = self._read_lines(shared_data.users_file)
         self.passwords = self._read_lines(shared_data.passwords_file)
 
@@ -67,7 +59,7 @@ class SQLConnector:
         self.results: List[List[str]] = []  # [ip, user, password, port, database, mac, hostname]
         self.queue = Queue()
 
-    # ---------- util fichiers ----------
+    # ---------- file utils ----------
     @staticmethod
     def _read_lines(path: str) -> List[str]:
         try:
@@ -111,7 +103,7 @@ class SQLConnector:
     # ---------- SQL ----------
     def sql_connect(self, adresse_ip: str, user: str, password: str):
         """
-        Connexion sans DB puis SHOW DATABASES; retourne (True, [dbs]) ou (False, []).
+        Connect without DB then SHOW DATABASES; returns (True, [dbs]) or (False, []).
         """
         try:
             conn = pymysql.connect(
@@ -242,7 +234,7 @@ class SQLConnector:
 
     # ---------- persistence DB ----------
     def save_results(self):
-        # pour chaque DB trouvée, créer/mettre à jour une ligne dans creds (service='sql', database=<dbname>)
+        # For each discovered DB, create/update a row in creds (service='sql', database=<dbname>)
         for ip, user, password, port, dbname in self.results:
             mac = self.mac_for_ip(ip)
             hostname = self.hostname_for_ip(ip) or ""
@@ -269,7 +261,7 @@ class SQLConnector:
         self.results = []
 
     def remove_duplicates(self):
-        # inutile avec l’index unique; conservé pour compat.
+        # No longer needed with unique index; kept for compat
         pass
 
 

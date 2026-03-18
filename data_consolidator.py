@@ -1,21 +1,4 @@
-"""
-data_consolidator.py - Data Consolidation Engine for Deep Learning
-═══════════════════════════════════════════════════════════════════════════
-
-Purpose:
-    Consolidate logged features into training-ready datasets.
-    Prepare data exports for deep learning on external PC.
-
-Features:
-    - Aggregate features across time windows
-    - Compute statistical features
-    - Create feature vectors for neural networks
-    - Export in formats ready for TensorFlow/PyTorch
-    - Incremental consolidation (low memory footprint)
-
-Author: Bjorn Team
-Version: 2.0.0
-"""
+"""data_consolidator.py - Aggregate logged features into training-ready datasets for export."""
 
 import json
 import csv
@@ -195,7 +178,7 @@ class DataConsolidator:
         Computes statistical features and feature vectors.
         """
         try:
-            # Parse JSON fields once — reused by _build_feature_vector to avoid double-parsing
+            # Parse JSON fields once - reused by _build_feature_vector to avoid double-parsing
             host_features = json.loads(record.get('host_features', '{}'))
             network_features = json.loads(record.get('network_features', '{}'))
             temporal_features = json.loads(record.get('temporal_features', '{}'))
@@ -209,7 +192,7 @@ class DataConsolidator:
                 **action_features
             }
 
-            # Build numerical feature vector — pass already-parsed dicts to avoid re-parsing
+            # Build numerical feature vector - pass already-parsed dicts to avoid re-parsing
             feature_vector = self._build_feature_vector(
                 host_features, network_features, temporal_features, action_features
             )
@@ -484,7 +467,7 @@ class DataConsolidator:
             else:
                 raise ValueError(f"Unsupported format: {format}")
 
-            # Free the large records list immediately after export — record_ids is all we still need
+            # Free the large records list immediately after export - record_ids is all we still need
             del records
 
             # AI-01: Write feature manifest with variance-filtered feature names

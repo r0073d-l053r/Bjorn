@@ -1,13 +1,7 @@
-# scanning.py – Network scanner (DB-first, no stubs)
-# - Host discovery (nmap -sn -PR)
-# - Resolve MAC/hostname (ThreadPoolExecutor) -> DB (hosts table)
-# - Port scan (ThreadPoolExecutor) -> DB (merge ports by MAC)
-# - Mark alive=0 for hosts not seen this run
-# - Update stats (stats table)
-# - Light logging (milestones) without flooding
-# - WAL checkpoint(TRUNCATE) + PRAGMA optimize at end of scan
-# - No DB insert without a real MAC. Unresolved IPs are kept in-memory.
-# - RPi Zero optimized: bounded thread pools, reduced retries, adaptive concurrency
+"""scanning.py - Network scanner: host discovery, MAC/hostname resolution, and port scanning.
+
+DB-first design - all results go straight to SQLite. RPi Zero optimized.
+"""
 
 import os
 import re
@@ -38,6 +32,18 @@ b_priority = 1
 b_action = "global"
 b_trigger = "on_interval:180"
 b_requires = '{"max_concurrent": 1}'
+b_enabled = 1
+b_timeout = 300
+b_max_retries = 1
+b_stealth_level = 3
+b_risk_level = "low"
+b_tags = ["scan", "discovery", "network", "nmap"]
+b_category = "recon"
+b_name = "Network Scanner"
+b_description = "Host discovery, MAC/hostname resolution, and port scanning via nmap."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "NetworkScanner.png"
 
 # --- Module-level constants (avoid re-creating per call) ---
 _MAC_RE = re.compile(r'([0-9A-Fa-f]{2})([-:])(?:[0-9A-Fa-f]{2}\2){4}[0-9A-Fa-f]{2}')

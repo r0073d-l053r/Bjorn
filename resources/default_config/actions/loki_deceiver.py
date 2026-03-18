@@ -1,11 +1,4 @@
-# WiFi deception tool for creating malicious access points and capturing authentications.
-# Saves settings in `/home/bjorn/.settings_bjorn/loki_deceiver_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -i, --interface    Wireless interface for AP creation (default: wlan0).
-# -s, --ssid        SSID for the fake access point (or target to clone).
-# -c, --channel     WiFi channel (default: 6).
-# -p, --password    Optional password for WPA2 AP.
-# -o, --output      Output directory (default: /home/bjorn/Bjorn/data/output/wifi).
+"""loki_deceiver.py - Rogue AP creation and WiFi auth capture (scapy/hostapd)."""
 
 import os
 import json

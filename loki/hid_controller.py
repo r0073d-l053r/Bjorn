@@ -1,5 +1,5 @@
-"""
-Low-level USB HID controller for Loki.
+"""hid_controller.py - Low-level USB HID controller for Loki.
+
 Writes keyboard and mouse reports to /dev/hidg0 and /dev/hidg1.
 """
 import os
@@ -16,7 +16,7 @@ from loki.layouts import load as load_layout
 logger = Logger(name="loki.hid_controller", level=logging.DEBUG)
 
 # ── HID Keycodes ──────────────────────────────────────────────
-# USB HID Usage Tables — Keyboard/Keypad Page (0x07)
+# USB HID Usage Tables - Keyboard/Keypad Page (0x07)
 
 KEY_NONE = 0x00
 KEY_A = 0x04

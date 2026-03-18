@@ -1,12 +1,4 @@
-"""
-steal_files_ftp.py — FTP file looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (FTPBruteforce).
-- FTP credentials are read from DB.creds (service='ftp'); anonymous is also tried.
-- IP -> (MAC, hostname) via DB.hosts.
-- Loot saved under: {data_stolen_dir}/ftp/{mac}_{ip}/(anonymous|<username>)/...
-"""
+"""steal_files_ftp.py - Loot files from FTP servers using cracked or anonymous credentials."""
 
 import os
 import logging
@@ -26,6 +18,24 @@ b_module = "steal_files_ftp"
 b_status = "steal_files_ftp"
 b_parent = "FTPBruteforce"
 b_port   = 21
+b_enabled = 1
+b_action = "normal"
+b_service = '["ftp"]'
+b_trigger = 'on_any:["on_cred_found:ftp","on_service:ftp"]'
+b_requires = '{"all":[{"has_cred":"ftp"},{"has_port":21}]}'
+b_priority = 60
+b_cooldown = 3600
+b_timeout = 600
+b_stealth_level = 5
+b_risk_level = "high"
+b_max_retries = 1
+b_tags = ["exfil", "ftp", "loot", "files"]
+b_category = "exfiltration"
+b_name = "Steal Files FTP"
+b_description = "Loot files from FTP servers using cracked or anonymous credentials."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "StealFilesFTP.png"
 
 
 class StealFilesFTP:
@@ -108,7 +118,7 @@ class StealFilesFTP:
         return out
 
     # -------- FTP helpers --------
-    # Max file size to download (10 MB) — protects RPi Zero RAM
+    # Max file size to download (10 MB) - protects RPi Zero RAM
     _MAX_FILE_SIZE = 10 * 1024 * 1024
     # Max recursion depth for directory traversal (avoids symlink loops)
     _MAX_DEPTH = 5
@@ -180,6 +190,8 @@ class StealFilesFTP:
         timer = None
         try:
             self.shared_data.bjorn_orch_status = b_class
+            # EPD live status
+            self.shared_data.comment_params = {"ip": ip, "port": str(port), "files": "0"}
             try:
                 port_i = int(port)
             except Exception:
@@ -268,5 +280,6 @@ class StealFilesFTP:
             logger.error(f"Unexpected error during execution for {ip}:{port}: {e}")
             return 'failed'
         finally:
+            self.shared_data.bjorn_progress = ""
             if timer:
                 timer.cancel()

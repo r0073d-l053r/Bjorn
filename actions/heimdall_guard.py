@@ -119,6 +119,14 @@ class HeimdallGuard:
         return packet
 
     def execute(self, ip, port, row, status_key) -> str:
+        if not HAS_SCAPY:
+            logger.error("HeimdallGuard requires scapy but it is not installed.")
+            return "failed"
+
+        # Reset per-run state
+        self.stats = {'packets_processed': 0, 'packets_fragmented': 0, 'timing_adjustments': 0}
+        self.packet_queue.clear()
+
         iface = getattr(self.shared_data, "heimdall_guard_interface", conf.iface)
         mode = getattr(self.shared_data, "heimdall_guard_mode", "all")
         delay = float(getattr(self.shared_data, "heimdall_guard_delay", 1.0))
@@ -126,6 +134,8 @@ class HeimdallGuard:
         
         logger.info(f"HeimdallGuard: Engaging stealth mode ({mode}) on {iface}")
         self.shared_data.log_milestone(b_class, "StealthActive", f"Mode: {mode}")
+        # EPD live status
+        self.shared_data.comment_params = {"ip": ip, "mode": mode, "iface": iface}
 
         self.active = True
         start_time = time.time()
@@ -133,11 +143,9 @@ class HeimdallGuard:
         try:
             while time.time() - start_time < timeout:
                 if self.shared_data.orchestrator_should_exit:
-                    break
-                
-                # In a real scenario, this would be hooking into a packet stream
-                # For this action, we simulate protection state
-                
+                    logger.info("HeimdallGuard: Interrupted by orchestrator.")
+                    return "interrupted"
+
                 # Progress reporting
                 elapsed = int(time.time() - start_time)
                 prog = int((elapsed / timeout) * 100)
@@ -158,7 +166,9 @@ class HeimdallGuard:
             return "failed"
         finally:
             self.active = False
-            
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}
+
         return "success"
 
 if __name__ == "__main__":

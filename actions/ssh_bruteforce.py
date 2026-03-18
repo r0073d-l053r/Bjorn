@@ -1,15 +1,4 @@
-"""
-ssh_bruteforce.py - This script performs a brute force attack on SSH services (port 22)
-to find accessible accounts using various user credentials. It logs the results of
-successful connections.
-
-SQL version (minimal changes):
-- Targets still provided by the orchestrator (ip + port)
-- IP -> (MAC, hostname) mapping read from DB 'hosts'
-- Successes saved into DB.creds (service='ssh') with robust fallback upsert
-- Action status recorded in DB.action_results (via SSHBruteforce.execute)
-- Paramiko noise silenced; ssh.connect avoids agent/keys to reduce hangs
-"""
+"""ssh_bruteforce.py - Threaded SSH credential bruteforcer via paramiko."""
 
 import os
 import paramiko
@@ -24,7 +13,6 @@ from shared import SharedData
 from actions.bruteforce_common import ProgressTracker, merged_password_plan
 from logger import Logger
 
-# Configure the logger
 logger = Logger(name="ssh_bruteforce.py", level=logging.DEBUG)
 
 # Silence Paramiko internals
@@ -32,7 +20,6 @@ for _name in ("paramiko", "paramiko.transport", "paramiko.client", "paramiko.hos
               "paramiko.kex", "paramiko.auth_handler"):
     logging.getLogger(_name).setLevel(logging.CRITICAL)
 
-# Define the necessary global variables
 b_class   = "SSHBruteforce"
 b_module  = "ssh_bruteforce"
 b_status  = "brute_force_ssh"
@@ -40,9 +27,22 @@ b_port    = 22
 b_service = '["ssh"]'
 b_trigger = 'on_any:["on_service:ssh","on_new_port:22"]'
 b_parent  = None
-b_priority = 70   # tu peux ajuster la priorité si besoin
-b_cooldown = 1800            # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_priority = 70
+b_cooldown = 1800            # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
+b_enabled = 1
+b_action = "normal"
+b_timeout = 600
+b_max_retries = 2
+b_stealth_level = 3
+b_risk_level = "medium"
+b_tags = ["bruteforce", "ssh", "credentials"]
+b_category = "exploitation"
+b_name = "SSH Bruteforce"
+b_description = "Threaded SSH credential bruteforcer via paramiko with dictionary and exhaustive modes."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "SSHBruteforce.png"
 
 
 class SSHBruteforce:
@@ -298,6 +298,19 @@ class SSHConnector:
                 t = threading.Thread(target=self.worker, args=(success_flag,), daemon=True)
                 t.start()
                 threads.append(t)
+
+            # Drain queue if orchestrator exit is requested, to unblock join
+            while not self.queue.empty():
+                if self.shared_data.orchestrator_should_exit:
+                    # Discard remaining items so workers can finish
+                    while not self.queue.empty():
+                        try:
+                            self.queue.get_nowait()
+                            self.queue.task_done()
+                        except Exception:
+                            break
+                    break
+                time.sleep(0.5)
             self.queue.join()
             for t in threads:
                 t.join()

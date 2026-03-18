@@ -1,5 +1,5 @@
-"""
-Keyboard layout loader for Loki HID subsystem.
+"""__init__.py - Keyboard layout loader for Loki HID subsystem.
+
 Caches loaded layouts in memory.
 """
 import json

@@ -1,8 +1,4 @@
-# web_utils/orchestrator_utils.py
-"""
-Orchestrator management utilities.
-Handles attack execution, scanning, and credential management.
-"""
+"""orchestrator_utils.py - Attack execution, scanning, and credential management."""
 from __future__ import annotations
 import json
 import html

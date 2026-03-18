@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-web_login_profiler.py — Lightweight web login profiler (Pi Zero friendly).
-
-Goal:
-- Profile web endpoints to detect login surfaces and defensive controls (no password guessing).
-- Store findings into DB table `webenum` (tool='login_profiler') for community visibility.
-- Update EPD UI fields: bjorn_orch_status, bjorn_status_text2, comment_params, bjorn_progress.
-"""
+"""web_login_profiler.py - Detect login forms and auth controls on web endpoints (no exploitation)."""
 
 import json
 import logging
@@ -35,6 +28,17 @@ b_action = "normal"
 b_cooldown = 1800
 b_rate_limit = "6/86400"
 b_enabled = 1
+b_timeout = 300
+b_max_retries = 2
+b_stealth_level = 5
+b_risk_level = "low"
+b_tags = ["web", "login", "auth", "profiler"]
+b_category = "recon"
+b_name = "Web Login Profiler"
+b_description = "Detects login forms and auth controls on web endpoints."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "WebLoginProfiler.png"
 
 # Small curated list, cheap but high signal.
 DEFAULT_PATHS = [
@@ -309,6 +313,9 @@ class WebLoginProfiler:
             # "success" means: profiler ran; not that a login exists.
             logger.info(f"WebLoginProfiler done for {ip}:{port_i} (login_surfaces={found_login})")
             return "success"
+        except Exception as e:
+            logger.error(f"WebLoginProfiler failed for {ip}:{port_i}: {e}")
+            return "failed"
         finally:
             self.shared_data.bjorn_progress = ""
             self.shared_data.comment_params = {}

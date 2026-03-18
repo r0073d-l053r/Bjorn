@@ -1,5 +1,4 @@
-# db_utils/config.py
-# Configuration management operations
+"""config.py - Configuration management operations."""
 
 import json
 import ast

@@ -1,7 +1,4 @@
-﻿# display.py
-# Core component for managing the E-Paper Display (EPD) and Web Interface Screenshot
-# OPTIMIZED FOR PI ZERO 2: Asynchronous Rendering, Text Caching, and I/O Throttling.
-# FULL VERSION - NO LOGIC REMOVED
+﻿"""display.py - E-paper display renderer and web screenshot generator."""
 
 import math
 import threading
@@ -704,7 +701,7 @@ class Display:
                     break
 
     def _draw_system_histogram(self, image: Image.Image, draw: ImageDraw.Draw):
-        # Vertical bars at the bottom-left — positions from layout
+        # Vertical bars at the bottom-left - positions from layout
         mem_hist = self.layout.get('mem_histogram')
         cpu_hist = self.layout.get('cpu_histogram')
 
@@ -1026,7 +1023,7 @@ class Display:
                 self._comment_layout_cache["key"] != key or
                 (now - self._comment_layout_cache["ts"]) >= self._comment_layout_min_interval
             ):
-                # J'ai aussi augmenté la largeur disponible (width - 2) puisque l'on se colle au bord
+                # Use (width - 2) since text hugs the edge
                 lines = self.shared_data.wrap_text(
                     self.shared_data.bjorn_says,
                     self.shared_data.font_arialbold,

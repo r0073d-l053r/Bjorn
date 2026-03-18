@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-web_enum.py — Gobuster Web Enumeration -> DB writer for table `webenum`.
-
-- Writes each finding into the `webenum` table
-- ON CONFLICT(mac_address, ip, port, directory) DO UPDATE
-- Respects orchestrator stop flag (shared_data.orchestrator_should_exit)
-- No filesystem output: parse Gobuster stdout directly
-"""
+"""web_enum.py - Gobuster-based web directory enumeration, results written to DB."""
 
 import re
 import socket

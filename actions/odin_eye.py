@@ -179,6 +179,10 @@ class OdinEye:
 
     def execute(self, ip, port, row, status_key) -> str:
         """Standard entry point."""
+        # Reset per-run state to prevent accumulation across reused instances
+        self.credentials.clear()
+        self.statistics.clear()
+
         iface = getattr(self.shared_data, "odin_eye_interface", "auto")
         if iface == "auto":
             iface = None # pyshark handles None as default
@@ -186,10 +190,17 @@ class OdinEye:
         bpf_filter = getattr(self.shared_data, "odin_eye_filter", b_args["filter"]["default"])
         max_pkts = int(getattr(self.shared_data, "odin_eye_max_packets", 1000))
         timeout = int(getattr(self.shared_data, "odin_eye_timeout", 300))
-        output_dir = getattr(self.shared_data, "odin_eye_output", "/home/bjorn/Bjorn/data/output/packets")
+        _fallback_dir = os.path.join(getattr(self.shared_data, "data_dir", "/home/bjorn/Bjorn/data"), "output", "packets")
+        output_dir = getattr(self.shared_data, "odin_eye_output", _fallback_dir)
 
         logger.info(f"OdinEye: Starting capture on {iface or 'default'} (filter: {bpf_filter})")
         self.shared_data.log_milestone(b_class, "Startup", f"Sniffing on {iface or 'any'}")
+        # EPD live status
+        self.shared_data.comment_params = {"iface": iface or "any", "filter": bpf_filter[:30]}
+
+        if not HAS_PYSHARK:
+            logger.error("OdinEye requires pyshark but it is not installed.")
+            return "failed"
 
         try:
             self.capture = pyshark.LiveCapture(interface=iface, bpf_filter=bpf_filter)
@@ -217,6 +228,8 @@ class OdinEye:
                 if packet_count % 50 == 0:
                     prog = int((packet_count / max_pkts) * 100)
                     self.shared_data.bjorn_progress = f"{prog}%"
+                    # EPD live status update
+                    self.shared_data.comment_params = {"packets": str(packet_count), "creds": str(len(self.credentials))}
                     self.shared_data.log_milestone(b_class, "Status", f"Captured {packet_count} packets")
 
         except Exception as e:
@@ -226,7 +239,7 @@ class OdinEye:
         finally:
             if self.capture:
                 try: self.capture.close()
-                except: pass
+                except Exception: pass
             
             # Save results
             if self.credentials or self.statistics['total_packets'] > 0:
@@ -238,6 +251,8 @@ class OdinEye:
                         "credentials": self.credentials
                     }, f, indent=4)
                 self.shared_data.log_milestone(b_class, "Complete", f"Capture finished. {len(self.credentials)} creds found.")
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}
 
         return "success"
 

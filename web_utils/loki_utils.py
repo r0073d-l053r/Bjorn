@@ -1,6 +1,4 @@
-"""
-Loki web API endpoints.
-"""
+"""loki_utils.py - Loki web API endpoints."""
 import os
 import json
 import logging
@@ -23,7 +21,7 @@ class LokiUtils:
     # ── GET endpoints (handler signature) ─────────────────────
 
     def get_status(self, handler):
-        """GET /api/loki/status — engine state."""
+        """GET /api/loki/status - engine state."""
         engine = self._engine
         if engine:
             data = engine.get_status()
@@ -36,7 +34,7 @@ class LokiUtils:
         self._send_json(handler, data)
 
     def get_scripts(self, handler):
-        """GET /api/loki/scripts — user-saved scripts."""
+        """GET /api/loki/scripts - user-saved scripts."""
         try:
             rows = self.shared_data.db.query(
                 "SELECT id, name, description, category, target_os, "
@@ -48,7 +46,7 @@ class LokiUtils:
             self._send_json(handler, {'scripts': []})
 
     def get_script(self, handler):
-        """GET /api/loki/script?id=N — single script with content."""
+        """GET /api/loki/script?id=N - single script with content."""
         try:
             qs = parse_qs(urlparse(handler.path).query)
             script_id = int(qs.get('id', [0])[0])
@@ -64,7 +62,7 @@ class LokiUtils:
             self._send_json(handler, {'error': str(e)}, 500)
 
     def get_jobs(self, handler):
-        """GET /api/loki/jobs — job list."""
+        """GET /api/loki/jobs - job list."""
         engine = self._engine
         if engine:
             jobs = engine.get_jobs()
@@ -73,7 +71,7 @@ class LokiUtils:
         self._send_json(handler, {'jobs': jobs})
 
     def get_payloads(self, handler):
-        """GET /api/loki/payloads — built-in payload list."""
+        """GET /api/loki/payloads - built-in payload list."""
         payloads = []
         payload_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -104,7 +102,7 @@ class LokiUtils:
         self._send_json(handler, {'payloads': payloads})
 
     def get_layouts(self, handler):
-        """GET /api/loki/layouts — available keyboard layouts."""
+        """GET /api/loki/layouts - available keyboard layouts."""
         try:
             from loki.layouts import available
             layouts = available()
@@ -115,7 +113,7 @@ class LokiUtils:
     # ── POST endpoints (JSON data signature) ──────────────────
 
     def toggle_loki(self, data: Dict) -> Dict:
-        """POST /api/loki/toggle — switch to/from LOKI mode."""
+        """POST /api/loki/toggle - switch to/from LOKI mode."""
         enabled = bool(data.get('enabled', False))
         if enabled:
             self.shared_data.operation_mode = "LOKI"
@@ -124,7 +122,7 @@ class LokiUtils:
         return {'status': 'ok', 'enabled': enabled}
 
     def save_script(self, data: Dict) -> Dict:
-        """POST /api/loki/script/save — save/update a script."""
+        """POST /api/loki/script/save - save/update a script."""
         try:
             script_id = data.get('id')
             name = data.get('name', '').strip()
@@ -154,7 +152,7 @@ class LokiUtils:
             return {'status': 'error', 'message': str(e)}
 
     def delete_script(self, data: Dict) -> Dict:
-        """POST /api/loki/script/delete — delete a script."""
+        """POST /api/loki/script/delete - delete a script."""
         try:
             script_id = data.get('id')
             if script_id:
@@ -166,7 +164,7 @@ class LokiUtils:
             return {'status': 'error', 'message': str(e)}
 
     def run_script(self, data: Dict) -> Dict:
-        """POST /api/loki/script/run — execute a HIDScript."""
+        """POST /api/loki/script/run - execute a HIDScript."""
         engine = self._engine
         if not engine:
             return {'status': 'error', 'message': 'Loki engine not available'}
@@ -185,7 +183,7 @@ class LokiUtils:
             return {'status': 'error', 'message': str(e)}
 
     def cancel_job(self, data: Dict) -> Dict:
-        """POST /api/loki/job/cancel — cancel a running job."""
+        """POST /api/loki/job/cancel - cancel a running job."""
         engine = self._engine
         if not engine:
             return {'status': 'error', 'message': 'Loki engine not available'}
@@ -195,20 +193,20 @@ class LokiUtils:
         return {'status': 'error', 'message': 'Job not found'}
 
     def clear_jobs(self, data: Dict) -> Dict:
-        """POST /api/loki/jobs/clear — clear completed jobs."""
+        """POST /api/loki/jobs/clear - clear completed jobs."""
         engine = self._engine
         if engine and engine._jobs:
             engine.job_manager.clear_completed()
         return {'status': 'ok'}
 
     def install_gadget(self, data: Dict) -> Dict:
-        """POST /api/loki/install — install HID gadget boot script."""
+        """POST /api/loki/install - install HID gadget boot script."""
         from loki import LokiEngine
         result = LokiEngine.install_hid_gadget()
         return result
 
     def reboot(self, data: Dict) -> Dict:
-        """POST /api/loki/reboot — reboot the Pi to activate HID gadget."""
+        """POST /api/loki/reboot - reboot the Pi to activate HID gadget."""
         import subprocess
         try:
             logger.info("Reboot requested by Loki setup")
@@ -218,7 +216,7 @@ class LokiUtils:
             return {'status': 'error', 'message': str(e)}
 
     def quick_type(self, data: Dict) -> Dict:
-        """POST /api/loki/quick — quick-type text without a full script."""
+        """POST /api/loki/quick - quick-type text without a full script."""
         engine = self._engine
         if not engine or not engine._running:
             return {'status': 'error', 'message': 'Loki not running'}

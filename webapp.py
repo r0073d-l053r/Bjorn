@@ -1,15 +1,14 @@
-"""
-Web Application Server for Bjorn
-Handles HTTP requests with optional authentication, gzip compression, and routing.
-OPTIMIZED FOR PI ZERO 2: Timeouts, Daemon Threads, Memory Protection, and Log Filtering.
-"""
+"""webapp.py - HTTP server with auth, gzip, and routing for the Bjorn web UI."""
 
 import gzip
+import hashlib
+import hmac
 import http.server
 import io
 import json
 import logging
 import os
+import secrets
 import signal
 import socket
 import socketserver
@@ -23,6 +22,101 @@ from urllib.parse import unquote
 from init_shared import shared_data
 from logger import Logger
 from utils import WebUtils
+
+
+# ============================================================================
+# AUTH HARDENING — password hashing & signed session tokens
+# ============================================================================
+
+# Server-wide secret for HMAC-signed session cookies (regenerated each startup)
+_SESSION_SECRET = secrets.token_bytes(32)
+# Active session tokens (server-side set; cleared on logout)
+_active_sessions: set = set()
+_session_lock = threading.Lock()
+
+
+def _hash_password(password: str, salt: str = None) -> dict:
+    """Hash a password with SHA-256 + random salt. Returns {"hash": ..., "salt": ...}."""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    h = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    return {"hash": h, "salt": salt}
+
+
+def _verify_password(password: str, stored_hash: str, salt: str) -> bool:
+    """Verify a password against stored hash+salt."""
+    h = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    return hmac.compare_digest(h, stored_hash)
+
+
+def _make_session_token() -> str:
+    """Create a cryptographically signed session token."""
+    nonce = secrets.token_hex(16)
+    sig = hmac.new(_SESSION_SECRET, nonce.encode(), hashlib.sha256).hexdigest()[:16]
+    token = f"{nonce}:{sig}"
+    with _session_lock:
+        _active_sessions.add(token)
+    return token
+
+
+def _validate_session_token(token: str) -> bool:
+    """Validate a session token is signed correctly AND still active."""
+    if not token or ':' not in token:
+        return False
+    parts = token.split(':', 1)
+    if len(parts) != 2:
+        return False
+    nonce, sig = parts
+    expected_sig = hmac.new(_SESSION_SECRET, nonce.encode(), hashlib.sha256).hexdigest()[:16]
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    with _session_lock:
+        return token in _active_sessions
+
+
+def _revoke_session_token(token: str):
+    """Revoke a session token (server-side invalidation)."""
+    with _session_lock:
+        _active_sessions.discard(token)
+
+
+def _ensure_password_hashed(webapp_json_path: str):
+    """
+    Auto-migrate webapp.json on first launch:
+    if 'password_hash' is absent, hash the plaintext 'password' field,
+    remove the plaintext, and rewrite the file.
+    """
+    if not os.path.exists(webapp_json_path):
+        return
+    try:
+        with open(webapp_json_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # Already migrated?
+        if 'password_hash' in config:
+            return
+
+        plaintext = config.get('password')
+        if not plaintext:
+            return
+
+        # Hash and replace
+        hashed = _hash_password(plaintext)
+        config['password_hash'] = hashed['hash']
+        config['password_salt'] = hashed['salt']
+        # Remove plaintext password
+        config.pop('password', None)
+
+        with open(webapp_json_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4)
+
+        Logger(name="webapp.py", level=logging.DEBUG).info(
+            "webapp.json: plaintext password migrated to salted hash"
+        )
+    except Exception as e:
+        Logger(name="webapp.py", level=logging.DEBUG).error(
+            f"Failed to migrate webapp.json password: {e}"
+        )
 
 # ============================================================================
 # INITIALIZATION
@@ -41,17 +135,20 @@ MAX_POST_SIZE = 5 * 1024 * 1024  # 5 MB max
 # Global WebUtils instance to prevent re-initialization per request
 web_utils_instance = WebUtils(shared_data)
 
+# Auto-migrate plaintext passwords to hashed on first launch
+_ensure_password_hashed(shared_data.webapp_json)
+
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     """
     Custom HTTP request handler with authentication, compression, and routing.
     Refactored to use dynamic routing maps and Pi Zero optimizations.
     """
 
-    # Routes built ONCE at class level (shared across all requests — saves RAM)
+    # Routes built ONCE at class level (shared across all requests - saves RAM)
     _routes_initialized = False
     GET_ROUTES = {}
     POST_ROUTES_JSON = {}        # handlers that take (data) only
-    POST_ROUTES_JSON_H = {}      # handlers that take (handler, data) — need the request handler
+    POST_ROUTES_JSON_H = {}      # handlers that take (handler, data) - need the request handler
     POST_ROUTES_MULTIPART = {}
 
     def __init__(self, *args, **kwargs):
@@ -153,6 +250,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/api/sentinel/arp': wu.sentinel.get_arp_table,
             '/api/sentinel/notifiers': wu.sentinel.get_notifier_config,
 
+            # PLUGINS
+            '/api/plugins/list': wu.plugin_utils.list_plugins,
+            '/api/plugins/config': wu.plugin_utils.get_plugin_config,
+            '/api/plugins/logs': wu.plugin_utils.get_plugin_logs,
+
             # BIFROST
             '/api/bifrost/status': wu.bifrost.get_status,
             '/api/bifrost/networks': wu.bifrost.get_networks,
@@ -207,6 +309,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/upload_files': wu.file_utils.handle_file_upload,
             '/upload_project': wu.script_utils.upload_project,
             '/upload_script': wu.script_utils.upload_script,
+            '/upload_custom_script': wu.script_utils.upload_custom_script,
+            '/api/plugins/install': wu.plugin_utils.install_plugin,
             '/clear_actions_file': wu.system_utils.clear_actions_file,
             '/clear_livestatus': wu.system_utils.clear_livestatus,
             '/clear_logs': wu.system_utils.clear_logs,
@@ -219,7 +323,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/reload_generate_actions_json': wu.index_utils.reload_generate_actions_json,
         }
 
-        # --- POST ROUTES (JSON) — data-only handlers: fn(data) ---
+        # --- POST ROUTES (JSON) - data-only handlers: fn(data) ---
         cls.POST_ROUTES_JSON = {
             # WEBENUM
             # NETWORK
@@ -268,6 +372,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             # SCRIPTS
             '/clear_script_output': wu.script_utils.clear_script_output,
             '/delete_script': wu.script_utils.delete_script,
+            '/delete_custom_script': wu.script_utils.delete_custom_script,
             '/export_script_logs': wu.script_utils.export_script_logs,
             '/get_script_output': wu.script_utils.get_script_output,
             '/run_script': wu.script_utils.run_script,
@@ -310,6 +415,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             '/api/sentinel/analyze': wu.sentinel.analyze_events,
             '/api/sentinel/summarize': wu.sentinel.summarize_events,
             '/api/sentinel/suggest-rule': wu.sentinel.suggest_rule,
+            # PLUGINS
+            '/api/plugins/toggle': wu.plugin_utils.toggle_plugin,
+            '/api/plugins/config': wu.plugin_utils.save_config,
+            '/api/plugins/uninstall': wu.plugin_utils.uninstall_plugin,
             # BIFROST
             '/api/bifrost/toggle': wu.bifrost.toggle_bifrost,
             '/api/bifrost/mode': wu.bifrost.set_mode,
@@ -333,6 +442,21 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             # MCP Server
             '/api/mcp/toggle': wu.llm_utils.toggle_mcp,
             '/api/mcp/config': wu.llm_utils.save_mcp_config,
+            # Schedules & Triggers
+            '/api/schedules/list': wu.schedule_utils.list_schedules,
+            '/api/schedules/create': wu.schedule_utils.create_schedule,
+            '/api/schedules/update': wu.schedule_utils.update_schedule,
+            '/api/schedules/delete': wu.schedule_utils.delete_schedule,
+            '/api/schedules/toggle': wu.schedule_utils.toggle_schedule,
+            '/api/triggers/list': wu.schedule_utils.list_triggers,
+            '/api/triggers/create': wu.schedule_utils.create_trigger,
+            '/api/triggers/update': wu.schedule_utils.update_trigger,
+            '/api/triggers/delete': wu.schedule_utils.delete_trigger,
+            '/api/triggers/toggle': wu.schedule_utils.toggle_trigger,
+            '/api/triggers/test': wu.schedule_utils.test_trigger,
+            # Packages
+            '/api/packages/uninstall': wu.package_utils.uninstall_package,
+            '/api/packages/list': wu.package_utils.list_packages_json,
         }
 
         if debug_enabled:
@@ -341,7 +465,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 '/api/debug/gc/collect': wu.debug_utils.force_gc,
             })
 
-        # --- POST ROUTES (JSON) — handler-aware: fn(handler, data) ---
+        # --- POST ROUTES (JSON) - handler-aware: fn(handler, data) ---
         # These need the per-request handler instance (for send_response etc.)
         cls.POST_ROUTES_JSON_H = {
             '/api/bjorn/config': lambda h, d: wu.index_utils.set_config(h, d),
@@ -440,12 +564,15 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def is_authenticated(self):
         if not self.shared_data.webauth:
             return True
-        return self.get_cookie('authenticated') == '1'
+        token = self.get_cookie('bjorn_session')
+        return _validate_session_token(token) if token else False
 
     def set_cookie(self, key, value, path='/', max_age=None):
         cookie = cookies.SimpleCookie()
         cookie[key] = value
         cookie[key]['path'] = path
+        cookie[key]['httponly'] = True
+        cookie[key]['samesite'] = 'Strict'
         if max_age is not None:
             cookie[key]['max-age'] = max_age
         self.send_header('Set-Cookie', cookie.output(header='', sep=''))
@@ -492,19 +619,34 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         password = params.get('password', [None])[0]
 
         try:
-            with open(self.shared_data.webapp_json, 'r') as f:
+            with open(self.shared_data.webapp_json, 'r', encoding='utf-8') as f:
                 auth_config = json.load(f)
-                expected_user = auth_config['username']
-                expected_pass = auth_config['password']
+                expected_user = auth_config.get('username', '')
         except Exception as e:
             logger.error(f"Error loading webapp.json: {e}")
             self.send_error(500)
             return
 
-        if username == expected_user and password == expected_pass:
+        # Verify password: support both hashed (new) and plaintext (legacy fallback)
+        password_ok = False
+        if 'password_hash' in auth_config and 'password_salt' in auth_config:
+            # Hashed password (migrated)
+            password_ok = _verify_password(
+                password or '',
+                auth_config['password_hash'],
+                auth_config['password_salt']
+            )
+        elif 'password' in auth_config:
+            # Legacy plaintext (auto-migrate now)
+            password_ok = (password == auth_config['password'])
+            if password_ok:
+                # Auto-migrate to hashed on successful login
+                _ensure_password_hashed(self.shared_data.webapp_json)
+
+        if username == expected_user and password_ok:
             always_auth = params.get('alwaysAuth', [None])[0] == 'on'
             try:
-                with open(self.shared_data.webapp_json, 'r+') as f:
+                with open(self.shared_data.webapp_json, 'r+', encoding='utf-8') as f:
                     config = json.load(f)
                     config['always_require_auth'] = always_auth
                     f.seek(0)
@@ -513,11 +655,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Error saving auth preference: {e}")
 
+            # Create HMAC-signed session token (server-validated)
+            token = _make_session_token()
             if not always_auth:
-                self.set_cookie('authenticated', '1', max_age=30*24*60*60)
+                self.set_cookie('bjorn_session', token, max_age=30*24*60*60)
             else:
-                self.set_cookie('authenticated', '1')
-                
+                self.set_cookie('bjorn_session', token)
+
             self.send_response(302)
             self.send_header('Location', '/')
             self.end_headers()
@@ -527,8 +671,12 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def handle_logout(self):
         if not self.shared_data.webauth:
             self.send_response(302); self.send_header('Location', '/'); self.end_headers(); return
+        # Server-side session invalidation
+        token = self.get_cookie('bjorn_session')
+        if token:
+            _revoke_session_token(token)
         self.send_response(302)
-        self.delete_cookie('authenticated')
+        self.delete_cookie('bjorn_session')
         self.send_header('Location', '/login.html')
         self.end_headers()
 
@@ -538,17 +686,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         
     def log_message(self, format, *args):
             """
-            Intercepte et filtre les logs du serveur web.
-            On supprime les requêtes répétitives qui polluent les logs.
+            Filter noisy web server logs. Suppresses repetitive polling requests.
             """
-            # [infinition] Check if web logging is enabled in config
             if not self.shared_data.config.get("web_logging_enabled", False):
                 return
 
             msg = format % args
-            
-            # Liste des requêtes "bruyantes" à ne pas afficher dans les logs
-            # Tu peux ajouter ici tout ce que tu veux masquer
+
+            # High-frequency polling routes to suppress from logs
             silent_routes = [
                 "/api/bjorn/stats",
                 "/bjorn_status",
@@ -564,11 +709,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "/api/rl/history",
             ]
 
-            # Si l'une des routes silencieuses est dans le message, on quitte la fonction sans rien écrire
+            # If any silent route matches, skip logging
             if any(route in msg for route in silent_routes):
                 return
 
-            # Pour tout le reste (erreurs, connexions, changements de config), on loggue normalement
+            # Log everything else (errors, connections, config changes)
             logger.info("%s - [%s] %s" % (
                 self.client_address[0],
                 self.log_date_time_string(),
@@ -823,6 +968,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         elif self.path.startswith('/action_queue'):
             self.web_utils.netkb_utils.serve_action_queue(self)
             return
+        elif self.path.startswith('/api/packages/install'):
+            self.web_utils.package_utils.install_package(self)
+            return
 
         super().do_GET()
 
@@ -877,7 +1025,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 self.web_utils.system_utils.clear_livestatus(self, restart=restart)
                 return
 
-            # Dynamic Dispatch for JSON — data-only handlers
+            # Dynamic Dispatch for JSON - data-only handlers
             if self.path in self.POST_ROUTES_JSON:
                 handler = self.POST_ROUTES_JSON[self.path]
                 if callable(handler):
@@ -887,7 +1035,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                         self._send_json(response, status_code)
                     return
 
-            # Dynamic Dispatch for JSON — handler-aware: fn(handler, data)
+            # Dynamic Dispatch for JSON - handler-aware: fn(handler, data)
             if self.path in self.POST_ROUTES_JSON_H:
                 handler_fn = self.POST_ROUTES_JSON_H[self.path]
                 if callable(handler_fn):
@@ -999,6 +1147,16 @@ class WebThread(threading.Thread):
             raise RuntimeError(f"Unable to start server after {max_retries} attempts")
 
     def run(self):
+        # Start the script scheduler daemon
+        try:
+            from script_scheduler import ScriptSchedulerDaemon
+            daemon = ScriptSchedulerDaemon(self.shared_data)
+            self.shared_data.script_scheduler = daemon
+            daemon.start()
+            logger.info("ScriptSchedulerDaemon started")
+        except Exception as e:
+            logger.warning(f"Failed to start ScriptSchedulerDaemon: {e}")
+
         while not self.shared_data.webapp_should_exit:
             try:
                 self.httpd = self.setup_server()

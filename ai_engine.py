@@ -1,26 +1,6 @@
-"""
-ai_engine.py - Dynamic AI Decision Engine for Bjorn
-═══════════════════════════════════════════════════════════════════════════
+"""ai_engine.py - Lightweight AI decision engine for action selection on Pi Zero.
 
-Purpose:
-    Lightweight AI decision engine for Raspberry Pi Zero.
-    Works in tandem with deep learning model trained on external PC.
-
-Architecture:
-    - Lightweight inference engine (no TensorFlow/PyTorch on Pi)
-    - Loads pre-trained model weights from PC
-    - Real-time action selection
-    - Automatic feature extraction
-    - Fallback to heuristics when model unavailable
-
-Model Pipeline:
-    1. Pi: Collect data → Export → Transfer to PC
-    2. PC: Train deep neural network → Export lightweight model
-    3. Pi: Load model → Use for decision making
-    4. Repeat: Continuous learning cycle
-
-Author: Bjorn Team
-Version: 2.0.0
+Loads pre-trained model weights from PC; falls back to heuristics when unavailable.
 """
 
 import json
@@ -141,7 +121,7 @@ class BjornAIEngine:
             new_weights = {
                 k: np.array(v) for k, v in weights_data.items()
             }
-            del weights_data  # Free raw dict — numpy arrays are the canonical form
+            del weights_data  # Free raw dict - numpy arrays are the canonical form
 
             # AI-03: Save previous model for rollback
             if self.model_loaded and self.model_weights is not None:
@@ -263,7 +243,7 @@ class BjornAIEngine:
         self._performance_window.append(reward)
 
         # Update current history entry
-        if self._model_history:
+        if self._model_history and len(self._performance_window) > 0:
             self._model_history[-1]['avg_reward'] = round(
                 sum(self._performance_window) / len(self._performance_window), 2
             )
@@ -345,7 +325,14 @@ class BjornAIEngine:
                 
             current_version = str(self.model_config.get("version", "0")).strip() if self.model_config else "0"
             
-            if remote_version > current_version:
+            def _version_tuple(v: str) -> tuple:
+                """Parse version string like '1.2.3' into comparable tuple (1, 2, 3)."""
+                try:
+                    return tuple(int(x) for x in v.split('.'))
+                except (ValueError, AttributeError):
+                    return (0,)
+
+            if _version_tuple(remote_version) > _version_tuple(current_version):
                 logger.info(f"New model available: {remote_version} (Local: {current_version})")
                 
                 # Download config (stream to avoid loading the whole file into RAM)
@@ -625,7 +612,7 @@ class BjornAIEngine:
     def _get_temporal_context(self, mac: str) -> Dict:
         """
         Collect real temporal features for a MAC from DB.
-        same_action_attempts / is_retry are action-specific — they are NOT
+        same_action_attempts / is_retry are action-specific - they are NOT
         included here; instead they are merged from _get_action_context()
         inside the per-action loop in _predict_with_model().
         """
@@ -930,9 +917,14 @@ class BjornAIEngine:
                 best_action = max(action_scores, key=action_scores.get)
                 best_score = action_scores[best_action]
 
-                # Normalize score to 0-1
-                if best_score > 0:
-                    best_score = min(best_score / 1.0, 1.0)
+                # Normalize score to 0-1 range
+                # Static heuristic scores can exceed 1.0 when multiple port/service
+                # rules match, so we normalize by the maximum observed score.
+                if best_score > 1.0:
+                    all_vals = action_scores.values()
+                    max_val = max(all_vals) if all_vals else 1.0
+                    best_score = best_score / max_val if max_val > 0 else 1.0
+                best_score = min(best_score, 1.0)
 
                 debug_info = {
                     'method': 'heuristics_bootstrap' if bootstrap_used else 'heuristics',

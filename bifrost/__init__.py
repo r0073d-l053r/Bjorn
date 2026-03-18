@@ -1,5 +1,5 @@
-"""
-Bifrost — Pwnagotchi-compatible WiFi recon engine for Bjorn.
+"""__init__.py - Bifrost, pwnagotchi-compatible WiFi recon engine for Bjorn.
+
 Runs as a daemon thread alongside MANUAL/AUTO/AI modes.
 """
 import os
@@ -42,7 +42,7 @@ class BifrostEngine:
 
         # Wait for any previous thread to finish before re-starting
         if self._thread and self._thread.is_alive():
-            logger.warning("Previous Bifrost thread still running — waiting ...")
+            logger.warning("Previous Bifrost thread still running - waiting ...")
             self._stop_event.set()
             self._thread.join(timeout=15)
 
@@ -82,7 +82,7 @@ class BifrostEngine:
         logger.info("Bifrost engine stopped")
 
     def _loop(self):
-        """Main daemon loop — setup monitor mode, start bettercap, create agent, run recon cycle."""
+        """Main daemon loop - setup monitor mode, start bettercap, create agent, run recon cycle."""
         try:
             # Install compatibility shim for pwnagotchi plugins
             from bifrost import plugins as bfplugins
@@ -94,15 +94,15 @@ class BifrostEngine:
 
             if self._monitor_failed:
                 logger.error(
-                    "Monitor mode setup failed — Bifrost cannot operate without monitor "
+                    "Monitor mode setup failed - Bifrost cannot operate without monitor "
                     "mode. For Broadcom chips (Pi Zero W/2W), install nexmon: "
-                    "https://github.com/seemoo-lab/nexmon — "
+                    "https://github.com/seemoo-lab/nexmon - "
                     "Or use an external USB WiFi adapter with monitor mode support.")
                 # Teardown first (restores network services) BEFORE switching mode,
                 # so the orchestrator doesn't start scanning on a dead network.
                 self._teardown_monitor_mode()
                 self._running = False
-                # Now switch mode back to AUTO — the network should be restored.
+                # Now switch mode back to AUTO - the network should be restored.
                 # We set the flag directly FIRST (bypass setter to avoid re-stopping),
                 # then ensure manual_mode/ai_mode are cleared so getter returns AUTO.
                 try:
@@ -112,7 +112,7 @@ class BifrostEngine:
                     self.shared_data.manual_mode = False
                     self.shared_data.ai_mode = False
                     self.shared_data.invalidate_config_cache()
-                    logger.info("Bifrost auto-disabled due to monitor mode failure — mode: AUTO")
+                    logger.info("Bifrost auto-disabled due to monitor mode failure - mode: AUTO")
                 except Exception:
                     pass
                 return
@@ -133,7 +133,7 @@ class BifrostEngine:
             # Initialize agent
             self.agent.start()
 
-            logger.info("Bifrost agent started — entering recon cycle")
+            logger.info("Bifrost agent started - entering recon cycle")
 
             # Main recon loop (port of do_auto_mode from pwnagotchi)
             while not self._stop_event.is_set():
@@ -208,7 +208,7 @@ class BifrostEngine:
                 return True
         except Exception:
             pass
-        # nexutil exists — assume usable even without dmesg confirmation
+        # nexutil exists - assume usable even without dmesg confirmation
         return True
 
     @staticmethod
@@ -239,10 +239,10 @@ class BifrostEngine:
         """Put the WiFi interface into monitor mode.
 
         Strategy order:
-        1. Nexmon — for Broadcom brcmfmac chips (Pi Zero W / Pi Zero 2 W)
+        1. Nexmon - for Broadcom brcmfmac chips (Pi Zero W / Pi Zero 2 W)
            Uses: iw phy <phy> interface add mon0 type monitor + nexutil -m2
-        2. airmon-ng — for chipsets with proper driver support (Atheros, Realtek, etc.)
-        3. iw — direct fallback for other drivers
+        2. airmon-ng - for chipsets with proper driver support (Atheros, Realtek, etc.)
+        3. iw - direct fallback for other drivers
         """
         self._monitor_torn_down = False
         self._nexmon_used = False
@@ -270,7 +270,7 @@ class BifrostEngine:
             if self._has_nexmon():
                 if self._setup_nexmon(base_iface, cfg):
                     return
-                # nexmon setup failed — don't try other strategies, they won't work either
+                # nexmon setup failed - don't try other strategies, they won't work either
                 self._monitor_failed = True
                 return
             else:
@@ -410,7 +410,7 @@ class BifrostEngine:
                 logger.error("Monitor interface %s not created", mon_iface)
                 return False
 
-            # Success — update config to use mon0
+            # Success - update config to use mon0
             cfg['bifrost_iface'] = mon_iface
             self._mon_iface = mon_iface
             self._nexmon_used = True

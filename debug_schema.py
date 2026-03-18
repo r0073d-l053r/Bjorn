@@ -1,3 +1,4 @@
+"""debug_schema.py - Dump RL table schemas to schema_debug.txt for quick inspection."""
 
 import sqlite3
 import os

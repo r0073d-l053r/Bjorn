@@ -1,5 +1,4 @@
-# db_utils/agents.py
-# C2 (Command & Control) agent management operations
+"""agents.py - C2 agent management operations."""
 
 import json
 import os

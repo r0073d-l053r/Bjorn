@@ -1,8 +1,4 @@
-# comment.py
-# Comments manager with database backend
-# Provides contextual messages for display with timing control and multilingual support.
-# comment = ai.get_comment("SSHBruteforce", params={"user": "pi", "ip": "192.168.0.12"})
-# Avec un texte DB du style: "Trying {user}@{ip} over SSH..."
+"""comment.py - Contextual display messages with DB-backed templates and i18n support."""
 
 import os
 import time
@@ -154,35 +150,42 @@ class CommentAI:
     # --- Bootstrapping DB -----------------------------------------------------
 
     def _ensure_comments_loaded(self):
-        """Ensure comments are present in DB; import JSON if empty."""
-        try:
-            comment_count = int(self.shared_data.db.count_comments())
-        except Exception as e:
-            logger.error(f"Database error counting comments: {e}")
-            comment_count = 0
+        """Import all comments.*.json files on every startup (dedup via UNIQUE index)."""
+        import glob as _glob
 
-        if comment_count > 0:
-            logger.debug(f"Comments already in database: {comment_count}")
+        default_dir = getattr(self.shared_data, "default_comments_dir", "") or ""
+        if not default_dir or not os.path.isdir(default_dir):
+            logger.debug("No default_comments_dir, seeding minimal fallback set")
+            self._seed_minimal_comments()
             return
 
+        # Glob all comments JSON files: comments.en.json, comments.fr.json, etc.
+        pattern = os.path.join(default_dir, "comments.*.json")
+        json_files = sorted(_glob.glob(pattern))
+
+        # Also check for a bare comments.json
+        bare = os.path.join(default_dir, "comments.json")
+        if os.path.exists(bare) and bare not in json_files:
+            json_files.insert(0, bare)
+
         imported = 0
-        for lang in self._lang_priority():
-            for json_path in self._get_comments_json_paths(lang):
-                if os.path.exists(json_path):
-                    try:
-                        count = int(self.shared_data.db.import_comments_from_json(json_path))
-                        imported += count
-                        if count > 0:
-                            logger.info(f"Imported {count} comments (auto-detected lang) from {json_path}")
-                            break  # stop at first successful import
-                    except Exception as e:
-                        logger.error(f"Failed to import comments from {json_path}: {e}")
-            if imported > 0:
-                break
+        for json_path in json_files:
+            try:
+                count = int(self.shared_data.db.import_comments_from_json(json_path))
+                imported += count
+                if count > 0:
+                    logger.info(f"Imported {count} comments from {json_path}")
+            except Exception as e:
+                logger.error(f"Failed to import comments from {json_path}: {e}")
 
         if imported == 0:
-            logger.debug("No comments imported, seeding minimal fallback set")
-            self._seed_minimal_comments()
+            # Nothing new imported - check if DB is empty and seed fallback
+            try:
+                if int(self.shared_data.db.count_comments()) == 0:
+                    logger.debug("No comments in DB, seeding minimal fallback set")
+                    self._seed_minimal_comments()
+            except Exception:
+                self._seed_minimal_comments()
 
 
     def _seed_minimal_comments(self):

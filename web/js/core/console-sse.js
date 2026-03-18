@@ -7,7 +7,7 @@
  * @module core/console-sse
  */
 
-import { $, el, toast } from './dom.js';
+import { $, el, toast, escapeHtml } from './dom.js';
 import { api } from './api.js';
 import { t } from './i18n.js';
 
@@ -47,6 +47,7 @@ const HEALTHY_THRESHOLD = 5;  // messages needed before resetting reconnect coun
 let isUserScrolling = false;
 let autoScroll = true;
 let lineBuffer = [];     // lines held while user is scrolled up
+const MAX_BUFFER_LINES = 500;  // cap buffer to prevent unbounded memory growth
 let isDocked = false;
 let consoleMode = 'log'; // 'log' | 'bubble'
 const CONSOLE_SESSION_ID = 'console';
@@ -435,6 +436,10 @@ function connectSSE() {
     const html = processLogLine(raw);
     if (isUserScrolling && !autoScroll) {
       lineBuffer.push(html);
+      // Evict oldest lines if buffer exceeds max
+      if (lineBuffer.length > MAX_BUFFER_LINES) {
+        lineBuffer = lineBuffer.slice(-MAX_BUFFER_LINES);
+      }
       updateBufferBadge();
     } else {
       appendLogHtml(html);
@@ -660,8 +665,10 @@ async function loadManualTargets() {
       if (currentIp && ips.includes(currentIp)) elSelIp.value = currentIp;
     }
 
+    const customActions = Array.isArray(data?.custom_actions) ? data.custom_actions : [];
+
     elSelAction.innerHTML = '';
-    if (!actions.length) {
+    if (!actions.length && !customActions.length) {
       const op = document.createElement('option');
       op.value = '';
       op.textContent = t('console.noAction');
@@ -673,7 +680,20 @@ async function loadManualTargets() {
         op.textContent = String(action);
         elSelAction.appendChild(op);
       }
-      if (currentAction && actions.includes(currentAction)) elSelAction.value = currentAction;
+      if (customActions.length) {
+        const grp = document.createElement('optgroup');
+        grp.label = 'Custom Scripts';
+        for (const action of customActions) {
+          const op = document.createElement('option');
+          op.value = String(action);
+          op.textContent = String(action);
+          grp.appendChild(op);
+        }
+        elSelAction.appendChild(grp);
+      }
+      if (currentAction && (actions.includes(currentAction) || customActions.includes(currentAction))) {
+        elSelAction.value = currentAction;
+      }
     }
 
     updatePortsForSelectedIp(portsByIp);
@@ -1090,26 +1110,29 @@ async function sendConsoleChat(inputEl) {
   if (!msg) return;
   inputEl.value = '';
 
-  // Show user message in console
+  // Show user message in console (escape to prevent XSS)
+  const safeMsg = escapeHtml(msg);
   if (consoleMode === 'bubble') {
-    appendLogHtml(`<div class="console-bubble-user">${msg}</div>`);
+    appendLogHtml(`<div class="console-bubble-user">${safeMsg}</div>`);
   } else {
-    appendLogHtml(`<span class="comment-line"><span class="comment-status">YOU</span> ${msg}</span>`);
+    appendLogHtml(`<span class="comment-line"><span class="comment-status">YOU</span> ${safeMsg}</span>`);
   }
 
   // Call LLM
   try {
     const data = await api.post('/api/llm/chat', { message: msg, session_id: CONSOLE_SESSION_ID });
     if (data?.status === 'ok' && data.response) {
+      // Escape LLM response to prevent stored XSS via prompt injection
+      const safeResp = escapeHtml(data.response);
       if (consoleMode === 'bubble') {
-        appendLogHtml(`<div class="console-bubble-bjorn llm"><img src="/web/images/icon-60x60.png" class="comment-icon" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:4px">${data.response}</div>`);
+        appendLogHtml(`<div class="console-bubble-bjorn llm"><img src="/web/images/icon-60x60.png" class="comment-icon" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:4px">${safeResp}</div>`);
       } else {
-        appendLogHtml(`<span class="comment-line"><span class="comment-llm-badge">LLM</span><span class="comment-status">BJORN</span> <img src="/web/images/icon-60x60.png" class="comment-icon" alt=""> ${data.response}</span>`);
+        appendLogHtml(`<span class="comment-line"><span class="comment-llm-badge">LLM</span><span class="comment-status">BJORN</span> <img src="/web/images/icon-60x60.png" class="comment-icon" alt=""> ${safeResp}</span>`);
       }
     } else {
-      appendLogHtml(`<span class="loglvl error">Chat error: ${data?.message || 'unknown'}</span>`);
+      appendLogHtml(`<span class="loglvl error">Chat error: ${escapeHtml(data?.message || 'unknown')}</span>`);
     }
   } catch (e) {
-    appendLogHtml(`<span class="loglvl error">Chat error: ${e.message}</span>`);
+    appendLogHtml(`<span class="loglvl error">Chat error: ${escapeHtml(e.message)}</span>`);
   }
 }

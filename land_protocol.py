@@ -1,15 +1,4 @@
-# land_protocol.py
-# Python client for the LAND Protocol (Local AI Network Discovery).
-# https://github.com/infinition/land-protocol
-#
-# Replace this file to update LAND protocol compatibility.
-# Imported by llm_bridge.py — no other Bjorn code touches this.
-#
-# Protocol summary:
-#   Discovery : mDNS service type  _ai-inference._tcp.local.  (port 5353)
-#   Transport : TCP HTTP on port 8419 by default
-#   Infer     : POST /infer  {"prompt": str, "capability": "llm", "max_tokens": int}
-#   Response  : {"response": str}  or  {"text": str}
+"""land_protocol.py - LAND protocol client: mDNS discovery + HTTP inference for local AI nodes."""
 
 import json
 import threading
@@ -43,11 +32,11 @@ def discover_node(
     except ImportError:
         if logger:
             logger.warning(
-                "zeroconf not installed — LAND mDNS discovery disabled. "
+                "zeroconf not installed - LAND mDNS discovery disabled. "
                 "Run:  pip install zeroconf"
             )
         else:
-            print("[LAND] zeroconf not installed — mDNS discovery disabled")
+            print("[LAND] zeroconf not installed - mDNS discovery disabled")
         return
 
     class _Listener(ServiceListener):

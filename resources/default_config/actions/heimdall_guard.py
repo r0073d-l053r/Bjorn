@@ -1,11 +1,4 @@
-# Stealth operations module for IDS/IPS evasion and traffic manipulation.a
-# Saves settings in `/home/bjorn/.settings_bjorn/heimdall_guard_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -i, --interface   Network interface to use (default: active interface).
-# -m, --mode       Operating mode (timing, random, fragmented, all).
-# -d, --delay      Base delay between operations in seconds (default: 1).
-# -r, --randomize  Randomization factor for timing (default: 0.5).
-# -o, --output     Output directory (default: /home/bjorn/Bjorn/data/output/stealth).
+"""heimdall_guard.py - IDS/IPS evasion via timing jitter, fragmentation, and traffic shaping."""
 
 import os
 import json

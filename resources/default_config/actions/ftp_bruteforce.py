@@ -1,10 +1,4 @@
-"""
-ftp_bruteforce.py — FTP bruteforce (DB-backed, no CSV/JSON, no rich)
-- Cibles: (ip, port) par l’orchestrateur
-- IP -> (MAC, hostname) via DB.hosts
-- Succès -> DB.creds (service='ftp')
-- Conserve la logique d’origine (queue/threads, sleep éventuels, etc.)
-"""
+"""ftp_bruteforce.py - FTP bruteforce with DB-backed credential storage."""
 
 import os
 import threading
@@ -27,11 +21,11 @@ b_parent = None
 b_service = '["ftp"]'
 b_trigger = 'on_any:["on_service:ftp","on_new_port:21"]'
 b_priority = 70  
-b_cooldown = 1800,            # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_cooldown = 1800,            # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
 
 class FTPBruteforce:
-    """Wrapper orchestrateur -> FTPConnector."""
+    """Orchestrator wrapper -> FTPConnector."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
@@ -39,13 +33,13 @@ class FTPBruteforce:
         logger.info("FTPConnector initialized.")
 
     def bruteforce_ftp(self, ip, port):
-        """Lance le bruteforce FTP pour (ip, port)."""
+        """Run FTP bruteforce for (ip, port)."""
         return self.ftp_bruteforce.run_bruteforce(ip, port)
 
     def execute(self, ip, port, row, status_key):
-        """Point d’entrée orchestrateur (retour 'success' / 'failed')."""
+        """Orchestrator entry point (returns ‘success’ / ‘failed’)."""
         self.shared_data.bjorn_orch_status = "FTPBruteforce"
-        # comportement original : un petit délai visuel
+        # Original behavior: small visual delay
         time.sleep(5)
         logger.info(f"Brute forcing FTP on {ip}:{port}...")
         success, results = self.bruteforce_ftp(ip, port)
@@ -53,12 +47,11 @@ class FTPBruteforce:
 
 
 class FTPConnector:
-    """Gère les tentatives FTP, persistance DB, mapping IP→(MAC, Hostname)."""
+    """Handles FTP attempts, DB persistence, IP->(MAC, Hostname) mapping."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
 
-        # Wordlists inchangées
         self.users = self._read_lines(shared_data.users_file)
         self.passwords = self._read_lines(shared_data.passwords_file)
 
@@ -70,7 +63,7 @@ class FTPConnector:
         self.results: List[List[str]] = []  # [mac, ip, hostname, user, password, port]
         self.queue = Queue()
 
-    # ---------- util fichiers ----------
+    # ---------- file utils ----------
     @staticmethod
     def _read_lines(path: str) -> List[str]:
         try:
@@ -181,7 +174,7 @@ class FTPConnector:
             finally:
                 self.queue.task_done()
 
-                # Pause configurable entre chaque tentative FTP
+                # Configurable delay between FTP attempts
                 if getattr(self.shared_data, "timewait_ftp", 0) > 0:
                     time.sleep(self.shared_data.timewait_ftp)
 
@@ -190,7 +183,7 @@ class FTPConnector:
         mac_address = self.mac_for_ip(adresse_ip)
         hostname = self.hostname_for_ip(adresse_ip) or ""
 
-        total_tasks = len(self.users) * len(self.passwords) + 1  # (logique d'origine conservée)
+        total_tasks = len(self.users) * len(self.passwords) + 1  # (original logic preserved)
         if len(self.users) * len(self.passwords) == 0:
             logger.warning("No users/passwords loaded. Abort.")
             return False, []

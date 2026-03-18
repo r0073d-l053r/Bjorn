@@ -1,8 +1,4 @@
-# web_utils/file_utils.py
-"""
-File management utilities.
-Handles file operations, uploads, downloads, directory management.
-"""
+"""file_utils.py - File operations, uploads, downloads, and directory management."""
 from __future__ import annotations
 import os
 import json
@@ -76,7 +72,8 @@ class FileUtils:
             except (BrokenPipeError, ConnectionResetError):
                 return
         except Exception as e:
-            error_payload = json.dumps({"status": "error", "message": str(e)}).encode("utf-8")
+            self.logger.error(f"Error listing files: {e}")
+            error_payload = json.dumps({"status": "error", "message": "Internal server error"}).encode("utf-8")
             handler.send_response(500)
             handler.send_header("Content-Type", "application/json")
             handler.send_header("Content-Length", str(len(error_payload)))
@@ -126,7 +123,7 @@ class FileUtils:
             handler.end_headers()
             handler.wfile.write(json.dumps({
                 "status": "error",
-                "message": str(e)
+                "message": "Internal server error"
             }).encode('utf-8'))
 
     def loot_download(self, handler):
@@ -158,8 +155,8 @@ class FileUtils:
             handler.send_header("Content-type", "application/json")
             handler.end_headers()
             handler.wfile.write(json.dumps({
-                "status": "error", 
-                "message": str(e)
+                "status": "error",
+                "message": "Internal server error"
             }).encode('utf-8'))
 
     def download_file(self, handler):
@@ -178,10 +175,11 @@ class FileUtils:
                 handler.send_response(404)
                 handler.end_headers()
         except Exception as e:
+            self.logger.error(f"Error downloading file: {e}")
             handler.send_response(500)
             handler.send_header("Content-type", "application/json")
             handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+            handler.wfile.write(json.dumps({"status": "error", "message": "Internal server error"}).encode('utf-8'))
 
     def create_folder(self, data):
         """Create a new folder."""
@@ -213,7 +211,15 @@ class FileUtils:
                     current_path = json.loads(data.decode().strip())
                     break
 
+            # Validate currentPath segments to prevent path traversal
+            for seg in current_path:
+                if not isinstance(seg, str) or '..' in seg or seg.startswith('/') or seg.startswith('\\'):
+                    raise PermissionError(f"Invalid path segment: {seg}")
             target_dir = os.path.join(self.shared_data.current_dir, *current_path)
+            abs_target = os.path.realpath(target_dir)
+            abs_base = os.path.realpath(self.shared_data.current_dir)
+            if not abs_target.startswith(abs_base + os.sep) and abs_target != abs_base:
+                raise PermissionError("Path traversal detected in currentPath")
             os.makedirs(target_dir, exist_ok=True)
 
             uploaded_files = []
@@ -260,7 +266,7 @@ class FileUtils:
             handler.end_headers()
             handler.wfile.write(json.dumps({
                 "status": "error",
-                "message": str(e)
+                "message": "Internal server error"
             }).encode('utf-8'))
 
     def delete_file(self, data):
@@ -290,7 +296,7 @@ class FileUtils:
             }
         except Exception as e:
             self.logger.error(f"Error deleting file: {str(e)}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def rename_file(self, data):
         """Rename file or directory."""
@@ -306,10 +312,10 @@ class FileUtils:
                 "message": f"Successfully renamed {old_path} to {new_path}"
             }
         except ValueError as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Access denied"}
         except Exception as e:
             self.logger.error(f"Error renaming file: {str(e)}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def duplicate_file(self, data):
         """Duplicate file or directory."""
@@ -330,7 +336,7 @@ class FileUtils:
             }
         except Exception as e:
             self.logger.error(f"Error duplicating file: {str(e)}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def move_file(self, data):
         """Move file or directory."""
@@ -355,7 +361,7 @@ class FileUtils:
             return {"status": "success", "message": "Item moved successfully"}
         except Exception as e:
             self.logger.error(f"Error moving file: {str(e)}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def list_directories(self, handler):
         """List directory structure."""
@@ -379,12 +385,13 @@ class FileUtils:
             handler.end_headers()
             handler.wfile.write(json.dumps(directory_structure).encode())
         except Exception as e:
+            self.logger.error(f"Error listing directories: {e}")
             handler.send_response(500)
             handler.send_header('Content-Type', 'application/json')
             handler.end_headers()
             handler.wfile.write(json.dumps({
                 "status": "error",
-                "message": str(e)
+                "message": "Internal server error"
             }).encode())
 
     def clear_output_folder(self, data=None):
@@ -454,4 +461,4 @@ class FileUtils:
             }
         except Exception as e:
             self.logger.error(f"Error clearing output folder: {str(e)}")
-            return {"status": "error", "message": f"Error clearing output folder: {str(e)}"}
+            return {"status": "error", "message": "Internal server error"}

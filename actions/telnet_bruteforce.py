@@ -1,10 +1,4 @@
-﻿"""
-telnet_bruteforce.py â€” Telnet bruteforce (DB-backed, no CSV/JSON, no rich)
-- Cibles: (ip, port) par lâ€™orchestrateur
-- IP -> (MAC, hostname) via DB.hosts
-- SuccÃ¨s -> DB.creds (service='telnet')
-- Conserve la logique dâ€™origine (telnetlib, queue/threads)
-"""
+﻿“””telnet_bruteforce.py - Threaded Telnet credential bruteforcer.”””
 
 import os
 import telnetlib
@@ -28,11 +22,24 @@ b_parent = None
 b_service = '["telnet"]'
 b_trigger = 'on_any:["on_service:telnet","on_new_port:23"]'
 b_priority = 70  
-b_cooldown = 1800            # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_cooldown = 1800            # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
+b_enabled = 1
+b_action = "normal"
+b_timeout = 600
+b_max_retries = 2
+b_stealth_level = 3
+b_risk_level = "medium"
+b_tags = ["bruteforce", "telnet", "credentials"]
+b_category = "exploitation"
+b_name = "Telnet Bruteforce"
+b_description = "Threaded Telnet credential bruteforcer with prompt detection."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "TelnetBruteforce.png"
 
 class TelnetBruteforce:
-    """Wrapper orchestrateur -> TelnetConnector."""
+    """Orchestrator wrapper for TelnetConnector."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
@@ -40,11 +47,11 @@ class TelnetBruteforce:
         logger.info("TelnetConnector initialized.")
 
     def bruteforce_telnet(self, ip, port):
-        """Lance le bruteforce Telnet pour (ip, port)."""
+        """Run Telnet bruteforce for (ip, port)."""
         return self.telnet_bruteforce.run_bruteforce(ip, port)
 
     def execute(self, ip, port, row, status_key):
-        """Point d'entrÃ©e orchestrateur (retour 'success' / 'failed')."""
+        """Orchestrator entry point. Returns 'success' or 'failed'."""
         logger.info(f"Executing TelnetBruteforce on {ip}:{port}")
         self.shared_data.bjorn_orch_status = "TelnetBruteforce"
         self.shared_data.comment_params = {"user": "?", "ip": ip, "port": str(port)}
@@ -53,12 +60,12 @@ class TelnetBruteforce:
 
 
 class TelnetConnector:
-    """GÃ¨re les tentatives Telnet, persistance DB, mapping IPâ†’(MAC, Hostname)."""
+    """Handles Telnet attempts, DB persistence, and IP->(MAC, Hostname) mapping."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
 
-        # Wordlists inchangÃ©es
+        # Wordlists
         self.users = self._read_lines(shared_data.users_file)
         self.passwords = self._read_lines(shared_data.passwords_file)
 
@@ -71,7 +78,7 @@ class TelnetConnector:
         self.queue = Queue()
         self.progress = None
 
-    # ---------- util fichiers ----------
+    # ---------- file utils ----------
     @staticmethod
     def _read_lines(path: str) -> List[str]:
         try:
@@ -273,7 +280,8 @@ class TelnetConnector:
         self.results = []
 
     def removeduplicates(self):
-        pass
+        """No longer needed with unique DB index; kept for interface compat."""
+        # Dedup handled by DB UNIQUE constraint + ON CONFLICT in save_results
 
 
 if __name__ == "__main__":

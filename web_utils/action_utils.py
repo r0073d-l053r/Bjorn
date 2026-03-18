@@ -1,17 +1,6 @@
-# action_utils.py
-"""
-Unified web utilities: Actions (scripts+images+comments), Images, Characters,
-Comments, and Attacks — consolidated into a single module.
+"""action_utils.py - Unified web utilities for actions, images, characters, comments, and attacks.
 
-Key image rules:
-- Status icon: always 28x28 BMP (<status_images>/<Action>/<Action>.bmp)
-- Character image: always 78x78 BMP (<status_images>/<Action>/<Action>N.bmp)
-- Missing status icon auto-generates a placeholder (similar intent to makePlaceholderIconBlob).
-
-This file merges previous modules:
-- Action/Image/Character utils (now in ActionUtils)
-- Comment utils (CommentUtils)
-- Attack utils (AttackUtils)
+Consolidates ActionUtils, CommentUtils, and AttackUtils into a single module.
 """
 
 from __future__ import annotations
@@ -471,11 +460,11 @@ class ActionUtils:
         """
         Rebuild DB 'actions' + 'actions_studio' from filesystem .py files.
         - 'actions'      : info runtime (b_class, b_module, etc.)
-        - 'actions_studio': payload studio (on garde meta complet en JSON)
+        - 'actions_studio': studio payload (full meta as JSON)
         """
         actions_dir = self.shared_data.actions_dir
 
-        # Schéma minimum (au cas où la migration n'est pas faite)
+        # Minimum schema (in case migration hasn't run)
         self.shared_data.db.execute("""
             CREATE TABLE IF NOT EXISTS actions (
                 name       TEXT PRIMARY KEY,
@@ -491,7 +480,7 @@ class ActionUtils:
             )
         """)
 
-        # On reconstruit à partir du disque
+        # Rebuild from disk
         self.shared_data.db.execute("DELETE FROM actions")
         self.shared_data.db.execute("DELETE FROM actions_studio")
 
@@ -510,10 +499,10 @@ class ActionUtils:
             module_name = os.path.splitext(filename)[0]
             meta.setdefault("b_module", module_name)
 
-            # Nom logique de l'action (prend 'name' si présent, sinon b_class)
+            # Logical action name: use 'name' if present, fall back to b_class
             action_name = (meta.get("name") or meta["b_class"]).strip()
 
-            # -- UPSERT dans actions
+            # Upsert into actions
             self.shared_data.db.execute(
                 """
                 INSERT INTO actions (name, b_class, b_module, meta_json)
@@ -526,7 +515,7 @@ class ActionUtils:
                 (action_name, meta["b_class"], meta["b_module"], json.dumps(meta, ensure_ascii=False))
             )
 
-            # -- UPSERT dans actions_studio (on stocke le même meta ou seulement ce qui est utile studio)
+            # Upsert into actions_studio (store full meta or studio-relevant subset)
             self.shared_data.db.execute(
                 """
                 INSERT INTO actions_studio (action_name, studio_meta_json)
@@ -853,7 +842,7 @@ class ActionUtils:
             image_name = self._safe(form.getvalue('image_name') or '')
             file_item = form['new_image'] if 'new_image' in form else None
 
-            # ⚠️ NE PAS faire "not file_item" (FieldStorage n'est pas booléable)
+            # Don't use "not file_item" (FieldStorage is not bool-safe)
             if not tp or not image_name or file_item is None or not getattr(file_item, 'filename', ''):
                 raise ValueError('type, image_name and new_image are required')
 
@@ -869,13 +858,13 @@ class ActionUtils:
 
                 raw = file_item.file.read()
 
-                # Si c'est le status icon <action>.bmp => BMP 28x28 imposé
+                # Status icon <action>.bmp => forced BMP 28x28
                 if image_name.lower() == f"{action.lower()}.bmp":
                     out = self._to_bmp_resized(raw, self.STATUS_W, self.STATUS_H)
                     with open(target, 'wb') as f:
                         f.write(out)
                 else:
-                    # Déléguer aux character utils pour une image perso numérotée
+                    # Delegate to character utils for numbered character image
                     if not self.character_utils:
                         raise RuntimeError("CharacterUtils not wired into ImageUtils")
                     return self.character_utils.replace_character_image(h, form, action, image_name)
@@ -1088,10 +1077,7 @@ class ActionUtils:
                 f.write(char_from_status)
 
     def get_status_icon(self, handler):
-        """
-        Serve <action>/<action>.bmp s'il existe.
-        NE PAS créer de placeholder ici (laisser le front gérer le fallback).
-        """
+        """Serve <action>/<action>.bmp if it exists. No placeholder - let the frontend handle fallback."""
         try:
             q = parse_qs(urlparse(handler.path).query)
             action = (q.get("action", [None])[0] or "").strip()
@@ -1615,7 +1601,7 @@ class ActionUtils:
     def get_attacks(self, handler):
         """List all attack cards from DB (name + enabled)."""
         try:
-            cards = self.shared_data.db.list_action_cards()  # déjà mappe b_enabled -> enabled
+            cards = self.shared_data.db.list_action_cards()  # maps b_enabled -> enabled
             attacks = []
             for c in cards:
                 name = c.get("name") or c.get("b_class")
@@ -1648,7 +1634,7 @@ class ActionUtils:
             if not action_name:
                 raise ValueError("action_name is required")
 
-            # Met à jour la colonne correcte avec l'API DB existante
+            # Update the correct column using existing DB API
             rowcount = self.shared_data.db.execute(
                 "UPDATE actions SET b_enabled = ? WHERE b_class = ?;",
                 (enabled, action_name)
@@ -1915,11 +1901,11 @@ class ActionUtils:
 
         try:
             ctype, pdict = _parse_header(h.headers.get('Content-Type'))
-            if ctype != 'multipart/form-data': raise ValueError('Content-Type doit être multipart/form-data')
+            if ctype != 'multipart/form-data': raise ValueError('Content-Type must be multipart/form-data')
             pdict['boundary']=bytes(pdict['boundary'],'utf-8'); pdict['CONTENT-LENGTH']=int(h.headers.get('Content-Length'))
             form = _MultipartForm(fp=BytesIO(h.rfile.read(pdict['CONTENT-LENGTH'])),
                                     headers=h.headers, environ={'REQUEST_METHOD':'POST'}, keep_blank_values=True)
-            if 'web_image' not in form or not getattr(form['web_image'],'filename',''): raise ValueError('Aucun fichier web_image fourni')
+            if 'web_image' not in form or not getattr(form['web_image'],'filename',''): raise ValueError('No web_image file provided')
             file_item = form['web_image']; filename = self._safe(file_item.filename)
             base, ext = os.path.splitext(filename); 
             if ext.lower() not in ALLOWED_IMAGE_EXTS: filename = base + '.png'
@@ -1961,11 +1947,11 @@ class ActionUtils:
 
         try:
             ctype, pdict = _parse_header(h.headers.get('Content-Type'))
-            if ctype != 'multipart/form-data': raise ValueError('Content-Type doit être multipart/form-data')
+            if ctype != 'multipart/form-data': raise ValueError('Content-Type must be multipart/form-data')
             pdict['boundary']=bytes(pdict['boundary'],'utf-8'); pdict['CONTENT-LENGTH']=int(h.headers.get('Content-Length'))
             form = _MultipartForm(fp=BytesIO(h.rfile.read(pdict['CONTENT-LENGTH'])),
                                     headers=h.headers, environ={'REQUEST_METHOD':'POST'}, keep_blank_values=True)
-            if 'icon_image' not in form or not getattr(form['icon_image'],'filename',''): raise ValueError('Aucun fichier icon_image fourni')
+            if 'icon_image' not in form or not getattr(form['icon_image'],'filename',''): raise ValueError('No icon_image file provided')
             file_item = form['icon_image']; filename = self._safe(file_item.filename)
             base, ext = os.path.splitext(filename); 
             if ext.lower() not in ALLOWED_IMAGE_EXTS: filename = base + '.png'

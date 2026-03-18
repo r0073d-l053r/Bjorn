@@ -1,5 +1,4 @@
-# db_utils/software.py
-# Detected software (CPE) inventory operations
+"""software.py - Detected software (CPE) inventory operations."""
 
 from typing import List, Optional
 import logging

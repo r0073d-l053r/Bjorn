@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-c2_manager.py — Professional Command & Control Server
-"""
+"""c2_manager.py - Command & Control server for multi-agent coordination over SSH."""
 
 # ==== Stdlib ====
 import base64
@@ -28,7 +26,7 @@ import paramiko
 from cryptography.fernet import Fernet, InvalidToken
 
 # ==== Project ====
-from init_shared import shared_data         # requis (non optionnel)
+from init_shared import shared_data         # required
 from logger import Logger
 
 # -----------------------------------------------------
@@ -38,19 +36,15 @@ BASE_DIR = Path(__file__).resolve().parent
 
 def _resolve_data_root() -> Path:
     """
-    Résout le répertoire racine des données pour le C2, sans crasher
-    si shared_data n'a pas encore data_dir prêt.
-    Ordre de priorité :
-      1) shared_data.data_dir si présent
-      2) $BJORN_DATA_DIR si défini
-      3) BASE_DIR (fallback local)
+    Resolve C2 data root directory without crashing if shared_data isn't ready.
+    Priority: shared_data.data_dir > $BJORN_DATA_DIR > BASE_DIR (local fallback)
     """
     sd_dir = getattr(shared_data, "data_dir", None)
     if sd_dir:
         try:
             return Path(sd_dir)
         except Exception:
-            pass  # garde un fallback propre
+            pass  # clean fallback
 
     env_dir = os.getenv("BJORN_DATA_DIR")
     if env_dir:
@@ -63,22 +57,20 @@ def _resolve_data_root() -> Path:
 
 DATA_ROOT: Path = _resolve_data_root()
 
-# Sous-dossiers C2
+# C2 subdirectories
 DATA_DIR: Path    = DATA_ROOT / "c2_data"
 LOOT_DIR: Path    = DATA_DIR / "loot"
 CLIENTS_DIR: Path = DATA_DIR / "clients"
 LOGS_DIR: Path    = DATA_DIR / "logs"
 
 # Timings
-HEARTBEAT_INTERVAL: int = 20                    # secondes
+HEARTBEAT_INTERVAL: int = 20                    # seconds
 OFFLINE_THRESHOLD: int  = HEARTBEAT_INTERVAL * 3  # 60s sans heartbeat
 
-# Création arborescence (idempotente) — OK à l'import, coût faible
+# Create directory tree (idempotent) - safe at import time, low cost
 for directory in (DATA_DIR, LOOT_DIR, CLIENTS_DIR, LOGS_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
-# (Optionnel) Prépare un logger si besoin tout de suite
-# logger = Logger("c2_manager").get_logger()
 
 
 
@@ -137,7 +129,7 @@ class EventBus:
 # ============= Client Templates =============
 CLIENT_TEMPLATES = {
     'universal': Template(r"""#!/usr/bin/env python3
-# Lab client (Zombieland) — use only in controlled environments
+# Lab client (Zombieland) - use only in controlled environments
 import socket, json, os, platform, subprocess, threading, time, base64, struct, sys
 from pathlib import Path
 
@@ -924,7 +916,7 @@ class C2Manager:
                         lab_user: str = "testuser", lab_password: str = "testpass") -> dict:
         """Generate new client script"""
         try:
-            # Generate Fernet key (base64) and l'enregistrer en DB (rotation si besoin)
+            # Generate Fernet key (base64) and store in DB (rotate if existing)
             key_b64 = Fernet.generate_key().decode()
             if self.db.get_active_key(client_id):
                 self.db.rotate_key(client_id, key_b64)
@@ -969,7 +961,7 @@ class C2Manager:
                       ssh_pass: str, **kwargs) -> dict:
         """Deploy client via SSH"""
         try:
-            # S'assurer qu'une clé active existe (sinon générer le client)
+            # Ensure an active key exists (generate client otherwise)
             if not self.db.get_active_key(client_id):
                 result = self.generate_client(
                     client_id,
@@ -1028,7 +1020,7 @@ class C2Manager:
                 if client_id in self._clients:
                     self._disconnect_client(client_id)
 
-                # Révoquer les clés actives en DB
+                # Revoke active keys in DB
                 try:
                     self.db.revoke_keys(client_id)
                 except Exception as e:
@@ -1095,7 +1087,7 @@ class C2Manager:
 
             client_id = client_id_bytes.decode().strip()
 
-            # Récupérer la clé active depuis la DB
+            # Retrieve the active key from DB
             active_key = self.db.get_active_key(client_id)
             if not active_key:
                 self.logger.warning(f"Unknown client or no active key: {client_id} from {addr[0]}")
@@ -1163,7 +1155,7 @@ class C2Manager:
                     break
                 self._process_client_message(client_id, data)
             except OSError as e:
-                # socket fermé (remove_client) → on sort sans bruit
+                # Socket closed (remove_client) - exit silently
                 break
             except Exception as e:
                 self.logger.error(f"Client loop error for {client_id}: {e}")
@@ -1248,13 +1240,13 @@ class C2Manager:
             self._handle_loot(client_id, data['download'])
 
         elif 'result' in data:
-            # >>> ici on enregistre avec la vraie commande
+            # Store result with the actual command
             self.db.save_command(client_id, last_cmd or '<unknown>', result, True)
             self.bus.emit({"type": "console", "target": client_id, "text": str(result), "kind": "RX"})
 
         elif 'error' in data:
             error = data['error']
-            # >>> idem pour error
+            # Same for errors
             self.db.save_command(client_id, last_cmd or '<unknown>', error, False)
             self.bus.emit({"type": "console", "target": client_id, "text": f"ERROR: {error}", "kind": "RX"})
 
@@ -1308,10 +1300,10 @@ class C2Manager:
             with self._lock:
                 client = self._clients.get(client_id)
                 if client:
-                    # signale aux boucles de s'arrêter proprement
+                    # Signal loops to stop cleanly
                     client['info']['closing'] = True
 
-                    # fermer proprement le socket
+                    # Cleanly close the socket
                     try:
                         client['sock'].shutdown(socket.SHUT_RDWR)
                     except Exception:

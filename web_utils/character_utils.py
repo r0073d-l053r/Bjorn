@@ -1,7 +1,4 @@
-"""
-Character and persona management utilities.
-Handles character switching, creation, and image management.
-"""
+"""character_utils.py - Character switching, creation, and image management."""
 from __future__ import annotations
 import os
 import re
@@ -131,10 +128,7 @@ class CharacterUtils:
             return out.getvalue()
 
     def get_existing_character_numbers(self, action_dir: str | Path, action_name: str) -> set[int]:
-        """
-        Retourne l'ensemble des numéros déjà utilisés pour les images characters
-        (p. ex. <action>1.bmp, <action>2.bmp, ...).
-        """
+        """Return the set of numbers already used for character images (e.g. <action>1.bmp, <action>2.bmp)."""
         d = Path(action_dir)
         if not d.exists():
             return set()
@@ -152,7 +146,7 @@ class CharacterUtils:
     # --------- endpoints ---------
 
     def get_current_character(self):
-        """Lit le personnage courant depuis la config (DB)."""
+        """Read current character from config (DB)."""
         try:
             return self.shared_data.config.get('current_character', 'BJORN') or 'BJORN'
         except Exception:
@@ -220,7 +214,7 @@ class CharacterUtils:
 
             current_character = self.get_current_character()
             if character == current_character:
-                # Quand le perso est actif, ses images sont dans status_images_dir/IDLE/IDLE1.bmp
+                # Active character images live in status_images_dir/IDLE/IDLE1.bmp
                 idle_image_path = os.path.join(self.shared_data.status_images_dir, 'IDLE', 'IDLE1.bmp')
             else:
                 idle_image_path = os.path.join(self.shared_data.settings_dir, character, 'status', 'IDLE', 'IDLE1.bmp')
@@ -398,11 +392,11 @@ class CharacterUtils:
             self.logger.error(f"Error in copy_character_images: {e}")
 
     def upload_character_images(self, handler):
-        """Ajoute des images de characters pour une action existante (toujours BMP + numérotation)."""
+        """Add character images for an existing action (always BMP, auto-numbered)."""
         try:
             ctype, pdict = _parse_header(handler.headers.get('Content-Type'))
             if ctype != 'multipart/form-data':
-                raise ValueError('Content-Type doit être multipart/form-data')
+                raise ValueError('Content-Type must be multipart/form-data')
 
             pdict['boundary'] = bytes(pdict['boundary'], "utf-8")
             pdict['CONTENT-LENGTH'] = int(handler.headers.get('Content-Length'))
@@ -415,18 +409,18 @@ class CharacterUtils:
             )
 
             if 'action_name' not in form:
-                raise ValueError("Le nom de l'action est requis")
+                raise ValueError("Action name is required")
 
             action_name = (form.getvalue('action_name') or '').strip()
             if not action_name:
-                raise ValueError("Le nom de l'action est requis")
+                raise ValueError("Action name is required")
 
             if 'character_images' not in form:
-                raise ValueError('Aucun fichier image fourni')
+                raise ValueError('No image file provided')
 
             action_dir = os.path.join(self.shared_data.status_images_dir, action_name)
             if not os.path.exists(action_dir):
-                raise FileNotFoundError(f"L'action '{action_name}' n'existe pas")
+                raise FileNotFoundError(f"Action '{action_name}' does not exist")
 
             existing_numbers = self.get_existing_character_numbers(action_dir, action_name)
             next_number = max(existing_numbers, default=0) + 1
@@ -448,16 +442,16 @@ class CharacterUtils:
             handler.send_response(200)
             handler.send_header('Content-Type', 'application/json')
             handler.end_headers()
-            handler.wfile.write(json.dumps({'status': 'success', 'message': 'Images de characters ajoutées avec succès'}).encode('utf-8'))
+            handler.wfile.write(json.dumps({'status': 'success', 'message': 'Character images added successfully'}).encode('utf-8'))
         except Exception as e:
-            self.logger.error(f"Erreur dans upload_character_images: {e}")
+            self.logger.error(f"Error in upload_character_images: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
             self._send_error_response(handler, str(e))
 
 
     def reload_fonts(self, handler):
-        """Recharge les fonts en exécutant load_fonts."""
+        """Reload fonts via load_fonts."""
         try:
             self.shared_data.load_fonts()
             handler.send_response(200)
@@ -472,13 +466,13 @@ class CharacterUtils:
             handler.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
 
     def reload_images(self, handler):
-        """Recharge les images en exécutant load_images."""
+        """Reload images via load_images."""
         try:
             self.shared_data.load_images()
             handler.send_response(200)
             handler.send_header('Content-Type', 'application/json')
             handler.end_headers()
-            handler.wfile.write(json.dumps({'status': 'success', 'message': 'Images rechargées avec succès.'}).encode('utf-8'))
+            handler.wfile.write(json.dumps({'status': 'success', 'message': 'Images reloaded successfully.'}).encode('utf-8'))
         except Exception as e:
             self.logger.error(f"Error in reload_images: {e}")
             handler.send_response(500)

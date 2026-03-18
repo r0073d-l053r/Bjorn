@@ -1,5 +1,5 @@
-"""
-Bifrost — Mood state machine.
+"""automata.py - Bifrost mood state machine.
+
 Ported from pwnagotchi/automata.py.
 """
 import logging

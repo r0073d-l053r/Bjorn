@@ -1,0 +1,52 @@
+{
+  "id": "example_notifier",
+  "name": "Example Notifier",
+  "description": "Logs events to console when credentials or vulnerabilities are found. Use as a template for building your own plugins.",
+  "author": "Bjorn Team",
+  "version": "1.0.0",
+  "license": "MIT",
+  "type": "notifier",
+  "main": "example_notifier.py",
+  "class": "ExampleNotifier",
+  "tags": ["example", "template", "notifier"],
+
+  "config_schema": {
+    "log_credentials": {
+      "type": "boolean",
+      "label": "Log new credentials",
+      "default": true,
+      "help": "Log to console when new credentials are discovered"
+    },
+    "log_vulnerabilities": {
+      "type": "boolean",
+      "label": "Log new vulnerabilities",
+      "default": true,
+      "help": "Log to console when new vulnerabilities are found"
+    },
+    "log_actions": {
+      "type": "boolean",
+      "label": "Log action completions",
+      "default": false,
+      "help": "Log every action result (can be noisy)"
+    },
+    "custom_prefix": {
+      "type": "string",
+      "label": "Log prefix",
+      "default": "ALERT",
+      "help": "Custom prefix for log messages"
+    }
+  },
+
+  "hooks": [
+    "on_credential_found",
+    "on_vulnerability_found",
+    "on_action_complete",
+    "on_host_discovered"
+  ],
+
+  "requires": {
+    "pip": [],
+    "system": [],
+    "bjorn_min_version": "1.0.0"
+  }
+}

@@ -1,7 +1,5 @@
-# web_utils/network_utils.py
-"""
-Network utilities for WiFi/network operations.
-Handles WiFi scanning, connection, known networks management.
+"""network_utils.py - WiFi scanning, connection, and known networks management.
+
 Compatible with both legacy NM keyfiles and Trixie netplan.
 """
 from __future__ import annotations
@@ -48,7 +46,7 @@ class NetworkUtils:
 
         Uses nmcli terse output.  On Trixie, netplan-generated profiles
         (named ``netplan-wlan0-*``) appear alongside user-created NM
-        profiles — both are returned.
+        profiles - both are returned.
         """
         try:
             result = self._run(
@@ -60,7 +58,7 @@ class NetworkUtils:
             for line in result.stdout.strip().splitlines():
                 if not line.strip():
                     continue
-                # nmcli -t uses ':' as delimiter — SSIDs with ':' are
+                # nmcli -t uses ':' as delimiter - SSIDs with ':' are
                 # escaped by nmcli (backslash-colon), so split from
                 # the right to be safe: last field = priority,
                 # second-to-last = type, rest = name.
@@ -205,7 +203,7 @@ class NetworkUtils:
                 continue
 
             # Split from the right: IN-USE (last), SECURITY, SIGNAL, rest=SSID
-            # IN-USE is '*' or '' — always one char field at the end
+            # IN-USE is '*' or '' - always one char field at the end
             parts = line.rsplit(':', 3)
             if len(parts) < 4:
                 continue
@@ -302,7 +300,7 @@ class NetworkUtils:
     def import_potfiles(self, data=None):
         """Import WiFi credentials from .pot/.potfile files.
 
-        Creates NM connection profiles via nmcli — these are stored
+        Creates NM connection profiles via nmcli - these are stored
         in /etc/NetworkManager/system-connections/ and persist across
         reboots on both legacy and Trixie builds.
         """
@@ -403,7 +401,7 @@ class NetworkUtils:
                 os.remove(path)
                 self.logger.info("Deleted preconfigured.nmconnection")
             else:
-                self.logger.info("preconfigured.nmconnection not found (Trixie/netplan — this is normal)")
+                self.logger.info("preconfigured.nmconnection not found (Trixie/netplan - this is normal)")
             self._json_response(handler, 200, {"status": "success"})
         except Exception as e:
             self.logger.error(f"Error deleting preconfigured file: {e}")
@@ -415,7 +413,7 @@ class NetworkUtils:
         On Trixie this is a no-op: Wi-Fi is managed by netplan.
         Returns success regardless to avoid breaking the frontend.
         """
-        self.logger.warning("create_preconfigured_file called — no-op on Trixie/netplan builds")
+        self.logger.warning("create_preconfigured_file called - no-op on Trixie/netplan builds")
         self._json_response(handler, 200, {
             "status": "success",
             "message": "No action needed on netplan-managed builds",
@@ -428,7 +426,7 @@ class NetworkUtils:
 
         Accepts multipart/form-data with a 'potfile' field.
         Saves to shared_data.potfiles_dir.
-        Manual multipart parsing — no cgi module (removed in Python 3.13).
+        Manual multipart parsing - no cgi module (removed in Python 3.13).
         """
         try:
             content_type = handler.headers.get("Content-Type", "")

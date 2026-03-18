@@ -1,5 +1,4 @@
-# db_utils/vulnerabilities.py
-# Vulnerability tracking and CVE metadata operations
+"""vulnerabilities.py - Vulnerability tracking and CVE metadata operations."""
 
 import json
 import time

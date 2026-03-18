@@ -1,11 +1,4 @@
-# Network topology mapping tool for discovering and visualizing network segments.
-# Saves settings in `/home/bjorn/.settings_bjorn/yggdrasil_mapper_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -r, --range       Network range to scan (CIDR format).
-# -i, --interface   Network interface to use (default: active interface).
-# -d, --depth       Maximum trace depth for routing (default: 5).
-# -o, --output      Output directory (default: /home/bjorn/Bjorn/data/output/topology).
-# -t, --timeout     Timeout for probes in seconds (default: 2).
+"""yggdrasil_mapper.py - Network topology mapper with traceroute and graph visualization."""
 
 import os
 import json

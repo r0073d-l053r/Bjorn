@@ -1,9 +1,4 @@
-# demo_action.py
-# Demonstration Action: wrapped in a DemoAction class
-
-# ---------------------------------------------------------------------------
-# Metadata (compatible with sync_actions / Neo launcher)
-# ---------------------------------------------------------------------------
+"""demo_action.py - Minimal action template that just prints received arguments."""
 b_class       = "DemoAction"
 b_module      = "demo_action"
 b_enabled     = 1

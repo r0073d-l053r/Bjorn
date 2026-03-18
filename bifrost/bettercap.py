@@ -1,5 +1,5 @@
-"""
-Bifrost — Bettercap REST API client.
+"""bettercap.py - Bifrost bettercap REST API client.
+
 Ported from pwnagotchi/bettercap.py using urllib (no requests dependency).
 """
 import json
@@ -54,16 +54,16 @@ class BettercapClient:
             raise Exception("bettercap unreachable: %s" % e.reason)
 
     def session(self):
-        """GET /api/session — current bettercap state."""
+        """GET /api/session - current bettercap state."""
         return self._request('GET', '/session')
 
     def run(self, command, verbose_errors=True):
-        """POST /api/session — execute a bettercap command."""
+        """POST /api/session - execute a bettercap command."""
         return self._request('POST', '/session', {'cmd': command},
                              verbose_errors=verbose_errors)
 
     def events(self):
-        """GET /api/events — poll recent events (REST fallback)."""
+        """GET /api/events - poll recent events (REST fallback)."""
         try:
             result = self._request('GET', '/events', verbose_errors=False)
             # Clear after reading so we don't reprocess
@@ -80,7 +80,7 @@ class BettercapClient:
 
         Args:
             consumer: async callable that receives each message string.
-            stop_event: optional threading.Event — exit when set.
+            stop_event: optional threading.Event - exit when set.
         """
         import websockets
         import asyncio
@@ -99,5 +99,5 @@ class BettercapClient:
             except Exception as ex:
                 if stop_event and stop_event.is_set():
                     return
-                logger.debug("Websocket error: %s — reconnecting...", ex)
+                logger.debug("Websocket error: %s - reconnecting...", ex)
                 await asyncio.sleep(2)

@@ -1,11 +1,5 @@
-# actions/presence_join.py
 # -*- coding: utf-8 -*-
-"""
-PresenceJoin — Sends a Discord webhook when the targeted host JOINS the network.
-- Triggered by the scheduler ONLY on transition OFF->ON (b_trigger="on_join").
-- Targeting via b_requires (e.g. {"any":[{"mac_is":"AA:BB:..."}]}).
-- The action does not query anything: it only notifies when called.
-"""
+"""presence_join.py - Discord webhook notification when a target host joins the network."""
 
 import requests
 from typing import Optional
@@ -28,7 +22,20 @@ b_priority   = 90
 b_cooldown   = 0              # not needed: on_join only fires on join transition
 b_rate_limit = None
 b_trigger    = "on_join"      # <-- Host JOINED the network (OFF -> ON since last scan)
-b_requires   = {"any":[{"mac_is":"60:57:c8:51:63:fb"}]}  # adapt as needed
+b_requires   = None  # Configure via DB to restrict to specific MACs if needed
+b_enabled    = 1
+b_action     = "normal"
+b_category   = "notification"
+b_name       = "Presence Join"
+b_description = "Sends a Discord webhook notification when a host joins the network."
+b_author     = "Bjorn Team"
+b_version    = "1.0.0"
+b_timeout = 30
+b_max_retries = 1
+b_stealth_level = 10
+b_risk_level = "low"
+b_tags = ["presence", "discord", "notification"]
+b_icon = "PresenceJoin.png"
 
 DISCORD_WEBHOOK_URL = ""  # Configure via shared_data or DB
 
@@ -60,7 +67,9 @@ class PresenceJoin:
             host = row.get("hostname") or (row.get("hostnames") or "").split(";")[0] if row.get("hostnames") else None
             name = f"{host} ({mac})" if host else mac
             ip_s = (ip or (row.get("IPs") or "").split(";")[0] or "").strip()
-            
+            # EPD live status
+            self.shared_data.comment_params = {"mac": mac, "host": host or "unknown", "ip": ip_s or "?"}
+
             # Add timestamp in UTC
             timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 

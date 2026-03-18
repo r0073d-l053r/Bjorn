@@ -1,11 +1,4 @@
-# Advanced password cracker supporting multiple hash formats and attack methods.
-# Saves settings in `/home/bjorn/.settings_bjorn/rune_cracker_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -i, --input       Input file containing hashes to crack.
-# -w, --wordlist    Path to password wordlist (default: built-in list).
-# -r, --rules       Path to rules file for mutations (default: built-in rules).
-# -t, --type        Hash type (md5, sha1, sha256, sha512, ntlm).
-# -o, --output      Output directory (default: /home/bjorn/Bjorn/data/output/hashes).
+"""rune_cracker.py - Threaded hash cracker with wordlist + mutation rules (MD5/SHA/NTLM)."""
 
 import os
 import json

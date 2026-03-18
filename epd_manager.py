@@ -1,11 +1,4 @@
-﻿"""
-EPD Manager - singleton wrapper around Waveshare drivers.
-Hardened for runtime stability:
-- no per-operation worker-thread timeouts (prevents leaked stuck SPI threads)
-- serialized SPI access
-- bounded retry + recovery
-- health metrics for monitoring
-"""
+﻿"""epd_manager.py - Singleton wrapper around Waveshare EPD drivers with serialized SPI access."""
 
 import importlib
 import threading

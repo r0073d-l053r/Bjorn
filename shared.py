@@ -1,7 +1,4 @@
-# shared.py
-# Core component for managing shared resources and data for Bjorn project
-# Handles initialization, configuration, logging, fonts, images, and database management
-# OPTIMIZED FOR PI ZERO 2: Lazy Loading, Thread-Safety, and Low Memory Footprint.
+"""shared.py - Centralized config, fonts, images, and DB access for all Bjorn modules."""
 
 import os
 import re
@@ -91,6 +88,8 @@ class SharedData:
         # Main application directories
         self.data_dir = os.path.join(self.current_dir, 'data')
         self.actions_dir = os.path.join(self.current_dir, 'actions')
+        self.custom_scripts_dir = os.path.join(self.actions_dir, 'custom')
+        self.plugins_dir = os.path.join(self.current_dir, 'plugins')
         self.web_dir = os.path.join(self.current_dir, 'web')
         self.resources_dir = os.path.join(self.current_dir, 'resources')
         
@@ -158,7 +157,8 @@ class SharedData:
             self.status_images_dir, self.static_images_dir, self.dictionary_dir,
             self.potfiles_dir, self.wordlists_dir, self.nmap_prefixes_dir,
             self.backup_dir, self.settings_dir,
-            self.ai_models_dir, self.ml_exports_dir
+            self.ai_models_dir, self.ml_exports_dir,
+            self.custom_scripts_dir
         ]
         
         for directory in directories:
@@ -537,7 +537,7 @@ class SharedData:
                 "get_action_history", "get_status", "run_action", "query_db"
             ],
 
-            # EPD Buttons (disabled by default — not all users have buttons)
+            # EPD Buttons (disabled by default - not all users have buttons)
             "__title_epd_buttons__": "EPD Buttons",
             "epd_buttons_enabled": False,
             "epd_button_a_pin": 5,
@@ -551,8 +551,8 @@ class SharedData:
         """
         Get current operation mode: 'MANUAL', 'AUTO', 'AI', 'BIFROST', or 'LOKI'.
         Abstracts legacy manual_mode and ai_mode flags.
-        LOKI is the 5th exclusive mode — USB HID attack, Pi acts as keyboard/mouse.
-        BIFROST is the 4th exclusive mode — WiFi monitor mode recon.
+        LOKI is the 5th exclusive mode - USB HID attack, Pi acts as keyboard/mouse.
+        BIFROST is the 4th exclusive mode - WiFi monitor mode recon.
         """
         if self.config.get("loki_enabled", False):
             return "LOKI"
@@ -813,6 +813,7 @@ class SharedData:
         self.display_layout = None  # Initialized by Display module
         self.orchestrator_should_exit = False
         self.webapp_should_exit = False
+        self.script_scheduler = None
         
         # Instance tracking
         self.bjorn_instance = None
@@ -940,6 +941,17 @@ class SharedData:
 
                 # Status tracking
                 self.status_list.add(meta["b_class"])
+
+            # Merge plugin action registrations (if plugin_manager is loaded)
+            try:
+                mgr = getattr(self, 'plugin_manager', None)
+                if mgr:
+                    plugin_actions = mgr.get_action_registrations()
+                    if plugin_actions:
+                        actions_config.extend(plugin_actions)
+                        logger.info(f"Merged {len(plugin_actions)} plugin action(s)")
+            except Exception as e:
+                logger.debug(f"Plugin action discovery skipped: {e}")
 
             if actions_config:
                 self.db.sync_actions(actions_config)
@@ -1228,7 +1240,7 @@ class SharedData:
             self.imagegen = None
 
     def wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
-        """Wrap text to fit within specified width — boucle infinie protégée."""
+        """Wrap text to fit within specified width - infinite loop protected."""
         try:
             lines = []
             words = text.split()
@@ -1237,8 +1249,8 @@ class SharedData:
 
             while words:
                 line = []
-                # Toujours ajouter au moins 1 mot même s'il dépasse max_width
-                # sinon si le mot seul > max_width → boucle infinie garantie
+                # Always add at least 1 word even if it exceeds max_width
+                # otherwise a single oversized word guarantees an infinite loop
                 line.append(words.pop(0))
                 while words and font.getlength(' '.join(line + [words[0]])) <= max_width:
                     line.append(words.pop(0))

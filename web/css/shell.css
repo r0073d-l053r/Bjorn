@@ -257,18 +257,18 @@ body.console-docked .app-container {
 
 #bjornSay {
   white-space: normal;
-  /* autorise le retour à la ligne */
+  /* allow word wrapping */
   word-break: break-word;
   line-height: 1.25;
 
   display: flex;
   align-items: center;
-  /* centre verticalement dans la bottombar */
+  /* vertically center in the bottombar */
   height: 100%;
 
   text-align: right;
   max-width: 240px;
-  /* évite qu’il déborde vers le centre */
+  /* prevent overflow toward center */
 }
 
 /* ---- Console panel (matches old global.css console) ---- */

@@ -1,5 +1,4 @@
-# db_utils/webenum.py
-# Web enumeration (directory/file discovery) operations
+"""webenum.py - Web enumeration and directory/file discovery operations."""
 
 from typing import Any, Dict, List, Optional
 import logging

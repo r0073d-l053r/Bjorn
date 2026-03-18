@@ -1,11 +1,4 @@
-# Data collection and organization tool to aggregate findings from other modules.
-# Saves settings in `/home/bjorn/.settings_bjorn/freya_harvest_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -i, --input       Input directory to monitor (default: /home/bjorn/Bjorn/data/output/).
-# -o, --output      Output directory for reports (default: /home/bjorn/Bjorn/data/reports).
-# -f, --format      Output format (json, html, md, default: all).
-# -w, --watch       Watch for new findings in real-time.
-# -c, --clean       Clean old data before processing.
+"""freya_harvest.py - Aggregates findings from other modules into JSON/HTML/MD reports."""
 
 import os
 import json

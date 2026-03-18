@@ -1,7 +1,4 @@
-﻿# Bjorn.py
-# Main entry point and supervisor for the Bjorn project
-# Manages lifecycle of threads, health monitoring, and crash protection.
-# OPTIMIZED FOR PI ZERO 2: Low CPU overhead, aggressive RAM management.
+﻿"""Bjorn.py - Main supervisor: thread lifecycle, health monitoring, and crash protection."""
 
 import logging
 import os
@@ -305,7 +302,7 @@ class Bjorn:
             # Keep MANUAL sticky so supervisor does not auto-restart orchestration,
             # but only if the current mode isn't already handling it.
             # - MANUAL/BIFROST: already non-AUTO, no need to change
-            # - AUTO: let it be — orchestrator will restart naturally (e.g. after Bifrost auto-disable)
+            # - AUTO: let it be - orchestrator will restart naturally (e.g. after Bifrost auto-disable)
             try:
                 current = self.shared_data.operation_mode
                 if current == "AI":
@@ -471,6 +468,14 @@ def handle_exit(
     except Exception:
         pass
 
+    # 2e. Stop Plugin Manager
+    try:
+        mgr = getattr(shared_data, 'plugin_manager', None)
+        if mgr and hasattr(mgr, 'stop_all'):
+            mgr.stop_all()
+    except Exception:
+        pass
+
     # 3. Stop Web Server
     try:
         if web_thread_obj and hasattr(web_thread_obj, "shutdown"):
@@ -547,7 +552,7 @@ if __name__ == "__main__":
         health_thread = HealthMonitor(shared_data, interval_s=health_interval)
         health_thread.start()
 
-        # Sentinel watchdog — start if enabled in config
+        # Sentinel watchdog - start if enabled in config
         try:
             from sentinel import SentinelEngine
             sentinel_engine = SentinelEngine(shared_data)
@@ -560,7 +565,7 @@ if __name__ == "__main__":
         except Exception as e:
             logger.warning("Sentinel init skipped: %s", e)
 
-        # Bifrost engine — start if enabled in config
+        # Bifrost engine - start if enabled in config
         try:
             from bifrost import BifrostEngine
             bifrost_engine = BifrostEngine(shared_data)
@@ -573,7 +578,7 @@ if __name__ == "__main__":
         except Exception as e:
             logger.warning("Bifrost init skipped: %s", e)
 
-        # Loki engine — start if enabled in config
+        # Loki engine - start if enabled in config
         try:
             from loki import LokiEngine
             loki_engine = LokiEngine(shared_data)
@@ -586,7 +591,7 @@ if __name__ == "__main__":
         except Exception as e:
             logger.warning("Loki init skipped: %s", e)
 
-        # LLM Bridge — warm up singleton (starts LaRuche mDNS discovery if enabled)
+        # LLM Bridge - warm up singleton (starts LaRuche mDNS discovery if enabled)
         try:
             from llm_bridge import LLMBridge
             LLMBridge()  # Initialise singleton, kicks off background discovery
@@ -594,16 +599,27 @@ if __name__ == "__main__":
         except Exception as e:
             logger.warning("LLM Bridge init skipped: %s", e)
 
-        # MCP Server — start if enabled in config
+        # MCP Server - start if enabled in config
         try:
             import mcp_server
             if shared_data.config.get("mcp_enabled", False):
                 mcp_server.start()
                 logger.info("MCP server started")
             else:
-                logger.info("MCP server loaded (disabled — enable via Settings)")
+                logger.info("MCP server loaded (disabled - enable via Settings)")
         except Exception as e:
             logger.warning("MCP server init skipped: %s", e)
+
+        # Plugin Manager - discover and load enabled plugins
+        try:
+            from plugin_manager import PluginManager
+            plugin_manager = PluginManager(shared_data)
+            shared_data.plugin_manager = plugin_manager
+            plugin_manager.load_all()
+            plugin_manager.install_db_hooks()
+            logger.info(f"Plugin manager started ({len(plugin_manager._instances)} plugins loaded)")
+        except Exception as e:
+            logger.warning("Plugin manager init skipped: %s", e)
 
         # Signal Handlers
         exit_handler = lambda s, f: handle_exit(
@@ -708,6 +724,6 @@ if __name__ == "__main__":
                 runtime_state_thread,
                 False,
             )
-        except:
+        except Exception:
             pass
         sys.exit(1)

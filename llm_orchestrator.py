@@ -1,18 +1,4 @@
-# llm_orchestrator.py
-# LLM-based orchestration layer for Bjorn.
-#
-# Modes (llm_orchestrator_mode in config):
-#   none       — disabled (default); LLM has no role in scheduling
-#   advisor    — LLM reviews state periodically and injects ONE priority action
-#   autonomous — LLM runs its own agentic cycle, observes via MCP tools, queues actions
-#
-# Prerequisites: llm_enabled=True, llm_orchestrator_mode != "none"
-#
-# Guard rails:
-#   llm_orchestrator_allowed_actions — whitelist for run_action (empty = mcp_allowed_tools)
-#   llm_orchestrator_max_actions     — hard cap on actions per autonomous cycle
-#   llm_orchestrator_interval_s      — cooldown between autonomous cycles
-#   Falls back silently when LLM unavailable (no crash, no spam)
+"""llm_orchestrator.py - LLM-driven scheduling layer (advisor or autonomous mode)."""
 
 import json
 import threading
@@ -32,8 +18,8 @@ class LLMOrchestrator:
     """
     LLM-based orchestration layer.
 
-    advisor mode    — called from orchestrator background tasks; LLM suggests one action.
-    autonomous mode — runs its own thread; LLM loops with full tool-calling.
+    advisor mode    - called from orchestrator background tasks; LLM suggests one action.
+    autonomous mode - runs its own thread; LLM loops with full tool-calling.
     """
 
     def __init__(self, shared_data):
@@ -58,7 +44,7 @@ class LLMOrchestrator:
             self._thread.start()
             logger.info("LLM Orchestrator started (autonomous)")
         elif mode == "advisor":
-            logger.info("LLM Orchestrator ready (advisor — called from background tasks)")
+            logger.info("LLM Orchestrator ready (advisor - called from background tasks)")
 
     def stop(self) -> None:
         self._stop.set()
@@ -152,7 +138,7 @@ class LLMOrchestrator:
             system = (
                 "You are Bjorn's tactical advisor. Review the current network state "
                 "and suggest ONE action to queue, or nothing if the queue is sufficient. "
-                "Reply ONLY with valid JSON — no markdown, no commentary.\n"
+                "Reply ONLY with valid JSON - no markdown, no commentary.\n"
                 'Format when action needed: {"action": "ActionName", "target_ip": "1.2.3.4", "reason": "brief"}\n'
                 'Format when nothing needed: {"action": null}\n'
                 "action must be exactly one of: " + ", ".join(allowed) + "\n"
@@ -197,7 +183,7 @@ class LLMOrchestrator:
                 return None
 
             if action not in allowed:
-                logger.warning(f"LLM advisor suggested disallowed action '{action}' — ignored")
+                logger.warning(f"LLM advisor suggested disallowed action '{action}' - ignored")
                 return None
 
             target_ip = str(data.get("target_ip", "")).strip()
@@ -226,7 +212,7 @@ class LLMOrchestrator:
             return action
 
         except json.JSONDecodeError:
-            logger.debug(f"LLM advisor: invalid JSON: {raw[:200]}")
+            logger.warning(f"LLM advisor: invalid JSON response: {raw[:200]}")
             return None
         except Exception as e:
             logger.debug(f"LLM advisor apply error: {e}")
@@ -243,7 +229,7 @@ class LLMOrchestrator:
                 if self._is_llm_enabled() and self._mode() == "autonomous":
                     self._run_autonomous_cycle()
                 else:
-                    # Mode was switched off at runtime — stop thread
+                    # Mode was switched off at runtime - stop thread
                     break
             except Exception as e:
                 logger.error(f"LLM autonomous cycle error: {e}")
@@ -255,7 +241,7 @@ class LLMOrchestrator:
     def _compute_fingerprint(self) -> tuple:
         """
         Compact state fingerprint: (hosts, vulns, creds, last_completed_queue_id).
-        Only increases are meaningful — a host going offline is not an opportunity.
+        Only increases are meaningful - a host going offline is not an opportunity.
         """
         try:
             hosts = int(getattr(self._sd, "target_count", 0))
@@ -385,7 +371,7 @@ class LLMOrchestrator:
         real_ips = snapshot.get("VALID_TARGET_IPS", [])
         ip_list_str = ", ".join(real_ips) if real_ips else "(no hosts discovered yet)"
 
-        # Short system prompt — small models forget long instructions
+        # Short system prompt - small models forget long instructions
         system = (
             "You are a network security orchestrator. "
             "You receive network scan data and output a JSON array of actions. "
@@ -496,11 +482,11 @@ class LLMOrchestrator:
                     logger.debug(f"LLM autonomous: skipping invalid/disallowed action '{action}'")
                     continue
                 if not target_ip:
-                    logger.debug(f"LLM autonomous: skipping '{action}' — no target_ip")
+                    logger.debug(f"LLM autonomous: skipping '{action}' - no target_ip")
                     continue
                 if not self._is_valid_ip(target_ip):
                     logger.warning(
-                        f"LLM autonomous: skipping '{action}' — invalid/placeholder IP '{target_ip}' "
+                        f"LLM autonomous: skipping '{action}' - invalid/placeholder IP '{target_ip}' "
                         f"(LLM must use exact IPs from alive_hosts)"
                     )
                     continue
@@ -508,7 +494,7 @@ class LLMOrchestrator:
                 mac = self._resolve_mac(target_ip)
                 if not mac:
                     logger.warning(
-                        f"LLM autonomous: skipping '{action}' @ {target_ip} — "
+                        f"LLM autonomous: skipping '{action}' @ {target_ip} - "
                         f"IP not found in hosts table (LLM used an IP not in alive_hosts)"
                     )
                     continue
@@ -535,7 +521,7 @@ class LLMOrchestrator:
                     pass
 
         except json.JSONDecodeError as e:
-            logger.debug(f"LLM autonomous: JSON parse error: {e} — raw: {raw[:200]}")
+            logger.debug(f"LLM autonomous: JSON parse error: {e} - raw: {raw[:200]}")
         except Exception as e:
             logger.debug(f"LLM autonomous: action queue error: {e}")
 

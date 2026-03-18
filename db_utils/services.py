@@ -1,5 +1,4 @@
-# db_utils/services.py
-# Per-port service fingerprinting and tracking operations
+"""services.py - Per-port service fingerprinting and tracking."""
 
 from typing import Dict, List, Optional
 import logging

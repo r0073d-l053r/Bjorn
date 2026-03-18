@@ -1,8 +1,6 @@
-"""
-Debug / Profiling utilities for the Bjorn Debug page.
-Exposes process-level and per-thread metrics via /proc (no external deps).
-Designed for Pi Zero 2: lightweight reads, no subprocess spawning.
-OPTIMIZED: minimal allocations, cached tracemalloc, /proc/self/smaps for C memory.
+"""debug_utils.py - Debug/profiling for the Bjorn Debug page.
+
+Exposes process and per-thread metrics via /proc. Optimized for Pi Zero 2.
 """
 
 import json
@@ -58,7 +56,7 @@ def _fd_count():
 
 
 def _read_open_files():
-    """Read open FDs — reuses a single dict to minimize allocations."""
+    """Read open FDs - reuses a single dict to minimize allocations."""
     fd_dir = "/proc/self/fd"
     fd_map = {}
     try:
@@ -141,7 +139,7 @@ def _get_python_threads_rich():
         if target is not None:
             tf = getattr(target, "__qualname__", getattr(target, "__name__", "?"))
             tm = getattr(target, "__module__", "")
-            # Source file — use __code__ directly (avoids importing inspect)
+            # Source file - use __code__ directly (avoids importing inspect)
             tfile = ""
             code = getattr(target, "__code__", None)
             if code:
@@ -151,7 +149,7 @@ def _get_python_threads_rich():
             tm = ""
             tfile = ""
 
-        # Current stack — top 5 frames, build compact strings directly
+        # Current stack - top 5 frames, build compact strings directly
         stack = []
         frame = frames.get(ident)
         depth = 0
@@ -236,7 +234,7 @@ def _read_smaps_rollup():
 
 
 # ---------------------------------------------------------------------------
-# Cached tracemalloc — take snapshot at most every 5s to reduce overhead
+# Cached tracemalloc - take snapshot at most every 5s to reduce overhead
 # ---------------------------------------------------------------------------
 
 _tm_cache_lock = threading.Lock()
@@ -261,7 +259,7 @@ def _get_tracemalloc_cached():
     current, peak = tracemalloc.get_traced_memory()
     snap = tracemalloc.take_snapshot()
 
-    # Single statistics call — use lineno (more useful), derive file-level client-side
+    # Single statistics call - use lineno (more useful), derive file-level client-side
     stats_line = snap.statistics("lineno")[:30]
     top_by_line = []
     file_agg = {}

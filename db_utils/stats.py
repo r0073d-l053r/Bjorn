@@ -1,5 +1,4 @@
-# db_utils/stats.py
-# Statistics tracking and display operations
+"""stats.py - Statistics tracking and display operations."""
 
 import time
 import sqlite3

@@ -1,5 +1,4 @@
-# db_utils/actions.py
-# Action definition and management operations
+"""actions.py - Action definition and management operations."""
 
 import json
 import sqlite3
@@ -256,7 +255,7 @@ class ActionOps:
         out = []
         for r in rows:
             cls = r["b_class"]
-            enabled = int(r["b_enabled"])  # 0 reste 0
+            enabled = int(r["b_enabled"])
             out.append({
                 "name": cls,
                 "image": f"/actions/actions_icons/{cls}.png",

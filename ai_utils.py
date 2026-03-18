@@ -1,6 +1,4 @@
-"""
-ai_utils.py - Shared AI utilities for Bjorn
-"""
+"""ai_utils.py - Shared feature extraction and encoding helpers for the AI engine."""
 
 import json
 import numpy as np

@@ -1,5 +1,4 @@
-# wpasec_potfiles.py
-# WPAsec Potfile Manager - Download, clean, import, or erase WiFi credentials
+"""wpasec_potfiles.py - Download, clean, import, or erase WiFi creds from WPAsec potfiles."""
 
 import os
 import json

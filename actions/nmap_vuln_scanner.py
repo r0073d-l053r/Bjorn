@@ -1,16 +1,11 @@
-"""
-Vulnerability Scanner Action
-Scanne ultra-rapidement CPE (+ CVE via vulners si dispo),
-avec fallback "lourd" optionnel.
-Affiche une progression en % dans Bjorn.
-"""
+"""nmap_vuln_scanner.py - Nmap-based CPE/CVE vulnerability scanning with vulners integration."""
 
 import re
 import time
 import nmap
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any
 
 from shared import SharedData
@@ -31,18 +26,28 @@ b_priority = 11
 b_cooldown = 0
 b_enabled = 1
 b_rate_limit = None
+b_timeout = 600
+b_max_retries = 2
+b_stealth_level = 3
+b_risk_level = "medium"
+b_tags = ["vuln", "nmap", "cpe", "cve", "scanner"]
+b_category = "recon"
+b_name = "Nmap Vuln Scanner"
+b_description = "Nmap-based CPE/CVE vulnerability scanning with vulners integration."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "NmapVulnScanner.png"
 
-# Regex compilé une seule fois (gain CPU sur Pi Zero)
+# Pre-compiled regex (saves CPU on Pi Zero)
 CVE_RE = re.compile(r'CVE-\d{4}-\d{4,7}', re.IGNORECASE)
 
 
 class NmapVulnScanner:
-    """Scanner de vulnérabilités via nmap (mode rapide CPE/CVE) avec progression."""
+    """Nmap vulnerability scanner (fast CPE/CVE mode) with progress tracking."""
 
     def __init__(self, shared_data: SharedData):
         self.shared_data = shared_data
-        # Pas de self.nm partagé : on instancie dans chaque méthode de scan
-        # pour éviter les corruptions d'état entre batches.
+        # No shared self.nm: instantiate per scan method to avoid state corruption between batches
         logger.info("NmapVulnScanner initialized")
 
     # ---------------------------- Public API ---------------------------- #
@@ -54,7 +59,7 @@ class NmapVulnScanner:
             self.shared_data.bjorn_progress = "0%"
 
             if self.shared_data.orchestrator_should_exit:
-                return 'failed'
+                return 'interrupted'
 
             # 1) Metadata
             meta = {}
@@ -63,7 +68,7 @@ class NmapVulnScanner:
             except Exception:
                 pass
 
-            # 2) Récupérer MAC et TOUS les ports
+            # 2) Get MAC and ALL ports
             mac = row.get("MAC Address") or row.get("mac_address") or ""
 
             ports_str = ""
@@ -87,13 +92,13 @@ class NmapVulnScanner:
 
             ports = [p.strip() for p in ports_str.split(';') if p.strip()]
 
-            # Nettoyage des ports (garder juste le numéro si format 80/tcp)
+            # Strip port format (keep just the number from "80/tcp")
             ports = [p.split('/')[0] for p in ports]
 
             self.shared_data.comment_params = {"ip": ip, "ports": str(len(ports))}
             logger.debug(f"Found {len(ports)} ports for {ip}: {ports[:5]}...")
 
-            # 3) Filtrage "Rescan Only"
+            # 3) "Rescan Only" filtering
             if self.shared_data.config.get('vuln_rescan_on_change_only', False):
                 if self._has_been_scanned(mac):
                     original_count = len(ports)
@@ -105,24 +110,24 @@ class NmapVulnScanner:
                         self.shared_data.bjorn_progress = "100%"
                         return 'success'
 
-            # 4) SCAN AVEC PROGRESSION
+            # 4) SCAN WITH PROGRESS
             if self.shared_data.orchestrator_should_exit:
-                return 'failed'
+                return 'interrupted'
 
             logger.info(f"Starting nmap scan on {len(ports)} ports for {ip}")
             findings = self.scan_vulnerabilities(ip, ports)
 
             if self.shared_data.orchestrator_should_exit:
                 logger.info("Scan interrupted by user")
-                return 'failed'
+                return 'interrupted'
 
-            # 5) Déduplication en mémoire avant persistance
+            # 5) In-memory dedup before persistence
             findings = self._deduplicate_findings(findings)
 
             # 6) Persistance
             self.save_vulnerabilities(mac, ip, findings)
 
-            # Finalisation UI
+            # Final UI update
             self.shared_data.bjorn_progress = "100%"
             self.shared_data.comment_params = {"ip": ip, "vulns_found": str(len(findings))}
             logger.success(f"Vuln scan done on {ip}: {len(findings)} entries")
@@ -130,7 +135,7 @@ class NmapVulnScanner:
 
         except Exception as e:
             logger.error(f"NmapVulnScanner failed for {ip}: {e}")
-            self.shared_data.bjorn_progress = "Error"
+            self.shared_data.bjorn_progress = "0%"
             return 'failed'
 
     def _has_been_scanned(self, mac: str) -> bool:
@@ -161,7 +166,7 @@ class NmapVulnScanner:
 
         ttl = int(self.shared_data.config.get('vuln_rescan_ttl_seconds', 0) or 0)
         if ttl > 0:
-            cutoff = datetime.utcnow() - timedelta(seconds=ttl)
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl)
             final_ports = []
             for p in ports:
                 if p not in seen:
@@ -180,7 +185,7 @@ class NmapVulnScanner:
     # ---------------------------- Helpers -------------------------------- #
 
     def _deduplicate_findings(self, findings: List[Dict]) -> List[Dict]:
-        """Supprime les doublons (même port + vuln_id) pour éviter des inserts inutiles."""
+        """Remove duplicates (same port + vuln_id) to avoid redundant inserts."""
         seen: set = set()
         deduped = []
         for f in findings:
@@ -201,7 +206,7 @@ class NmapVulnScanner:
         return [str(cpe).strip()]
 
     def extract_cves(self, text: str) -> List[str]:
-        """Extrait les CVE via regex pré-compilé (pas de recompilation à chaque appel)."""
+        """Extract CVEs using pre-compiled regex."""
         if not text:
             return []
         return CVE_RE.findall(str(text))
@@ -210,8 +215,7 @@ class NmapVulnScanner:
 
     def scan_vulnerabilities(self, ip: str, ports: List[str]) -> List[Dict]:
         """
-        Orchestre le scan en lots (batches) pour permettre la mise à jour
-        de la barre de progression.
+        Orchestrate scanning in batches for progress bar updates.
         """
         all_findings = []
 
@@ -219,10 +223,10 @@ class NmapVulnScanner:
         use_vulners = bool(self.shared_data.config.get('nse_vulners', False))
         max_ports   = int(self.shared_data.config.get('vuln_max_ports', 10 if fast else 20))
 
-        # Pause entre batches – important sur Pi Zero pour laisser respirer le CPU
+        # Pause between batches -- important on Pi Zero to let the CPU breathe
         batch_pause = float(self.shared_data.config.get('vuln_batch_pause', 0.5))
 
-        # Taille de lot réduite par défaut (2 sur Pi Zero, configurable)
+        # Reduced batch size by default (2 on Pi Zero, configurable)
         batch_size  = int(self.shared_data.config.get('vuln_batch_size', 2))
 
         target_ports = ports[:max_ports]
@@ -240,7 +244,7 @@ class NmapVulnScanner:
 
             port_str = ','.join(batch)
 
-            # Mise à jour UI avant le scan du lot
+            # UI update before batch scan
             pct = int((processed_count / total) * 100)
             self.shared_data.bjorn_progress = f"{pct}%"
             self.shared_data.comment_params = {
@@ -251,7 +255,7 @@ class NmapVulnScanner:
 
             t0 = time.time()
 
-            # Scan du lot (instanciation locale pour éviter la corruption d'état)
+            # Scan batch (local instance to avoid state corruption)
             if fast:
                 batch_findings = self._scan_fast_cpe_cve(ip, port_str, use_vulners)
             else:
@@ -263,11 +267,11 @@ class NmapVulnScanner:
             all_findings.extend(batch_findings)
             processed_count += len(batch)
 
-            # Mise à jour post-lot
+            # Post-batch update
             pct = int((processed_count / total) * 100)
             self.shared_data.bjorn_progress = f"{pct}%"
 
-            # Pause CPU entre batches (vital sur Pi Zero)
+            # CPU pause between batches (vital on Pi Zero)
             if batch_pause > 0 and processed_count < total:
                 time.sleep(batch_pause)
 
@@ -275,10 +279,10 @@ class NmapVulnScanner:
 
     def _scan_fast_cpe_cve(self, ip: str, port_list: str, use_vulners: bool) -> List[Dict]:
         vulns: List[Dict] = []
-        nm = nmap.PortScanner()  # Instance locale – pas de partage d'état
+        nm = nmap.PortScanner()  # Local instance -- no shared state
 
-        # --version-light au lieu de --version-all : bien plus rapide sur Pi Zero
-        # --min-rate/--max-rate : évite de saturer CPU et réseau
+        # --version-light instead of --version-all: much faster on Pi Zero
+        # --min-rate/--max-rate: avoid saturating CPU and network
         args = (
             "-sV --version-light -T4 "
             "--max-retries 1 --host-timeout 60s --script-timeout 20s "
@@ -329,14 +333,14 @@ class NmapVulnScanner:
 
     def _scan_heavy(self, ip: str, port_list: str) -> List[Dict]:
         vulnerabilities: List[Dict] = []
-        nm = nmap.PortScanner()  # Instance locale
+        nm = nmap.PortScanner()  # Local instance
 
         vuln_scripts = [
             'vuln', 'exploit', 'http-vuln-*', 'smb-vuln-*',
             'ssl-*', 'ssh-*', 'ftp-vuln-*', 'mysql-vuln-*',
         ]
         script_arg = ','.join(vuln_scripts)
-        # --min-rate/--max-rate pour ne pas saturer le Pi
+        # --min-rate/--max-rate to avoid saturating the Pi
         args = (
             f"-sV --script={script_arg} -T3 "
             "--script-timeout 30s --min-rate 50 --max-rate 100"
@@ -371,7 +375,7 @@ class NmapVulnScanner:
                             'details': str(output)[:200]
                         })
 
-        # CPE Scan optionnel (sur ce batch)
+        # Optional CPE scan (on this batch)
         if bool(self.shared_data.config.get('scan_cpe', False)):
             ports_for_cpe = list(discovered_ports_in_batch)
             if ports_for_cpe:
@@ -381,10 +385,10 @@ class NmapVulnScanner:
 
     def scan_cpe(self, ip: str, ports: List[str]) -> List[Dict]:
         cpe_vulns = []
-        nm = nmap.PortScanner()  # Instance locale
+        nm = nmap.PortScanner()  # Local instance
         try:
             port_list = ','.join([str(p) for p in ports])
-            # --version-light à la place de --version-all (bien plus rapide)
+            # --version-light instead of --version-all (much faster)
             args = "-sV --version-light -T4 --max-retries 1 --host-timeout 45s"
             nm.scan(hosts=ip, ports=port_list, arguments=args)
 
@@ -430,7 +434,7 @@ class NmapVulnScanner:
             if vid_upper.startswith('CVE-'):
                 findings_by_port[port]['cves'].add(vid)
             elif vid_upper.startswith('CPE:'):
-                # On stocke sans le préfixe "CPE:"
+                # Store without the "CPE:" prefix
                 findings_by_port[port]['cpes'].add(vid[4:])
 
         # 1) CVEs

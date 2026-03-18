@@ -46,14 +46,14 @@ b_icon        = "FreyaHarvest.png"
 
 b_args = {
     "input_dir": {
-        "type": "text", 
-        "label": "Input Data Dir", 
-        "default": "/home/bjorn/Bjorn/data/output"
+        "type": "text",
+        "label": "Input Data Dir",
+        "default": "data/output"
     },
     "output_dir": {
-        "type": "text", 
-        "label": "Reports Dir", 
-        "default": "/home/bjorn/Bjorn/data/reports"
+        "type": "text",
+        "label": "Reports Dir",
+        "default": "data/reports"
     },
     "watch": {
         "type": "checkbox", 
@@ -92,7 +92,8 @@ class FreyaHarvest:
                             with self.lock:
                                 self.data[cat].append(finds)
                             new_findings += 1
-                    except: pass
+                    except Exception:
+                        logger.debug(f"Failed to read {f_path}")
         
         if new_findings > 0:
             logger.info(f"FreyaHarvest: Collected {new_findings} new intelligence items.")
@@ -123,20 +124,30 @@ class FreyaHarvest:
             self.shared_data.log_milestone(b_class, "ReportGenerated", f"MD: {os.path.basename(out_file)}")
 
     def execute(self, ip, port, row, status_key) -> str:
-        input_dir = getattr(self.shared_data, "freya_harvest_input", b_args["input_dir"]["default"])
-        output_dir = getattr(self.shared_data, "freya_harvest_output", b_args["output_dir"]["default"])
+        # Reset per-run state to prevent memory accumulation
+        self.data.clear()
+        self.last_scan_time = 0
+
+        _data_dir = getattr(self.shared_data, "data_dir", "/home/bjorn/Bjorn/data")
+        _default_input = os.path.join(_data_dir, "output")
+        _default_output = os.path.join(_data_dir, "reports")
+        input_dir = getattr(self.shared_data, "freya_harvest_input", _default_input)
+        output_dir = getattr(self.shared_data, "freya_harvest_output", _default_output)
         watch = getattr(self.shared_data, "freya_harvest_watch", True)
         fmt = getattr(self.shared_data, "freya_harvest_format", "all")
         timeout = int(getattr(self.shared_data, "freya_harvest_timeout", 600))
 
         logger.info(f"FreyaHarvest: Starting data harvest from {input_dir}")
         self.shared_data.log_milestone(b_class, "Startup", "Monitoring intelligence directories")
+        # EPD live status
+        self.shared_data.comment_params = {"input": os.path.basename(input_dir), "items": "0"}
 
         start_time = time.time()
         try:
             while time.time() - start_time < timeout:
                 if self.shared_data.orchestrator_should_exit:
-                    break
+                    logger.info("FreyaHarvest: Interrupted by orchestrator.")
+                    return "interrupted"
                 
                 self._collect_data(input_dir)
                 self._generate_report(output_dir, fmt)
@@ -145,7 +156,10 @@ class FreyaHarvest:
                 elapsed = int(time.time() - start_time)
                 prog = int((elapsed / timeout) * 100)
                 self.shared_data.bjorn_progress = f"{prog}%"
-                
+                # EPD live status update
+                total_items = sum(len(v) for v in self.data.values())
+                self.shared_data.comment_params = {"input": os.path.basename(input_dir), "items": str(total_items)}
+
                 if not watch:
                     break
                 
@@ -156,7 +170,10 @@ class FreyaHarvest:
         except Exception as e:
             logger.error(f"FreyaHarvest error: {e}")
             return "failed"
-            
+        finally:
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}
+
         return "success"
 
 if __name__ == "__main__":

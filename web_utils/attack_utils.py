@@ -1,8 +1,4 @@
-# web_utils/attack_utils.py
-"""
-Attack and action management utilities.
-Handles attack listing, import/export, and action metadata management.
-"""
+"""attack_utils.py - Attack listing, import/export, and action metadata management."""
 from __future__ import annotations
 import json
 import os
@@ -322,11 +318,13 @@ class AttackUtils:
         try:
             rel = handler.path[len('/actions_icons/'):]
             rel = os.path.normpath(rel).replace("\\", "/")
-            if rel.startswith("../"):
+
+            # Robust path traversal prevention: resolve to absolute and verify containment
+            image_path = os.path.realpath(os.path.join(self.shared_data.actions_icons_dir, rel))
+            base_dir = os.path.realpath(self.shared_data.actions_icons_dir)
+            if not image_path.startswith(base_dir + os.sep) and image_path != base_dir:
                 handler.send_error(400, "Invalid path")
                 return
-
-            image_path = os.path.join(self.shared_data.actions_icons_dir, rel)
 
             if not os.path.exists(image_path):
                 handler.send_error(404, "Image not found")

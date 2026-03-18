@@ -1,8 +1,4 @@
-# web_utils/backup_utils.py
-"""
-Backup and restore utilities.
-Handles system backups, GitHub updates, and restore operations.
-"""
+"""backup_utils.py - System backups, GitHub updates, and restore operations."""
 from __future__ import annotations
 import os
 import json
@@ -59,7 +55,7 @@ class BackupUtils:
                 return {"status": "success", "message": "Backup created successfully in ZIP format."}
             except Exception as e:
                 self.logger.error(f"Failed to create ZIP backup: {e}")
-                return {"status": "error", "message": str(e)}
+                return {"status": "error", "message": "Internal server error"}
 
         elif backup_format == 'tar.gz':
             backup_filename = f"backup_{timestamp}.tar.gz"
@@ -83,7 +79,7 @@ class BackupUtils:
                 return {"status": "success", "message": "Backup created successfully in tar.gz format."}
             except Exception as e:
                 self.logger.error(f"Failed to create tar.gz backup: {e}")
-                return {"status": "error", "message": str(e)}
+                return {"status": "error", "message": "Internal server error"}
         else:
             self.logger.error(f"Unsupported backup format: {backup_format}")
             return {"status": "error", "message": "Unsupported backup format."}
@@ -96,7 +92,7 @@ class BackupUtils:
             return {"status": "success", "backups": backups}
         except Exception as e:
             self.logger.error(f"Failed to list backups: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def remove_named_pipes(self, directory):
         """Recursively remove named pipes in the specified directory."""
@@ -213,12 +209,12 @@ class BackupUtils:
             self.logger.error(f"Failed to extract backup: {e}")
             if os.path.exists(temp_dir):
                 os.rename(temp_dir, original_dir)
-            return {"status": "error", "message": f"Failed to extract backup: {e}"}
+            return {"status": "error", "message": "Failed to extract backup"}
         except Exception as e:
             self.logger.error(f"Failed to restore backup: {e}")
             if os.path.exists(temp_dir):
                 os.rename(temp_dir, original_dir)
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def set_default_backup(self, data):
         """Set a backup as default."""
@@ -231,7 +227,7 @@ class BackupUtils:
             return {"status": "success"}
         except Exception as e:
             self.logger.error(f"Error setting default backup: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def delete_backup(self, data):
         """Delete a backup file and its DB metadata."""
@@ -250,7 +246,7 @@ class BackupUtils:
             return {"status": "success", "message": "Backup deleted successfully."}
         except Exception as e:
             self.logger.error(f"Failed to delete backup: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def update_application(self, data):
         """Update application from GitHub with options to keep certain folders."""
@@ -367,12 +363,12 @@ class BackupUtils:
             self.logger.error(f"Failed to download update: {e}")
             if os.path.exists(temp_dir):
                 os.rename(temp_dir, original_dir)
-            return {"status": "error", "message": f"Failed to download update: {e}"}
+            return {"status": "error", "message": "Failed to download update"}
         except Exception as e:
             self.logger.error(f"Update failed: {e}")
             if os.path.exists(temp_dir):
                 os.rename(temp_dir, original_dir)
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
         finally:
             for path in [downloaded_zip, extract_dir]:
                 if os.path.exists(path):

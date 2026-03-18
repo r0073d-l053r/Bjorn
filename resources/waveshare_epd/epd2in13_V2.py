@@ -1,16 +1,16 @@
-# epd2in13_V2 — V2 alignée V4, zone utile 120px centrée dans 122px
-# - Fenêtrage complet 122x250
-# - Data entry: X++ puis Y++ (0x03) comme V3/V4
-# - getbuffer() accepte une image 120x250 (ou 122x250) et la centre (offset=1)
-# - Aucune rotation/mirroring côté driver (géré en amont si besoin)
-# - Pas de décalage wrap-around d’1 pixel (fini la ligne sombre)
+# epd2in13_V2 — V2 aligned with V4, usable area 120px centered in 122px
+# - Full 122x250 windowing
+# - Data entry: X++ then Y++ (0x03) like V3/V4
+# - getbuffer() accepts 120x250 (or 122x250) image and centers it (offset=1)
+# - No rotation/mirroring on driver side (handled upstream if needed)
+# - No 1px wrap-around offset (fixes the dark line artifact)
 
 import logging
 import time
 from . import epdconfig
 from logger import Logger
 
-# Résolution physique du panneau (hardware)
+# Physical panel resolution (hardware)
 EPD_WIDTH  = 122
 EPD_HEIGHT = 250
 
@@ -33,7 +33,7 @@ class EPD:
     FULL_UPDATE = 0
     PART_UPDATE = 1
 
-    # LUTs d'origine (Waveshare)
+    # Original Waveshare LUTs
     lut_full_update= [
         0x80,0x60,0x40,0x00,0x00,0x00,0x00,
         0x10,0x60,0x20,0x00,0x00,0x00,0x00,
@@ -124,11 +124,11 @@ class EPD:
         
     def init(self, update):
         """
-        Init V2 alignée V4 :
-        - Data entry: 0x03 (X++ puis Y++)
-        - X-window:   start=0x00, end=0x0F (16 octets = 128 bits => couvre nos 122 px)
-        - Y-window:   start=0x0000, end=0x00F9 (250 lignes)
-        - Curseur:    X=0x00, Y=0x0000
+        Init V2 aligned with V4:
+        - Data entry: 0x03 (X++ then Y++)
+        - X-window:   start=0x00, end=0x0F (16 bytes = 128 bits => covers 122 px)
+        - Y-window:   start=0x0000, end=0x00F9 (250 lines)
+        - Cursor:     X=0x00, Y=0x0000
         """
         if not self.is_initialized:
             if epdconfig.module_init() != 0:
@@ -155,12 +155,12 @@ class EPD:
             self.send_command(0x11)
             self.send_data(0x03)
 
-            # Fenêtre RAM X (octets) 0..15 (16*8=128 bits -> couvre 122 px)
+            # RAM X window (bytes) 0..15 (16*8=128 bits -> covers 122 px)
             self.send_command(0x44)
             self.send_data(0x00)  # start
             self.send_data(0x0F)  # end
 
-            # Fenêtre RAM Y 0..249
+            # RAM Y window 0..249
             self.send_command(0x45)
             self.send_data(0x00)  # Y-start L
             self.send_data(0x00)  # Y-start H
@@ -183,7 +183,7 @@ class EPD:
             for i in range(70):
                 self.send_data(self.lut_full_update[i])
 
-            # Curseur X/Y
+            # X/Y cursor
             self.send_command(0x4E); self.send_data(0x00)      # X-counter (byte)
             self.send_command(0x4F); self.send_data(0x00); self.send_data(0x00)  # Y-counter
             self.ReadBusy()
@@ -206,7 +206,7 @@ class EPD:
 
             self.send_command(0x3C); self.send_data(0x01)
 
-            # Même fenêtrage qu’en full
+            # Same windowing as full update
             self.send_command(0x44); self.send_data(0x00); self.send_data(0x0F)
             self.send_command(0x45); self.send_data(0x00); self.send_data(0x00); self.send_data(0xF9); self.send_data(0x00)
             self.send_command(0x4E); self.send_data(0x00)
@@ -234,12 +234,12 @@ class EPD:
                 if pixels[src_x, y] == 0:
                     xi = x + x_offset
                     if xi <= 0 or xi >= W-1:
-                        continue  # sécurité: ne jamais écrire col 0 ni 121
+                        continue  # safety: never write to col 0 or 121
                     byte_index = base + (xi >> 3)
                     bit = 0x80 >> (xi & 7)
                     buf[byte_index] &= (~bit) & 0xFF
 
-            # force colonnes 0 et 121 en blanc
+            # force columns 0 and 121 to white
             buf[base + (0 >> 3)] |= (0x80 >> (0 & 7))
             buf[base + (121 >> 3)] |= (0x80 >> (121 & 7))
 
@@ -255,7 +255,7 @@ class EPD:
     def displayPartial(self, image):
         bytes_per_line = (self.width + 7) // 8
         total = self.height * bytes_per_line
-        # Buffer inversé pour le second plan (comme d’origine)
+        # Inverted buffer for the second plane (as per original)
         buf_inv = bytearray(total)
         for i in range(total):
             buf_inv[i] = (~image[i]) & 0xFF

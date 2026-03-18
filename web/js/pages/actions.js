@@ -83,6 +83,7 @@ function buildShell() {
   const sideTabs = el('div', { class: 'tabs-container' }, [
     el('button', { class: 'tab-btn active', id: 'tabBtnActions', type: 'button' }, [t('actions.tabs.actions')]),
     el('button', { class: 'tab-btn', id: 'tabBtnArgs', type: 'button' }, [t('actions.tabs.arguments')]),
+    el('button', { class: 'tab-btn', id: 'tabBtnPkgs', type: 'button' }, ['Packages']),
   ]);
 
   const sideHeader = el('div', { class: 'sideheader' }, [
@@ -122,7 +123,16 @@ function buildShell() {
     el('div', { id: 'presetChips', class: 'chips' }),
   ]);
 
-  const sideContent = el('div', { class: 'sidecontent' }, [actionsSidebar, argsSidebar]);
+  const pkgsSidebar = el('div', { id: 'tab-packages', class: 'sidebar-page', style: 'display:none' }, [
+    el('div', { class: 'pkg-install-form' }, [
+      el('input', { type: 'text', class: 'pkg-install-input', placeholder: 'Package name (e.g. requests)', id: 'pkgNameInput' }),
+      el('button', { class: 'pkg-install-btn', type: 'button' }, ['Install']),
+    ]),
+    el('div', { class: 'pkg-console', id: 'pkgConsole' }),
+    el('ul', { class: 'pkg-list', id: 'pkgList' }),
+  ]);
+
+  const sideContent = el('div', { class: 'sidecontent' }, [actionsSidebar, argsSidebar, pkgsSidebar]);
 
   const sidebarPanel = el('aside', { class: 'panel al-sidebar' }, [sideHeader, sideContent]);
 
@@ -149,11 +159,27 @@ function buildShell() {
 }
 
 function bindStaticEvents() {
+  // Hidden file input for custom script uploads
+  const fileInput = el('input', { type: 'file', accept: '.py', id: 'customScriptFileInput', style: 'display:none' });
+  root.appendChild(fileInput);
+  tracker.trackEventListener(fileInput, 'change', () => {
+    const file = fileInput.files?.[0];
+    if (file) {
+      uploadCustomScript(file);
+      fileInput.value = '';
+    }
+  });
+
   const tabActions = q('#tabBtnActions');
   const tabArgs = q('#tabBtnArgs');
+  const tabPkgs = q('#tabBtnPkgs');
 
   if (tabActions) tracker.trackEventListener(tabActions, 'click', () => switchTab('actions'));
   if (tabArgs) tracker.trackEventListener(tabArgs, 'click', () => switchTab('arguments'));
+  if (tabPkgs) tracker.trackEventListener(tabPkgs, 'click', () => switchTab('packages'));
+
+  const pkgInstallBtn = q('.pkg-install-btn');
+  if (pkgInstallBtn) tracker.trackEventListener(pkgInstallBtn, 'click', () => installPackage());
 
   const searchInput = q('#searchInput');
   if (searchInput) {
@@ -190,13 +216,19 @@ function switchTab(tab) {
   currentTab = tab;
   const tabActions = q('#tabBtnActions');
   const tabArgs = q('#tabBtnArgs');
+  const tabPkgs = q('#tabBtnPkgs');
   const actionsPane = q('#tab-actions');
   const argsPane = q('#tab-arguments');
+  const pkgsPane = q('#tab-packages');
 
   if (tabActions) tabActions.classList.toggle('active', tab === 'actions');
   if (tabArgs) tabArgs.classList.toggle('active', tab === 'arguments');
+  if (tabPkgs) tabPkgs.classList.toggle('active', tab === 'packages');
   if (actionsPane) actionsPane.style.display = tab === 'actions' ? '' : 'none';
   if (argsPane) argsPane.style.display = tab === 'arguments' ? '' : 'none';
+  if (pkgsPane) pkgsPane.style.display = tab === 'packages' ? '' : 'none';
+
+  if (tab === 'packages') loadPackages();
 }
 
 function enforceMobileOnePane() {
@@ -275,6 +307,8 @@ function normalizeAction(raw) {
     path: raw.path || raw.module_path || raw.b_module || id,
     is_running: !!raw.is_running,
     status: raw.is_running ? 'running' : 'ready',
+    isCustom: !!raw.is_custom,
+    scriptFormat: raw.script_format || 'bjorn',
   };
 }
 
@@ -294,32 +328,116 @@ function renderActionsList() {
     return;
   }
 
-  for (const a of filtered) {
-    const row = el('div', { class: `al-row${a.id === activeActionId ? ' selected' : ''}`, draggable: 'true', 'data-action-id': a.id }, [
-      el('div', { class: 'ic' }, [
-        el('img', {
-          class: 'ic-img',
-          src: a.icon,
-          alt: '',
-          onerror: (e) => {
-            e.target.onerror = null;
-            e.target.src = '/actions/actions_icons/default.png';
-          },
-        }),
-      ]),
-      el('div', {}, [
-        el('div', { class: 'name' }, [a.name]),
-        el('div', { class: 'desc' }, [a.description]),
-      ]),
-      el('div', { class: `chip ${statusChipClass(a.status)}` }, [statusChipText(a.status)]),
-    ]);
+  const builtIn = filtered.filter((a) => a.category !== 'custom');
+  const custom = filtered.filter((a) => a.category === 'custom');
 
-    tracker.trackEventListener(row, 'click', () => onActionSelected(a.id));
-    tracker.trackEventListener(row, 'dragstart', (ev) => {
-      ev.dataTransfer?.setData('text/plain', a.id);
+  for (const a of builtIn) {
+    container.appendChild(buildActionRow(a));
+  }
+
+  // Custom Scripts section
+  const sectionHeader = el('div', { class: 'al-section-divider' }, [
+    el('span', { class: 'al-section-title' }, ['Custom Scripts']),
+    el('button', { class: 'al-btn al-upload-btn', type: 'button' }, ['\u2B06 Upload']),
+  ]);
+
+  const uploadBtn = sectionHeader.querySelector('.al-upload-btn');
+  if (uploadBtn) {
+    tracker.trackEventListener(uploadBtn, 'click', () => {
+      const fileInput = q('#customScriptFileInput');
+      if (fileInput) fileInput.click();
     });
+  }
 
-    container.appendChild(row);
+  container.appendChild(sectionHeader);
+
+  if (!custom.length) {
+    container.appendChild(el('div', { class: 'sub', style: 'padding:6px 12px' }, ['No custom scripts uploaded.']));
+  }
+
+  for (const a of custom) {
+    container.appendChild(buildActionRow(a, true));
+  }
+}
+
+function buildActionRow(a, isCustom = false) {
+  const badges = [];
+  if (isCustom) {
+    badges.push(el('span', { class: 'chip format-badge' }, [a.scriptFormat]));
+  }
+
+  const infoBlock = el('div', {}, [
+    el('div', { class: 'name' }, [a.name]),
+    el('div', { class: 'desc' }, [a.description]),
+  ]);
+
+  const rowChildren = [
+    el('div', { class: 'ic' }, [
+      el('img', {
+        class: 'ic-img',
+        src: a.icon,
+        alt: '',
+        onerror: (e) => {
+          e.target.onerror = null;
+          e.target.src = '/actions/actions_icons/default.png';
+        },
+      }),
+    ]),
+    infoBlock,
+    ...badges,
+    el('div', { class: `chip ${statusChipClass(a.status)}` }, [statusChipText(a.status)]),
+  ];
+
+  if (isCustom) {
+    const deleteBtn = el('button', { class: 'al-btn al-delete-btn', type: 'button', title: 'Delete script' }, ['\uD83D\uDDD1']);
+    tracker.trackEventListener(deleteBtn, 'click', (ev) => {
+      ev.stopPropagation();
+      deleteCustomScript(a.bClass);
+    });
+    rowChildren.push(deleteBtn);
+  }
+
+  const row = el('div', { class: `al-row${a.id === activeActionId ? ' selected' : ''}`, draggable: 'true', 'data-action-id': a.id }, rowChildren);
+
+  tracker.trackEventListener(row, 'click', () => onActionSelected(a.id));
+  tracker.trackEventListener(row, 'dragstart', (ev) => {
+    ev.dataTransfer?.setData('text/plain', a.id);
+  });
+
+  return row;
+}
+
+async function uploadCustomScript(file) {
+  const formData = new FormData();
+  formData.append('script_file', file);
+  try {
+    const resp = await fetch('/upload_custom_script', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.status === 'success') {
+      toast('Custom script uploaded', 1800, 'success');
+      await loadActions();
+      renderActionsList();
+    } else {
+      toast(`Upload failed: ${data.message || 'Unknown error'}`, 2600, 'error');
+    }
+  } catch (err) {
+    toast(`Upload error: ${err.message}`, 2600, 'error');
+  }
+}
+
+async function deleteCustomScript(bClass) {
+  if (!confirm(`Delete custom script "${bClass}"?`)) return;
+  try {
+    const resp = await api.post('/delete_custom_script', { script_name: bClass });
+    if (resp.status === 'success') {
+      toast('Custom script deleted', 1800, 'success');
+      await loadActions();
+      renderActionsList();
+    } else {
+      toast(`Delete failed: ${resp.message || 'Unknown error'}`, 2600, 'error');
+    }
+  } catch (err) {
+    toast(`Delete error: ${err.message}`, 2600, 'error');
   }
 }
 
@@ -812,5 +930,83 @@ function stopOutputPolling(actionId) {
   if (timer) {
     clearTimeout(timer);
     pollingTimers.delete(actionId);
+  }
+}
+
+/* ── Package Management ────────────────────────────── */
+
+async function installPackage() {
+  const input = document.getElementById('pkgNameInput');
+  const name = (input?.value || '').trim();
+  if (!name) return;
+
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+    toast('Invalid package name', 3000, 'error');
+    return;
+  }
+
+  const consoleEl = document.getElementById('pkgConsole');
+  if (consoleEl) {
+    consoleEl.classList.add('active');
+    consoleEl.textContent = '';
+  }
+
+  const evtSource = new EventSource(`/api/packages/install?name=${encodeURIComponent(name)}`);
+  evtSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.line && consoleEl) {
+      consoleEl.textContent += data.line + '\n';
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+    if (data.done) {
+      evtSource.close();
+      if (data.success) {
+        toast(`${name} installed successfully`, 3000, 'success');
+        loadPackages();
+      } else {
+        toast(`Failed to install ${name}`, 3000, 'error');
+      }
+    }
+  };
+  evtSource.onerror = () => {
+    evtSource.close();
+    toast('Install connection lost', 3000, 'error');
+  };
+}
+
+async function loadPackages() {
+  try {
+    const resp = await api.post('/api/packages/list', {});
+    if (resp.status === 'success') {
+      const list = document.getElementById('pkgList');
+      if (!list) return;
+      empty(list);
+      for (const pkg of resp.data) {
+        list.appendChild(el('li', { class: 'pkg-item' }, [
+          el('span', {}, [
+            el('span', { class: 'pkg-name' }, [pkg.name]),
+            el('span', { class: 'pkg-version' }, [pkg.version || '']),
+          ]),
+          el('button', { class: 'pkg-uninstall-btn', type: 'button', onClick: () => uninstallPackage(pkg.name) }, ['Uninstall']),
+        ]));
+      }
+    }
+  } catch (err) {
+    toast(`Failed to load packages: ${err.message}`, 2600, 'error');
+  }
+}
+
+async function uninstallPackage(name) {
+  if (!confirm(`Uninstall ${name}?`)) return;
+  try {
+    const resp = await api.post('/api/packages/uninstall', { name });
+    if (resp.status === 'success') {
+      toast(`${name} uninstalled`, 3000, 'success');
+      loadPackages();
+    } else {
+      toast(resp.message || 'Failed', 3000, 'error');
+    }
+  } catch (err) {
+    toast(`Uninstall error: ${err.message}`, 2600, 'error');
   }
 }

@@ -1,5 +1,4 @@
-# db_utils/credentials.py
-# Credential storage and management operations
+"""credentials.py - Credential storage and management operations."""
 
 import json
 import sqlite3

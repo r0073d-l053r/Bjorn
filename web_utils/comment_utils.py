@@ -1,8 +1,4 @@
-# web_utils/comment_utils.py
-"""
-Comment and status message management utilities.
-Handles status comments/messages displayed in the UI.
-"""
+"""comment_utils.py - Status comments and messages displayed in the UI."""
 from __future__ import annotations
 import json
 import re

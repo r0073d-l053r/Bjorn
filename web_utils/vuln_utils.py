@@ -1,9 +1,4 @@
-# web_utils/vuln_utils.py
-"""
-Vulnerability management and CVE enrichment utilities.
-Handles vulnerability data, CVE metadata, and enrichment from external sources.
-Optimized for low-power devices like Raspberry Pi Zero.
-"""
+"""vuln_utils.py - Vulnerability data, CVE metadata, and enrichment from external sources."""
 from __future__ import annotations
 
 import json
@@ -545,7 +540,7 @@ class VulnUtils:
 
     def _fetch_exploits_for_cve(self, cve_id: str) -> List[Dict[str, Any]]:
         """Look up exploit data from the local exploit_feeds table.
-        No external API calls — populated by serve_feed_sync().
+        No external API calls - populated by serve_feed_sync().
         """
         try:
             rows = self.shared_data.db.query(
@@ -576,7 +571,7 @@ class VulnUtils:
             return []
 
     # ------------------------------------------------------------------
-    # Feed sync — called by POST /api/feeds/sync
+    # Feed sync - called by POST /api/feeds/sync
     # ------------------------------------------------------------------
 
     # Schema created lazily on first sync
@@ -630,7 +625,7 @@ class VulnUtils:
             logger.debug("Failed to update feed_sync_state for %s", feed, exc_info=True)
 
     def serve_feed_sync(self, handler) -> None:
-        """POST /api/feeds/sync — download CISA KEV + Exploit-DB + EPSS into local DB."""
+        """POST /api/feeds/sync - download CISA KEV + Exploit-DB + EPSS into local DB."""
         self._ensure_feed_schema()
         results: Dict[str, Any] = {}
 
@@ -639,7 +634,7 @@ class VulnUtils:
             kev_count = self._sync_cisa_kev()
             self._set_sync_state("cisa_kev", kev_count, "ok")
             results["cisa_kev"] = {"status": "ok", "count": kev_count}
-            logger.info("CISA KEV synced — %d records", kev_count)
+            logger.info("CISA KEV synced - %d records", kev_count)
         except Exception as e:
             self._set_sync_state("cisa_kev", 0, "error")
             results["cisa_kev"] = {"status": "error", "message": str(e)}
@@ -650,7 +645,7 @@ class VulnUtils:
             edb_count = self._sync_exploitdb()
             self._set_sync_state("exploitdb", edb_count, "ok")
             results["exploitdb"] = {"status": "ok", "count": edb_count}
-            logger.info("Exploit-DB synced — %d records", edb_count)
+            logger.info("Exploit-DB synced - %d records", edb_count)
         except Exception as e:
             self._set_sync_state("exploitdb", 0, "error")
             results["exploitdb"] = {"status": "error", "message": str(e)}
@@ -661,7 +656,7 @@ class VulnUtils:
             epss_count = self._sync_epss()
             self._set_sync_state("epss", epss_count, "ok")
             results["epss"] = {"status": "ok", "count": epss_count}
-            logger.info("EPSS synced — %d records", epss_count)
+            logger.info("EPSS synced - %d records", epss_count)
         except Exception as e:
             self._set_sync_state("epss", 0, "error")
             results["epss"] = {"status": "error", "message": str(e)}
@@ -675,7 +670,7 @@ class VulnUtils:
         })
 
     def serve_feed_status(self, handler) -> None:
-        """GET /api/feeds/status — return last sync timestamps and counts."""
+        """GET /api/feeds/status - return last sync timestamps and counts."""
         try:
             self._ensure_feed_schema()
             rows = self.shared_data.db.query(

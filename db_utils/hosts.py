@@ -1,9 +1,9 @@
-# db_utils/hosts.py
-# Host and network device management operations
+"""hosts.py - Host and network device management operations."""
 
 import time
 import sqlite3
 from typing import Any, Dict, Iterable, List, Optional
+from db_utils.base import _validate_identifier
 import logging
 
 from logger import Logger
@@ -428,6 +428,7 @@ class HostOps:
                 if tname == 'hosts':
                     continue
                 try:
+                    _validate_identifier(tname, "table name")
                     cur.execute(f"PRAGMA table_info({tname})")
                     cols = [r[1].lower() for r in cur.fetchall()]
                     if 'mac_address' in cols:

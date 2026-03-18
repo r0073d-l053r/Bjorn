@@ -1,8 +1,4 @@
-# web_utils/system_utils.py
-"""
-System utilities for management operations.
-Handles system commands, service management, configuration.
-"""
+"""system_utils.py - System commands, service management, and configuration."""
 from __future__ import annotations
 import json
 import subprocess
@@ -73,7 +69,8 @@ class SystemUtils:
                         self.logger.warning(f"Failed to remove {entry.path}: {e}")
             self._send_json(handler, {"status": "success", "message": "Logs cleared successfully"})
         except Exception as e:
-            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
+            self.logger.error(f"Error clearing logs: {e}")
+            self._send_json(handler, {"status": "error", "message": "Internal server error"}, 500)
 
     def initialize_db(self, handler):
         """Initialize or prepare database schema."""
@@ -83,7 +80,8 @@ class SystemUtils:
             self.shared_data.initialize_statistics()
             self._send_json(handler, {"status": "success", "message": "Database initialized successfully"})
         except Exception as e:
-            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
+            self.logger.error(f"Error initializing database: {e}")
+            self._send_json(handler, {"status": "error", "message": "Internal server error"}, 500)
 
     def erase_bjorn_memories(self, handler):
         """Erase all Bjorn-related memories and restart service."""
@@ -120,7 +118,7 @@ class SystemUtils:
             handler.end_headers()
             handler.wfile.write(json.dumps({
                 "status": "error",
-                "message": f"Error erasing Bjorn memories: {str(e)}"
+                "message": "Internal server error"
             }).encode('utf-8'))
 
     def clear_netkb(self, handler, restart=True):
@@ -134,7 +132,8 @@ class SystemUtils:
                 self.restart_bjorn_service(handler)
             self._send_json(handler, {"status": "success", "message": "NetKB cleared in database"})
         except Exception as e:
-            self._send_json(handler, {"status": "error", "message": str(e)}, 500)
+            self.logger.error(f"Error clearing NetKB: {e}")
+            self._send_json(handler, {"status": "error", "message": "Internal server error"}, 500)
 
     def clear_livestatus(self, handler, restart=True):
         """Clear live status counters."""
@@ -195,7 +194,7 @@ class SystemUtils:
             return {"status": "success", "message": "Configuration saved"}
         except Exception as e:
             self.logger.error(f"Error saving configuration: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal server error"}
 
     def serve_current_config(self, handler):
         """Serve current configuration as JSON (Optimized via SharedData cache)."""
@@ -243,10 +242,13 @@ class SystemUtils:
             handler.send_response(500)
             handler.send_header("Content-type", "application/json")
             handler.end_headers()
-            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+            handler.wfile.write(json.dumps({"status": "error", "message": "Internal server error"}).encode('utf-8'))
 
     def sse_log_stream(self, handler):
         """Stream logs using Server-Sent Events (SSE)."""
+        log_file_handle = None
+        max_lifetime = 1800  # 30 minutes maximum connection lifetime
+        start_time = time.time()
         try:
             handler.send_response(200)
             handler.send_header("Content-Type", "text/event-stream")
@@ -260,24 +262,45 @@ class SystemUtils:
             handler.wfile.write(b"data: Connected\n\n")
             handler.wfile.flush()
 
-            with open(log_file_path, 'r') as log_file:
-                log_file.seek(0, os.SEEK_END)
-                while True:
-                    line = log_file.readline()
-                    if line:
-                        message = f"data: {line.strip()}\n\n"
-                        handler.wfile.write(message.encode('utf-8'))
+            log_file_handle = open(log_file_path, 'r')
+            log_file_handle.seek(0, os.SEEK_END)
+            while True:
+                # Check maximum connection lifetime
+                if time.time() - start_time > max_lifetime:
+                    self.logger.info("SSE stream reached maximum lifetime, closing")
+                    try:
+                        handler.wfile.write(b"data: Stream timeout, please reconnect\n\n")
                         handler.wfile.flush()
-                    else:
-                        handler.wfile.write(b": heartbeat\n\n")
-                        handler.wfile.flush()
-                        time.sleep(1)
+                    except Exception:
+                        pass
+                    break
 
-        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
+                line = log_file_handle.readline()
+                if line:
+                    message = f"data: {line.strip()}\n\n"
+                else:
+                    message = ": heartbeat\n\n"
+
+                try:
+                    handler.wfile.write(message.encode('utf-8') if isinstance(message, str) else message)
+                    handler.wfile.flush()
+                except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+                    self.logger.info("Client disconnected from SSE stream (write failed)")
+                    break
+
+                if not line:
+                    time.sleep(1)
+
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
             self.logger.info("Client disconnected from SSE stream")
         except Exception as e:
             self.logger.error(f"SSE Error: {e}")
         finally:
+            if log_file_handle is not None:
+                try:
+                    log_file_handle.close()
+                except Exception:
+                    pass
             self.logger.info("SSE stream closed")
 
     def _parse_progress(self):
@@ -301,7 +324,7 @@ class SystemUtils:
                 "status": self.shared_data.bjorn_orch_status,
                 "status2": self.shared_data.bjorn_status_text2,
 
-                # 🟢 PROGRESS — parse "42%" / "" / 0 safely
+                # 🟢 PROGRESS - parse "42%" / "" / 0 safely
                 "progress": self._parse_progress(),
 
                 "image_path": "/bjorn_status_image?t=" + str(int(time.time())),
@@ -358,7 +381,7 @@ class SystemUtils:
     # ----------------------------------------------------------------
 
     def epd_get_layout(self, handler):
-        """GET /api/epd/layout — return current layout JSON.
+        """GET /api/epd/layout - return current layout JSON.
 
         Optional query param: ?epd_type=epd2in7
         If provided, returns the layout for that EPD type (custom or built-in)
@@ -397,7 +420,7 @@ class SystemUtils:
             self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def epd_save_layout(self, handler, data):
-        """POST /api/epd/layout — save a custom layout."""
+        """POST /api/epd/layout - save a custom layout."""
         try:
             layout = getattr(self.shared_data, 'display_layout', None)
             if layout is None:
@@ -413,7 +436,7 @@ class SystemUtils:
             self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def epd_reset_layout(self, handler, data):
-        """POST /api/epd/layout/reset — reset to built-in default."""
+        """POST /api/epd/layout/reset - reset to built-in default."""
         try:
             layout = getattr(self.shared_data, 'display_layout', None)
             if layout is None:
@@ -426,7 +449,7 @@ class SystemUtils:
             self._send_json(handler, {"status": "error", "message": str(e)}, 500)
 
     def epd_list_layouts(self, handler):
-        """GET /api/epd/layouts — list available EPD types and their layouts."""
+        """GET /api/epd/layouts - list available EPD types and their layouts."""
         try:
             from display_layout import BUILTIN_LAYOUTS
             result = {}

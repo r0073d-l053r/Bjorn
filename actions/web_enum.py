@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-web_enum.py — Gobuster Web Enumeration -> DB writer for table `webenum`.
-
-- Writes each finding into the `webenum` table in REAL-TIME (Streaming).
-- Updates bjorn_progress with actual percentage (0-100%).
-- Respects orchestrator stop flag (shared_data.orchestrator_should_exit) immediately.
-- No filesystem output: parse Gobuster stdout/stderr directly.
-- Filtrage dynamique des statuts HTTP via shared_data.web_status_codes.
-"""
+"""web_enum.py - Gobuster-powered web directory enumeration, streaming results to DB."""
 
 import re
 import socket
@@ -37,6 +29,18 @@ b_priority  = 9
 b_cooldown  = 1800
 b_rate_limit = '3/86400'
 b_enabled   = 1
+b_timeout = 600
+b_max_retries = 1
+b_stealth_level = 4
+b_risk_level = "low"
+b_action = "normal"
+b_tags = ["web", "enum", "gobuster", "directories"]
+b_category = "recon"
+b_name = "Web Enumeration"
+b_description = "Gobuster-powered web directory enumeration with streaming results to DB."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "WebEnumeration.png"
 
 # -------------------- Defaults & parsing --------------------
 DEFAULT_WEB_STATUS_CODES = [
@@ -60,14 +64,14 @@ GOBUSTER_LINE = re.compile(
     re.VERBOSE
 )
 
-# Regex pour capturer la progression de Gobuster sur stderr
-# Ex: "Progress: 1024 / 4096 (25.00%)"
+# Regex to capture Gobuster progress from stderr
+# e.g.: "Progress: 1024 / 4096 (25.00%)"
 GOBUSTER_PROGRESS_RE = re.compile(r"Progress:\s+(?P<current>\d+)\s*/\s+(?P<total>\d+)")
 
 
 def _normalize_status_policy(policy) -> Set[int]:
     """
-    Transforme une politique "UI" en set d'entiers HTTP.
+    Convert a UI status policy into a set of HTTP status ints.
     """
     codes: Set[int] = set()
     if not policy:
@@ -104,12 +108,13 @@ class WebEnumeration:
     """
     def __init__(self, shared_data: SharedData):
         self.shared_data = shared_data
-        self.gobuster_path = "/usr/bin/gobuster"  # verify with `which gobuster`
+        import shutil
+        self.gobuster_path = shutil.which("gobuster") or "/usr/bin/gobuster"
         self.wordlist = self.shared_data.common_wordlist
         self.lock = threading.Lock()
         
-        # Cache pour la taille de la wordlist (pour le calcul du %)
-        self.wordlist_size = 0 
+        # Wordlist size cache (for % calculation)
+        self.wordlist_size = 0
         self._count_wordlist_lines()
 
         # ---- Sanity checks
@@ -121,7 +126,7 @@ class WebEnumeration:
             logger.error(f"Wordlist not found: {self.wordlist}")
             self._available = False
 
-        # Politique venant de l’UI : créer si absente
+        # Status code policy from UI; create if missing
         if not hasattr(self.shared_data, "web_status_codes") or not self.shared_data.web_status_codes:
             self.shared_data.web_status_codes = DEFAULT_WEB_STATUS_CODES.copy()
 
@@ -132,10 +137,10 @@ class WebEnumeration:
         )
 
     def _count_wordlist_lines(self):
-        """Compte les lignes de la wordlist une seule fois pour calculer le %."""
+        """Count wordlist lines once for progress % calculation."""
         if self.wordlist and os.path.exists(self.wordlist):
             try:
-                # Lecture rapide bufferisée
+                # Fast buffered read
                 with open(self.wordlist, 'rb') as f:
                     self.wordlist_size = sum(1 for _ in f)
             except Exception as e:
@@ -162,7 +167,7 @@ class WebEnumeration:
 
     # -------------------- Filter helper --------------------
     def _allowed_status_set(self) -> Set[int]:
-        """Recalcule à chaque run pour refléter une mise à jour UI en live."""
+        """Recalculated each run to reflect live UI updates."""
         try:
             return _normalize_status_policy(getattr(self.shared_data, "web_status_codes", None))
         except Exception as e:

@@ -1,13 +1,8 @@
-#init_shared.py
-# Description:
-# This file, init_shared.py, is responsible for initializing and providing access to shared data across different modules in the Bjorn project.
-#
-# Key functionalities include:
-# - Importing the `SharedData` class from the `shared` module.
-# - Creating an instance of `SharedData` named `shared_data` that holds common configuration, paths, and other resources.
-# - Ensuring that all modules importing `shared_data` will have access to the same instance, promoting consistency and ease of data management throughout the project.
-
+"""init_shared.py - Global singleton for shared state; import shared_data from here."""
 
 from shared import SharedData
 
+# Module-level initialization is thread-safe in CPython: the import lock
+# guarantees that this module body executes at most once, even when multiple
+# threads import it concurrently (see importlib._bootstrap._ModuleLock).
 shared_data = SharedData()

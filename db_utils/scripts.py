@@ -1,5 +1,4 @@
-# db_utils/scripts.py
-# Script and project metadata operations
+"""scripts.py - Script and project metadata operations."""
 
 from typing import Any, Dict, List, Optional
 import logging

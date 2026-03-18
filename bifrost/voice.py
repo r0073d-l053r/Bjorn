@@ -1,5 +1,5 @@
-"""
-Bifrost — Voice / status messages.
+"""voice.py - Bifrost voice / status messages.
+
 Ported from pwnagotchi/voice.py, uses random choice for personality.
 """
 import random

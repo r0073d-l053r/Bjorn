@@ -1,21 +1,4 @@
-"""
-Sentinel — Bjorn Network Watchdog Engine.
-
-Lightweight background thread that monitors network state changes
-and fires configurable alerts via rules. Resource-friendly: yields
-to the orchestrator when actions are running.
-
-Detection modules:
-  - new_device:    Never-seen MAC appears on the network
-  - device_join:   Known device comes back online (alive 0→1)
-  - device_leave:  Known device goes offline (alive 1→0)
-  - arp_spoof:     Same IP claimed by multiple MACs (ARP cache conflict)
-  - port_change:   Host ports changed since last snapshot
-  - service_change: New service detected on known host
-  - rogue_dhcp:    Multiple DHCP servers on the network
-  - dns_anomaly:   DNS response pointing to unexpected IP
-  - mac_flood:     Sudden burst of new MACs (possible MAC flooding attack)
-"""
+"""sentinel.py - Network watchdog: detects new devices, ARP spoofs, rogue DHCP, and more."""
 
 import json
 import logging
@@ -38,7 +21,7 @@ SEV_CRITICAL = "critical"
 class SentinelEngine:
     """
     Main Sentinel watchdog. Runs a scan loop on a configurable interval.
-    All checks read from the existing Bjorn DB — zero extra network traffic.
+    All checks read from the existing Bjorn DB - zero extra network traffic.
     """
 
     def __init__(self, shared_data):
@@ -112,7 +95,7 @@ class SentinelEngine:
                 # Resource-friendly: skip if orchestrator is busy with actions
                 running_count = self._count_running_actions()
                 if running_count > 2:
-                    logger.debug("Sentinel yielding — %d actions running", running_count)
+                    logger.debug("Sentinel yielding - %d actions running", running_count)
                     self._stop_event.wait(min(self.interval, 15))
                     continue
 
@@ -318,7 +301,7 @@ class SentinelEngine:
             ) or []
 
             if not rules:
-                # No rules for this event type — still log but don't notify
+                # No rules for this event type - still log but don't notify
                 self._store_event(event_type, severity, title, details, mac, ip, meta)
                 return
 
@@ -442,7 +425,7 @@ class SentinelEngine:
 
         for action in actions:
             if action == "notify_web":
-                # Web notification is automatic via polling — no extra action needed
+                # Web notification is automatic via polling - no extra action needed
                 continue
             notifier = self._notifiers.get(action)
             if notifier:

@@ -1,6 +1,4 @@
-# database.py
-# Main database facade - delegates to specialized modules in db_utils/
-# Maintains backward compatibility with existing code
+"""database.py - Main database facade, delegates to specialized modules in db_utils/."""
 
 import os
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -29,6 +27,9 @@ from db_utils.webenum import WebEnumOps
 from db_utils.sentinel import SentinelOps
 from db_utils.bifrost import BifrostOps
 from db_utils.loki import LokiOps
+from db_utils.schedules import ScheduleOps
+from db_utils.packages import PackageOps
+from db_utils.plugins import PluginOps
 
 logger = Logger(name="database.py", level=logging.DEBUG)
 
@@ -67,6 +68,9 @@ class BjornDatabase:
         self._sentinel = SentinelOps(self._base)
         self._bifrost = BifrostOps(self._base)
         self._loki = LokiOps(self._base)
+        self._schedules = ScheduleOps(self._base)
+        self._packages = PackageOps(self._base)
+        self._plugins = PluginOps(self._base)
 
         # Ensure schema is created
         self.ensure_schema()
@@ -147,6 +151,9 @@ class BjornDatabase:
         self._sentinel.create_tables()
         self._bifrost.create_tables()
         self._loki.create_tables()
+        self._schedules.create_tables()
+        self._packages.create_tables()
+        self._plugins.create_tables()
 
         # Initialize stats singleton
         self._stats.ensure_stats_initialized()
@@ -391,7 +398,44 @@ class BjornDatabase:
     
     def delete_script(self, name: str) -> None:
         return self._scripts.delete_script(name)
-    
+
+    # Schedule operations
+    def add_schedule(self, *a, **kw): return self._schedules.add_schedule(*a, **kw)
+    def update_schedule(self, *a, **kw): return self._schedules.update_schedule(*a, **kw)
+    def delete_schedule(self, *a, **kw): return self._schedules.delete_schedule(*a, **kw)
+    def list_schedules(self, *a, **kw): return self._schedules.list_schedules(*a, **kw)
+    def get_schedule(self, *a, **kw): return self._schedules.get_schedule(*a, **kw)
+    def get_due_schedules(self): return self._schedules.get_due_schedules()
+    def mark_schedule_run(self, *a, **kw): return self._schedules.mark_schedule_run(*a, **kw)
+    def toggle_schedule(self, *a, **kw): return self._schedules.toggle_schedule(*a, **kw)
+
+    # Trigger operations
+    def add_trigger(self, *a, **kw): return self._schedules.add_trigger(*a, **kw)
+    def update_trigger(self, *a, **kw): return self._schedules.update_trigger(*a, **kw)
+    def delete_trigger(self, *a, **kw): return self._schedules.delete_trigger(*a, **kw)
+    def list_triggers(self, *a, **kw): return self._schedules.list_triggers(*a, **kw)
+    def get_trigger(self, *a, **kw): return self._schedules.get_trigger(*a, **kw)
+    def get_active_triggers(self): return self._schedules.get_active_triggers()
+    def mark_trigger_fired(self, *a, **kw): return self._schedules.mark_trigger_fired(*a, **kw)
+    def is_trigger_on_cooldown(self, *a, **kw): return self._schedules.is_trigger_on_cooldown(*a, **kw)
+
+    # Package operations
+    def add_package(self, *a, **kw): return self._packages.add_package(*a, **kw)
+    def remove_package(self, *a, **kw): return self._packages.remove_package(*a, **kw)
+    def list_packages(self): return self._packages.list_packages()
+    def get_package(self, *a, **kw): return self._packages.get_package(*a, **kw)
+
+    # Plugin operations
+    def get_plugin_config(self, *a, **kw): return self._plugins.get_plugin_config(*a, **kw)
+    def save_plugin_config(self, *a, **kw): return self._plugins.save_plugin_config(*a, **kw)
+    def upsert_plugin(self, *a, **kw): return self._plugins.upsert_plugin(*a, **kw)
+    def delete_plugin(self, *a, **kw): return self._plugins.delete_plugin(*a, **kw)
+    def list_plugins_db(self): return self._plugins.list_plugins()
+    def set_plugin_enabled(self, *a, **kw): return self._plugins.set_plugin_enabled(*a, **kw)
+    def set_plugin_hooks(self, *a, **kw): return self._plugins.set_plugin_hooks(*a, **kw)
+    def get_hooks_for_event(self, *a, **kw): return self._plugins.get_hooks_for_event(*a, **kw)
+    def get_hooks_for_plugin(self, *a, **kw): return self._plugins.get_hooks_for_plugin(*a, **kw)
+
     # Stats operations
     def get_livestats(self) -> Dict[str, int]:
         return self._stats.get_livestats()

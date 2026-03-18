@@ -1,17 +1,4 @@
-"""
-steal_files_ssh.py — SSH file looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) and ensures parent action success (SSHBruteforce).
-- SSH credentials are read from the DB table `creds` (service='ssh').
-- IP -> (MAC, hostname) mapping is read from the DB table `hosts`.
-- Looted files are saved under: {shared_data.data_stolen_dir}/ssh/{mac}_{ip}/...
-- Paramiko logs are silenced to avoid noisy banners/tracebacks.
-
-Parent gate:
-- Orchestrator enforces parent success (b_parent='SSHBruteforce').
-- This action runs once per eligible target (alive, open port, parent OK).
-"""
+"""steal_files_ssh.py - SSH file exfiltration using DB creds from SSHBruteforce (paramiko)."""
 
 import os
 import time
@@ -203,7 +190,7 @@ class StealFilesSSH:
         names = set(self.shared_data.steal_file_names or [])
         if not exts and not names:
             # If no filters are defined, do nothing (too risky to pull everything).
-            logger.warning("No steal_file_extensions / steal_file_names configured — skipping.")
+            logger.warning("No steal_file_extensions / steal_file_names configured - skipping.")
             return []
 
         matches: List[str] = []

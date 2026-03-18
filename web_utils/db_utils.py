@@ -1,8 +1,4 @@
-# web_utils/db_utils.py
-"""
-Database manager utilities.
-Handles database table operations, CRUD, schema management, and exports.
-"""
+"""db_utils.py - Database table operations, CRUD, schema management, and exports."""
 from __future__ import annotations
 import json
 import re
@@ -122,7 +118,8 @@ class DBUtils:
             data = {"tables": self._db_list_tables(), "views": self._db_list_views()}
             self._write_json(handler, data)
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 500)
+            logger.error(f"Error fetching database catalog: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 500)
 
     def db_schema_endpoint(self, handler, name: str):
         """Get schema for a table or view."""
@@ -133,8 +130,11 @@ class DBUtils:
             )
             cols = self.shared_data.db.query(f"PRAGMA table_info({name});")
             self._write_json(handler, {"meta": row, "columns": cols})
+        except ValueError:
+            self._write_json(handler, {"status": "error", "message": "Invalid table or view name"}, 400)
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 400)
+            logger.error(f"Error fetching schema for '{name}': {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 500)
 
     def db_get_table_endpoint(self, handler, table_name: str):
         """Get table data with pagination and filtering."""
@@ -179,8 +179,11 @@ class DBUtils:
                 "pk": pk,
                 "total": total
             })
+        except ValueError:
+            self._write_json(handler, {"status": "error", "message": "Invalid table or query parameters"}, 400)
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 500)
+            logger.error(f"Error fetching table data: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 500)
 
     def db_update_cells_endpoint(self, handler, payload: dict):
         """Update table cells."""
@@ -210,7 +213,8 @@ class DBUtils:
 
             self._write_json(handler, {"status": "ok"})
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 400)
+            logger.error(f"Error updating cells: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 400)
 
     def db_delete_rows_endpoint(self, handler, payload: dict):
         """Delete table rows."""
@@ -226,8 +230,11 @@ class DBUtils:
                 tuple(pks)
             )
             self._write_json(handler, {"status": "ok", "deleted": len(pks)})
-        except Exception as e:
+        except ValueError as e:
             self._write_json(handler, {"status": "error", "message": str(e)}, 400)
+        except Exception as e:
+            logger.error(f"Error deleting rows: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 400)
 
     def db_insert_row_endpoint(self, handler, payload: dict):
         """Insert a new row."""
@@ -259,7 +266,8 @@ class DBUtils:
             new_pk = row["lid"]
             self._write_json(handler, {"status": "ok", "pk": new_pk})
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 400)
+            logger.error(f"Error inserting row: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 400)
 
     def db_export_table_endpoint(self, handler, table_name: str):
         """Export table as CSV or JSON."""
@@ -287,7 +295,8 @@ class DBUtils:
             handler.end_headers()
             handler.wfile.write(buf.getvalue().encode("utf-8"))
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 400)
+            logger.error(f"Error exporting table: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 400)
 
     def db_vacuum_endpoint(self, handler):
         """Vacuum and optimize database."""
@@ -296,7 +305,8 @@ class DBUtils:
             self.shared_data.db.optimize()
             self._write_json(handler, {"status": "ok"})
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 500)
+            logger.error(f"Error during database vacuum: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 500)
 
     def db_drop_table_endpoint(self, handler, table_name: str):
         """Drop a table."""
@@ -305,7 +315,8 @@ class DBUtils:
             self.shared_data.db.execute(f"DROP TABLE IF EXISTS {table};")
             self._write_json(handler, {"status": "ok"})
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 400)
+            logger.error(f"Error dropping table: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 400)
 
     def db_truncate_table_endpoint(self, handler, table_name: str):
         """Truncate a table."""
@@ -318,7 +329,8 @@ class DBUtils:
                 pass
             self._write_json(handler, {"status": "ok"})
         except Exception as e:
-            self._write_json(handler, {"status": "error", "message": str(e)}, 400)
+            logger.error(f"Error truncating table: {e}")
+            self._write_json(handler, {"status": "error", "message": "Internal server error"}, 400)
 
 
     def db_create_table_endpoint(self, handler, payload: dict):
@@ -345,14 +357,14 @@ class DBUtils:
                     seg += " DEFAULT " + str(c["default"])
                 if c.get("pk"):
                     pk_inline = cname
-                    # AUTOINCREMENT en SQLite que sur INTEGER PRIMARY KEY
+                    # AUTOINCREMENT only valid on INTEGER PRIMARY KEY in SQLite
                     if ctype.upper().startswith("INTEGER"):
                         seg += " PRIMARY KEY AUTOINCREMENT"
                     else:
                         seg += " PRIMARY KEY"
                 parts.append(seg)
             if pk_inline is None:
-                # rien, PK implicite ou aucune
+                # no explicit PK, implicit rowid or none
                 pass
             ine = "IF NOT EXISTS " if payload.get("if_not_exists") else ""
             sql = f"CREATE TABLE {ine}{name} ({', '.join(parts)});"
@@ -360,8 +372,9 @@ class DBUtils:
             handler.send_response(200); handler.send_header("Content-Type","application/json"); handler.end_headers()
             handler.wfile.write(json.dumps({"status":"ok"}).encode("utf-8"))
         except Exception as e:
+            logger.error(f"Error creating table: {e}")
             handler.send_response(400); handler.send_header("Content-Type","application/json"); handler.end_headers()
-            handler.wfile.write(json.dumps({"status":"error","message":str(e)}).encode("utf-8"))
+            handler.wfile.write(json.dumps({"status":"error","message":"Internal server error"}).encode("utf-8"))
 
     def db_rename_table_endpoint(self, handler, payload: dict):
         try:
@@ -371,8 +384,9 @@ class DBUtils:
             handler.send_response(200); handler.send_header("Content-Type","application/json"); handler.end_headers()
             handler.wfile.write(json.dumps({"status":"ok"}).encode("utf-8"))
         except Exception as e:
+            logger.error(f"Error renaming table: {e}")
             handler.send_response(400); handler.send_header("Content-Type","application/json"); handler.end_headers()
-            handler.wfile.write(json.dumps({"status":"error","message":str(e)}).encode("utf-8"))
+            handler.wfile.write(json.dumps({"status":"error","message":"Internal server error"}).encode("utf-8"))
 
     def db_add_column_endpoint(self, handler, payload: dict):
         """
@@ -391,11 +405,12 @@ class DBUtils:
             handler.send_response(200); handler.send_header("Content-Type","application/json"); handler.end_headers()
             handler.wfile.write(json.dumps({"status":"ok"}).encode("utf-8"))
         except Exception as e:
+            logger.error(f"Error adding column: {e}")
             handler.send_response(400); handler.send_header("Content-Type","application/json"); handler.end_headers()
-            handler.wfile.write(json.dumps({"status":"error","message":str(e)}).encode("utf-8"))
+            handler.wfile.write(json.dumps({"status":"error","message":"Internal server error"}).encode("utf-8"))
 
 
-    # --- drop/truncate (vue/table) ---
+    # --- drop/truncate (view/table) ---
     def db_drop_view_endpoint(self, handler, view_name: str):
         try:
             view = self._db_safe_ident(view_name)
@@ -403,8 +418,9 @@ class DBUtils:
             handler.send_response(200); handler.send_header("Content-Type","application/json"); handler.end_headers()
             handler.wfile.write(json.dumps({"status":"ok"}).encode("utf-8"))
         except Exception as e:
+            logger.error(f"Error dropping view: {e}")
             handler.send_response(400); handler.send_header("Content-Type","application/json"); handler.end_headers()
-            handler.wfile.write(json.dumps({"status":"error","message":str(e)}).encode("utf-8"))
+            handler.wfile.write(json.dumps({"status":"error","message":"Internal server error"}).encode("utf-8"))
 
     # --- export all (zip CSV/JSON) ---
     def db_export_all_endpoint(self, handler):
@@ -425,7 +441,7 @@ class DBUtils:
                         w.writeheader()
                         for r in rows: w.writerow({c: r.get(c) for c in cols})
                         z.writestr(f"tables/{name}.csv", sio.getvalue())
-                # views (lecture seule)
+                # views (read-only)
                 for v in self._db_list_views():
                     name = v["name"]
                     try:
@@ -451,8 +467,9 @@ class DBUtils:
             handler.end_headers()
             handler.wfile.write(payload)
         except Exception as e:
+            logger.error(f"Error exporting database: {e}")
             handler.send_response(500); handler.send_header("Content-Type","application/json"); handler.end_headers()
-            handler.wfile.write(json.dumps({"status":"error","message":str(e)}).encode("utf-8"))
+            handler.wfile.write(json.dumps({"status":"error","message":"Internal server error"}).encode("utf-8"))
 
     def db_list_tables_endpoint(self, handler):
         try:
@@ -466,7 +483,7 @@ class DBUtils:
             handler.send_response(500)
             handler.send_header("Content-Type", "application/json")
             handler.end_headers()
-            handler.wfile.write(json.dumps({"status":"error","message":str(e)}).encode("utf-8"))
+            handler.wfile.write(json.dumps({"status":"error","message":"Internal server error"}).encode("utf-8"))
 
 
 

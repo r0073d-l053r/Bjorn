@@ -1,11 +1,4 @@
-# mcp_server.py
-# Model Context Protocol server for Bjorn.
-# Exposes Bjorn's database and actions as MCP tools consumable by any MCP client
-# (Claude Desktop, custom agents, etc.).
-#
-# Transport: HTTP SSE (default, port configurable) or stdio.
-# Requires: pip install mcp
-# Gracefully no-ops if mcp is not installed.
+"""mcp_server.py - MCP server exposing Bjorn's DB and actions to external AI clients."""
 
 import json
 import threading
@@ -162,9 +155,12 @@ def _impl_run_action(action_name: str, target_ip: str, target_mac: str = "") -> 
 def _impl_query_db(sql: str, params: Optional[List] = None) -> str:
     """Run a read-only SELECT query. Non-SELECT statements are rejected."""
     try:
-        stripped = sql.strip().upper()
-        if not stripped.startswith("SELECT"):
+        stripped = sql.strip()
+        # Reject non-SELECT and stacked queries (multiple statements)
+        if not stripped.upper().startswith("SELECT"):
             return json.dumps({"error": "Only SELECT queries are allowed."})
+        if ';' in stripped.rstrip(';'):
+            return json.dumps({"error": "Multiple statements are not allowed."})
         rows = _sd().db.query(sql, tuple(params or []))
         return json.dumps([dict(r) for r in rows] if rows else [], default=str)
     except Exception as e:
@@ -180,7 +176,7 @@ def _build_mcp_server():
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError:
-        logger.warning("mcp package not installed — MCP server disabled. "
+        logger.warning("mcp package not installed - MCP server disabled. "
                        "Run: pip install mcp")
         return None
 
@@ -295,7 +291,7 @@ def start(block: bool = False) -> bool:
                 mcp.run(transport="stdio")
             else:
                 logger.info(f"MCP server starting (HTTP SSE transport, port {port})")
-                # FastMCP HTTP SSE — runs uvicorn internally
+                # FastMCP HTTP SSE - runs uvicorn internally
                 mcp.run(transport="sse", port=port)
         except Exception as e:
             logger.error(f"MCP server error: {e}")
@@ -311,10 +307,10 @@ def start(block: bool = False) -> bool:
 
 
 def stop() -> None:
-    """Signal MCP server to stop (best-effort — FastMCP handles cleanup)."""
+    """Signal MCP server to stop (best-effort - FastMCP handles cleanup)."""
     global _server_thread
     if _server_thread and _server_thread.is_alive():
-        logger.info("MCP server thread stopping (daemon — will exit with process)")
+        logger.info("MCP server thread stopping (daemon - will exit with process)")
     _server_thread = None
 
 

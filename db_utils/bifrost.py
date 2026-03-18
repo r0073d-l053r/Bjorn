@@ -1,6 +1,4 @@
-"""
-Bifrost DB operations — networks, handshakes, epochs, activity, peers, plugin data.
-"""
+"""bifrost.py - Networks, handshakes, epochs, activity, peers, plugin data."""
 import logging
 
 from logger import Logger
@@ -89,7 +87,7 @@ class BifrostOps:
             "ON bifrost_activity(timestamp DESC)"
         )
 
-        # Peers (mesh networking — Phase 2)
+        # Peers (mesh networking - Phase 2)
         self.base.execute("""
             CREATE TABLE IF NOT EXISTS bifrost_peers (
                 peer_id       TEXT PRIMARY KEY,

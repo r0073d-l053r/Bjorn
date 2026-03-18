@@ -1,6 +1,4 @@
-"""
-Loki DB operations — HID scripts and job tracking.
-"""
+"""loki.py - HID script and job tracking operations."""
 import logging
 
 from logger import Logger

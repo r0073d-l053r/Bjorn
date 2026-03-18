@@ -1,10 +1,4 @@
-﻿"""
-ftp_bruteforce.py â€” FTP bruteforce (DB-backed, no CSV/JSON, no rich)
-- Cibles: (ip, port) par lâ€™orchestrateur
-- IP -> (MAC, hostname) via DB.hosts
-- SuccÃ¨s -> DB.creds (service='ftp')
-- Conserve la logique dâ€™origine (queue/threads, sleep Ã©ventuels, etc.)
-"""
+﻿“””ftp_bruteforce.py - Threaded FTP credential bruteforcer, results stored in DB.”””
 
 import os
 import threading
@@ -28,11 +22,24 @@ b_parent = None
 b_service = '["ftp"]'
 b_trigger = 'on_any:["on_service:ftp","on_new_port:21"]'
 b_priority = 70  
-b_cooldown = 1800             # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_cooldown = 1800             # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
+b_enabled = 1
+b_action = "normal"
+b_timeout = 600
+b_max_retries = 2
+b_stealth_level = 3
+b_risk_level = "medium"
+b_tags = ["bruteforce", "ftp", "credentials"]
+b_category = "exploitation"
+b_name = "FTP Bruteforce"
+b_description = "Threaded FTP credential bruteforcer with share enumeration."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "FTPBruteforce.png"
 
 class FTPBruteforce:
-    """Wrapper orchestrateur -> FTPConnector."""
+    """Orchestrator wrapper for FTPConnector."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
@@ -40,11 +47,11 @@ class FTPBruteforce:
         logger.info("FTPConnector initialized.")
 
     def bruteforce_ftp(self, ip, port):
-        """Lance le bruteforce FTP pour (ip, port)."""
+        """Run FTP bruteforce for (ip, port)."""
         return self.ftp_bruteforce.run_bruteforce(ip, port)
 
     def execute(self, ip, port, row, status_key):
-        """Point d'entrÃ©e orchestrateur (retour 'success' / 'failed')."""
+        """Orchestrator entry point. Returns 'success' or 'failed'."""
         self.shared_data.bjorn_orch_status = "FTPBruteforce"
         self.shared_data.comment_params = {"user": "?", "ip": ip, "port": str(port)}
         logger.info(f"Brute forcing FTP on {ip}:{port}...")
@@ -53,12 +60,11 @@ class FTPBruteforce:
 
 
 class FTPConnector:
-    """GÃ¨re les tentatives FTP, persistance DB, mapping IPâ†’(MAC, Hostname)."""
+    """Handles FTP attempts, DB persistence, and IP->(MAC, Hostname) mapping."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
 
-        # Wordlists inchangÃ©es
         self.users = self._read_lines(shared_data.users_file)
         self.passwords = self._read_lines(shared_data.passwords_file)
 
@@ -71,7 +77,7 @@ class FTPConnector:
         self.queue = Queue()
         self.progress = None
 
-    # ---------- util fichiers ----------
+    # ---------- file utils ----------
     @staticmethod
     def _read_lines(path: str) -> List[str]:
         try:
@@ -186,7 +192,7 @@ class FTPConnector:
                     self.progress.advance(1)
                 self.queue.task_done()
 
-                # Pause configurable entre chaque tentative FTP
+                # Configurable delay between FTP attempts
                 if getattr(self.shared_data, "timewait_ftp", 0) > 0:
                     time.sleep(self.shared_data.timewait_ftp)
 
@@ -267,7 +273,8 @@ class FTPConnector:
         self.results = []
 
     def removeduplicates(self):
-        pass
+        """No longer needed with unique DB index; kept for interface compat."""
+        # Dedup handled by DB UNIQUE constraint + ON CONFLICT in save_results
 
 
 if __name__ == "__main__":

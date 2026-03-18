@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-valkyrie_scout.py — Web surface scout (Pi Zero friendly, orchestrator compatible).
-
-What it does:
-- Probes a small set of common web paths on a target (ip, port).
-- Extracts high-signal indicators from responses (auth type, login form hints, missing security headers,
-  error/debug strings). No exploitation, no bruteforce.
-- Writes results into DB table `webenum` (tool='valkyrie_scout') so the UI can browse findings.
-- Updates EPD fields: bjorn_orch_status, bjorn_status_text2, comment_params, bjorn_progress.
-"""
+"""valkyrie_scout.py - Probe common web paths for auth surfaces, headers, and debug leaks."""
 
 import json
 import logging
@@ -37,6 +28,17 @@ b_action = "normal"
 b_cooldown = 1800
 b_rate_limit = "8/86400"
 b_enabled = 0  # keep disabled by default; enable via Actions UI/DB when ready.
+b_timeout = 300
+b_max_retries = 2
+b_stealth_level = 5
+b_risk_level = "low"
+b_tags = ["web", "recon", "auth", "paths"]
+b_category = "recon"
+b_name = "Valkyrie Scout"
+b_description = "Probes common web paths for auth surfaces, headers, and debug leaks."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "ValkyrieScout.png"
 
 # Small default list to keep the action cheap on Pi Zero.
 DEFAULT_PATHS = [
@@ -373,6 +375,9 @@ class ValkyrieScout:
 
             progress.set_complete()
             return "success"
+        except Exception as e:
+            logger.error(f"ValkyrieScout failed for {ip}:{port_i}: {e}")
+            return "failed"
         finally:
             self.shared_data.bjorn_progress = ""
             self.shared_data.comment_params = {}

@@ -1,4 +1,4 @@
-# webutils/webenum_utils.py
+"""webenum_utils.py - REST utilities for web enumeration data."""
 from __future__ import annotations
 import json
 import base64
@@ -208,7 +208,7 @@ class WebEnumUtils:
 
             where_sql = " AND ".join(where_clauses)
 
-            # Main query — alias columns to match the frontend schema
+            # Main query - alias columns to match the frontend schema
             results = db.query(f"""
                 SELECT
                     id,

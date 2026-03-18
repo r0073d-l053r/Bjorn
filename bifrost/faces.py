@@ -1,5 +1,5 @@
-"""
-Bifrost — ASCII face definitions.
+"""faces.py - Bifrost ASCII face definitions.
+
 Ported from pwnagotchi/ui/faces.py with full face set.
 """
 

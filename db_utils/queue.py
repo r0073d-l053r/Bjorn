@@ -1,5 +1,4 @@
-# db_utils/queue.py
-# Action queue management operations
+"""queue.py - Action queue management operations."""
 
 import json
 import sqlite3

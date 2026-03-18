@@ -1,11 +1,12 @@
-# db_utils/studio.py
-# Actions Studio visual editor operations
+"""studio.py - Actions Studio visual editor operations."""
 
 import json
+import re
 from typing import Dict, List, Optional
 import logging
 
 from logger import Logger
+from db_utils.base import _validate_identifier
 
 logger = Logger(name="db_utils.studio", level=logging.DEBUG)
 
@@ -105,13 +106,27 @@ class StudioOps:
             ORDER BY b_priority DESC, b_class
         """)
     
+    # Whitelist of columns that can be updated via the studio API
+    _STUDIO_UPDATABLE = frozenset({
+        'b_priority', 'studio_x', 'studio_y', 'studio_locked', 'studio_color',
+        'studio_metadata', 'b_trigger', 'b_requires', 'b_enabled', 'b_timeout',
+        'b_max_retries', 'b_cooldown', 'b_rate_limit', 'b_service', 'b_port',
+        'b_stealth_level', 'b_risk_level', 'b_tags', 'b_parent', 'b_action',
+    })
+
     def update_studio_action(self, b_class: str, updates: dict):
         """Update a studio action"""
         sets = []
         params = []
         for key, value in updates.items():
+            _validate_identifier(key, "column name")
+            if key not in self._STUDIO_UPDATABLE:
+                logger.warning(f"Ignoring unknown studio column: {key}")
+                continue
             sets.append(f"{key} = ?")
             params.append(value)
+        if not sets:
+            return
         params.append(b_class)
         
         self.base.execute(f"""
@@ -313,7 +328,9 @@ class StudioOps:
             if col == "b_class":
                 continue
             if col not in stu_cols:
+                _validate_identifier(col, "column name")
                 col_type = act_col_defs.get(col, "TEXT") or "TEXT"
+                _validate_identifier(col_type.split()[0], "column type")
                 self.base.execute(f"ALTER TABLE actions_studio ADD COLUMN {col} {col_type};")
         
         # 3) Insert missing b_class entries, non-destructive
@@ -326,6 +343,7 @@ class StudioOps:
         for col in act_cols:
             if col == "b_class":
                 continue
+            _validate_identifier(col, "column name")
             # Only update if the studio value is NULL
             self.base.execute(f"""
                 UPDATE actions_studio

@@ -1,9 +1,7 @@
-# llm_bridge.py
-# LLM backend cascade for Bjorn.
-# Priority: LaRuche (LAND/mDNS) → Ollama local → External API → None (template fallback)
-# All external deps are optional — graceful degradation at every level.
+"""llm_bridge.py - LLM backend cascade: LAND/LaRuche -> Ollama -> external API -> fallback."""
 
 import json
+import socket
 import threading
 import time
 import urllib.request
@@ -17,7 +15,7 @@ logger = Logger(name="llm_bridge.py", level=20)  # INFO
 
 # ---------------------------------------------------------------------------
 # Tool definitions (Anthropic Messages API format).
-# Mirrors the tools exposed by mcp_server.py — add new tools here too.
+# Mirrors the tools exposed by mcp_server.py - add new tools here too.
 # ---------------------------------------------------------------------------
 _BJORN_TOOLS: List[Dict] = [
     {
@@ -104,7 +102,7 @@ class LLMBridge:
       3. External API           (Anthropic / OpenAI / OpenRouter)
       4. None → caller falls back to templates
 
-    Singleton — one instance per process, thread-safe.
+    Singleton - one instance per process, thread-safe.
     """
 
     _instance: Optional["LLMBridge"] = None
@@ -137,7 +135,7 @@ class LLMBridge:
             self._hist_lock = threading.Lock()
             self._ready = True
 
-        # Always start mDNS discovery — even if LLM is disabled.
+        # Always start mDNS discovery - even if LLM is disabled.
         # This way LaRuche URL is ready the moment the user enables LLM.
         if self._cfg("llm_laruche_discovery", True):
             self._start_laruche_discovery()
@@ -241,11 +239,11 @@ class LLMBridge:
                     logger.info(f"LLM response from [{b}] (len={len(result)})")
                     return result
                 else:
-                    logger.warning(f"LLM backend [{b}] returned empty response — skipping")
+                    logger.warning(f"LLM backend [{b}] returned empty response - skipping")
             except Exception as exc:
                 logger.warning(f"LLM backend [{b}] failed: {exc}")
 
-        logger.debug("All LLM backends failed — returning None (template fallback)")
+        logger.debug("All LLM backends failed - returning None (template fallback)")
         return None
 
     def generate_comment(
@@ -278,7 +276,7 @@ class LLMBridge:
             [{"role": "user", "content": prompt}],
             max_tokens=int(self._cfg("llm_comment_max_tokens", 80)),
             system=system,
-            timeout=8,   # Short timeout for EPD — fall back fast
+            timeout=8,   # Short timeout for EPD - fall back fast
         )
 
     def chat(
@@ -288,7 +286,7 @@ class LLMBridge:
         system: Optional[str] = None,
     ) -> Optional[str]:
         """
-        Stateful chat with Bjorn — maintains conversation history per session.
+        Stateful chat with Bjorn - maintains conversation history per session.
         """
         if not self._is_enabled():
             return "LLM is disabled. Enable it in Settings → LLM Bridge."
@@ -420,8 +418,17 @@ class LLMBridge:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw_bytes = resp.read().decode()
+        except (urllib.error.URLError, socket.timeout, ConnectionError, OSError) as e:
+            logger.warning(f"Ollama network error: {e}")
+            return None
+        try:
+            body = json.loads(raw_bytes)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Ollama returned invalid JSON: {e}")
+            return None
         return body.get("message", {}).get("content") or None
 
     # ------------------------------------------------------------------
@@ -481,8 +488,17 @@ class LLMBridge:
 
             data = json.dumps(payload).encode()
             req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                body = json.loads(resp.read().decode())
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    raw_bytes = resp.read().decode()
+            except (urllib.error.URLError, socket.timeout, ConnectionError, OSError) as e:
+                logger.warning(f"Anthropic network error: {e}")
+                return None
+            try:
+                body = json.loads(raw_bytes)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Anthropic returned invalid JSON: {e}")
+                return None
 
             stop_reason = body.get("stop_reason")
             content = body.get("content", [])
@@ -541,11 +557,18 @@ class LLMBridge:
             if name == "get_status":
                 return mcp_server._impl_get_status()
             if name == "run_action":
+                action_name = inputs.get("action_name")
+                target_ip = inputs.get("target_ip")
+                if not action_name or not target_ip:
+                    return json.dumps({"error": "run_action requires 'action_name' and 'target_ip'"})
                 return mcp_server._impl_run_action(
-                    inputs["action_name"], inputs["target_ip"], inputs.get("target_mac", "")
+                    action_name, target_ip, inputs.get("target_mac", "")
                 )
             if name == "query_db":
-                return mcp_server._impl_query_db(inputs["sql"], inputs.get("params"))
+                sql = inputs.get("sql")
+                if not sql:
+                    return json.dumps({"error": "query_db requires 'sql'"})
+                return mcp_server._impl_query_db(sql, inputs.get("params"))
             return json.dumps({"error": f"Unknown tool: {name}"})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -585,8 +608,17 @@ class LLMBridge:
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw_bytes = resp.read().decode()
+        except (urllib.error.URLError, socket.timeout, ConnectionError, OSError) as e:
+            logger.warning(f"OpenAI-compat network error: {e}")
+            return None
+        try:
+            body = json.loads(raw_bytes)
+        except json.JSONDecodeError as e:
+            logger.warning(f"OpenAI-compat returned invalid JSON: {e}")
+            return None
         return body.get("choices", [{}])[0].get("message", {}).get("content") or None
 
     # ------------------------------------------------------------------

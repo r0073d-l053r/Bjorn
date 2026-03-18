@@ -1,5 +1,6 @@
+"""odin_eye.py - Dynamic network interface detection and monitoring."""
 
-# --- AJOUTS EN HAUT DU FICHIER ---------------------------------------------
+# --- Dynamic interface detection ---
 import os
 try:
     import psutil
@@ -9,13 +10,13 @@ except Exception:
 
 def _list_net_ifaces() -> list[str]:
     names = set()
-    # 1) psutil si dispo
+    # 1) psutil if available
     if psutil:
         try:
             names.update(ifname for ifname in psutil.net_if_addrs().keys() if ifname != "lo")
         except Exception:
             pass
-    # 2) fallback kernel
+    # 2) kernel fallback
     try:
         for n in os.listdir("/sys/class/net"):
             if n and n != "lo":
@@ -23,7 +24,7 @@ def _list_net_ifaces() -> list[str]:
     except Exception:
         pass
     out = ["auto"] + sorted(names)
-    # sécurité: pas de doublons
+    # deduplicate
     seen, unique = set(), []
     for x in out:
         if x not in seen:
@@ -31,7 +32,7 @@ def _list_net_ifaces() -> list[str]:
     return unique
 
 
-# Hook appelée par le backend avant affichage UI / sync DB
+# Hook called by the backend before UI display / DB sync
 def compute_dynamic_b_args(base: dict) -> dict:
     """
     Compute dynamic arguments at runtime.
@@ -54,21 +55,20 @@ def compute_dynamic_b_args(base: dict) -> dict:
     
     return d
 
-# --- MÉTADONNÉES UI SUPPLÉMENTAIRES -----------------------------------------
-# Exemples d’arguments (affichage frontend; aussi persisté en DB via sync_actions)
+# --- Additional UI metadata ---
+# Example arguments (frontend display; also persisted in DB via sync_actions)
 b_examples = [
     {"interface": "auto", "filter": "http or ftp", "timeout": 120, "max_packets": 5000, "save_credentials": True},
     {"interface": "wlan0", "filter": "(http or smtp) and not broadcast", "timeout": 300, "max_packets": 10000},
 ]
 
-# Lien MD (peut être un chemin local servi par votre frontend, ou un http(s))
-# Exemple: un README markdown stocké dans votre repo
+# Docs link (local path served by frontend, or http(s))
 b_docs_url = "docs/actions/OdinEye.md"
 
 
-# --- Métadonnées d'action (consommées par shared.generate_actions_json) -----
+# --- Action metadata (consumed by shared.generate_actions_json) ---
 b_class       = "OdinEye"
-b_module      = "odin_eye"      # nom du fichier sans .py
+b_module      = "odin_eye"
 b_enabled    = 0
 b_action      = "normal"
 b_category    = "recon"
@@ -81,20 +81,20 @@ b_author      = "Fabien / Cyberviking"
 b_version     = "1.0.0"
 b_icon        = "OdinEye.png"
 
-# Schéma d'arguments pour UI dynamique (clé == nom du flag sans '--')
+# UI argument schema (key == flag name without '--')
 b_args = {
     "interface": {
         "type": "select", "label": "Network Interface",
-        "choices": [],  # <- Laisser vide: rempli dynamiquement par compute_dynamic_b_args(...)
+        "choices": [],  # Populated dynamically by compute_dynamic_b_args()
         "default": "auto",
-        "help": "Interface à écouter. 'auto' tente de détecter l'interface par défaut."    },
+        "help": "Interface to listen on. 'auto' tries to detect the default interface."    },
     "filter":      {"type": "text",   "label": "BPF Filter",   "default": "(http or ftp or smtp or pop3 or imap or telnet) and not broadcast"},
     "output":      {"type": "text",   "label": "Output dir",   "default": "/home/bjorn/Bjorn/data/output/packets"},
     "timeout":     {"type": "number", "label": "Timeout (s)",  "min": 10, "max": 36000, "step": 1, "default": 300},
     "max_packets": {"type": "number", "label": "Max packets",  "min": 100, "max": 2000000, "step": 100, "default": 10000},
 }
 
-# ----------------- Code d'analyse (ton code existant) -----------------------
+# --- Traffic analysis code ---
 import os, json, pyshark, argparse, logging, re, threading, signal
 from datetime import datetime
 from collections import defaultdict
@@ -249,7 +249,7 @@ class OdinEye:
 
     def execute(self):
         try:
-            # Timeout thread (inchangé) ...
+            # Timeout thread
             if self.timeout and self.timeout > 0:
                 def _stop_after():
                     self.stop_capture.wait(self.timeout)
@@ -260,13 +260,13 @@ class OdinEye:
 
             self.capture = pyshark.LiveCapture(interface=self.interface, bpf_filter=self.capture_filter)
 
-            # Interruption douce — SKIP si on tourne en mode importlib (thread)
+            # Graceful interrupt - skip if running in importlib (threaded) mode
             if os.environ.get("BJORN_EMBEDDED") != "1":
                 try:
                     signal.signal(signal.SIGINT, self.handle_interrupt)
                     signal.signal(signal.SIGTERM, self.handle_interrupt)
                 except Exception:
-                    # Ex: ValueError si pas dans le main thread
+                    # e.g. ValueError if not in main thread
                     pass
 
             for packet in self.capture.sniff_continuously():

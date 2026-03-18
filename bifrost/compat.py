@@ -1,7 +1,6 @@
-"""
-Bifrost — Pwnagotchi compatibility shim.
-Registers `pwnagotchi` in sys.modules so existing plugins can
-`import pwnagotchi` and get Bifrost-backed implementations.
+"""compat.py - Pwnagotchi compatibility shim.
+
+Registers `pwnagotchi` in sys.modules so existing plugins resolve to Bifrost.
 """
 import sys
 import time
@@ -56,7 +55,7 @@ def install_shim(shared_data, bifrost_plugins_module):
             return 0.0
 
     def _reboot():
-        pass  # no-op in Bifrost — we don't auto-reboot
+        pass  # no-op in Bifrost - we don't auto-reboot
 
     pwn.name = _name
     pwn.set_name = _set_name

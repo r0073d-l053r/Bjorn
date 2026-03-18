@@ -1,13 +1,4 @@
-# AARP Spoofer by poisoning the ARP cache of a target and a gateway.
-# Saves settings (target, gateway, interface, delay) in `/home/bjorn/.settings_bjorn/arpspoofer_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -t, --target       IP address of the target device (overrides saved value).
-# -g, --gateway      IP address of the gateway (overrides saved value).
-# -i, --interface    Network interface (default: primary or saved).
-# -d, --delay        Delay between ARP packets in seconds (default: 2 or saved).
-# - First time: python arpspoofer.py -t TARGET -g GATEWAY -i INTERFACE -d DELAY
-# - Subsequent: python arpspoofer.py (uses saved settings).
-# - Update: Provide any argument to override saved values.
+"""arp_spoofer.py - ARP cache poisoning between target and gateway (scapy)."""
 
 import os
 import json
@@ -19,7 +10,7 @@ from scapy.all import ARP, send, sr1, conf
 b_class       = "ARPSpoof"
 b_module      = "arp_spoofer"
 b_enabled    = 0
-# Répertoire et fichier de paramètres
+# Settings directory and file
 SETTINGS_DIR = "/home/bjorn/.settings_bjorn"
 SETTINGS_FILE = os.path.join(SETTINGS_DIR, "arpspoofer_settings.json")
 
@@ -29,7 +20,7 @@ class ARPSpoof:
         self.gateway_ip = gateway_ip
         self.interface = interface
         self.delay = delay
-        conf.iface = self.interface  # Set the interface
+        conf.iface = self.interface
         print(f"ARPSpoof initialized with target IP: {self.target_ip}, gateway IP: {self.gateway_ip}, interface: {self.interface}, delay: {self.delay}s")
 
     def get_mac(self, ip):
@@ -144,7 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--delay", type=float, default=2, help="Delay between ARP packets in seconds (default: 2 seconds)")
     args = parser.parse_args()
 
-    # Load saved settings and override with CLI arguments
+    # Load saved settings, override with CLI args
     settings = load_settings()
     target_ip = args.target or settings.get("target")
     gateway_ip = args.gateway or settings.get("gateway")
@@ -155,9 +146,9 @@ if __name__ == "__main__":
         print("Target and Gateway IPs are required. Use -t and -g or save them in the settings file.")
         exit(1)
 
-    # Save the settings for future use
+    # Persist settings for future runs
     save_settings(target_ip, gateway_ip, interface, delay)
 
-    # Execute the attack
+    # Launch ARP spoof
     spoof = ARPSpoof(target_ip=target_ip, gateway_ip=gateway_ip, interface=interface, delay=delay)
     spoof.execute()

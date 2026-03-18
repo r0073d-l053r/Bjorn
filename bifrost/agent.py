@@ -1,5 +1,5 @@
-"""
-Bifrost — WiFi recon agent.
+"""agent.py - Bifrost WiFi recon agent.
+
 Ported from pwnagotchi/agent.py using composition instead of inheritance.
 """
 import time
@@ -22,7 +22,7 @@ logger = Logger(name="bifrost.agent", level=logging.DEBUG)
 
 
 class BifrostAgent:
-    """WiFi recon agent — drives bettercap, captures handshakes, tracks epochs."""
+    """WiFi recon agent - drives bettercap, captures handshakes, tracks epochs."""
 
     def __init__(self, shared_data, stop_event=None):
         self.shared_data = shared_data
@@ -170,7 +170,7 @@ class BifrostAgent:
             err_msg = str(e)
             if 'Operation not supported' in err_msg or 'EOPNOTSUPP' in err_msg:
                 logger.error(
-                    "wifi.recon failed: %s — Your WiFi chip likely does NOT support "
+                    "wifi.recon failed: %s - Your WiFi chip likely does NOT support "
                     "monitor mode. The built-in Broadcom chip on Raspberry Pi Zero/Zero 2 "
                     "has limited monitor mode support. Use an external USB WiFi adapter "
                     "(e.g. Alfa AWUS036ACH, Panda PAU09) that supports monitor mode and "
@@ -362,7 +362,7 @@ class BifrostAgent:
                 logger.error("Error setting channel: %s", e)
 
     def next_epoch(self):
-        """Transition to next epoch — evaluate mood."""
+        """Transition to next epoch - evaluate mood."""
         self.automata.next_epoch(self.epoch)
         # Persist epoch to DB
         data = self.epoch.data()
@@ -393,7 +393,7 @@ class BifrostAgent:
             has_ws = True
         except ImportError:
             has_ws = False
-            logger.warning("websockets package not installed — using REST event polling "
+            logger.warning("websockets package not installed - using REST event polling "
                            "(pip install websockets for real-time events)")
 
         if has_ws:
@@ -417,7 +417,7 @@ class BifrostAgent:
         loop.close()
 
     def _rest_event_loop(self):
-        """REST-based fallback event poller — polls /api/events every 2s."""
+        """REST-based fallback event poller - polls /api/events every 2s."""
         while not self._stop_event.is_set():
             try:
                 events = self.bettercap.events()

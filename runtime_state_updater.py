@@ -1,3 +1,5 @@
+"""runtime_state_updater.py - Background thread keeping display-facing state fresh."""
+
 import logging
 import os
 import random
@@ -65,6 +67,7 @@ class RuntimeStateUpdater(threading.Thread):
         self._next_anim = 0.0
         self._last_status_image_key = None
         self._image_cache: OrderedDict[str, object] = OrderedDict()
+        self._image_cache_lock = threading.Lock()
 
         self.comment_ai = CommentAI()
 
@@ -244,22 +247,24 @@ class RuntimeStateUpdater(threading.Thread):
         if not path:
             return None
         try:
-            if path in self._image_cache:
-                img = self._image_cache.pop(path)
-                self._image_cache[path] = img
-                return img
+            with self._image_cache_lock:
+                if path in self._image_cache:
+                    img = self._image_cache.pop(path)
+                    self._image_cache[path] = img
+                    return img
 
             img = self.shared_data._load_image(path)
             if img is None:
                 return None
 
-            self._image_cache[path] = img
-            while len(self._image_cache) > self._image_cache_limit:
-                # Important: cached PIL images are also referenced by display/web threads.
-                # Closing here can invalidate an image still in use and trigger:
-                # ValueError: Operation on closed image
-                # We only drop our cache reference and let GC reclaim when no refs remain.
-                self._image_cache.popitem(last=False)
+            with self._image_cache_lock:
+                self._image_cache[path] = img
+                while len(self._image_cache) > self._image_cache_limit:
+                    # Important: cached PIL images are also referenced by display/web threads.
+                    # Closing here can invalidate an image still in use and trigger:
+                    # ValueError: Operation on closed image
+                    # We only drop our cache reference and let GC reclaim when no refs remain.
+                    self._image_cache.popitem(last=False)
             return img
         except Exception as exc:
             logger.error(f"Image cache load failed for {path}: {exc}")
@@ -267,9 +272,10 @@ class RuntimeStateUpdater(threading.Thread):
 
     def _close_image_cache(self):
         try:
-            # Drop references only; avoid closing shared PIL objects that may still be read
-            # by other threads during shutdown sequencing.
-            self._image_cache.clear()
+            with self._image_cache_lock:
+                # Drop references only; avoid closing shared PIL objects that may still be read
+                # by other threads during shutdown sequencing.
+                self._image_cache.clear()
         except Exception:
             pass
 

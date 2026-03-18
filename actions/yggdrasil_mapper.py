@@ -1,19 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-yggdrasil_mapper.py -- Network topology mapper (Pi Zero friendly, orchestrator compatible).
+"""yggdrasil_mapper.py - Traceroute-based network topology mapping to JSON.
 
-What it does:
-- Phase 1: Traceroute via scapy ICMP (fallback: subprocess traceroute) to discover
-  the routing path to the target IP. Records hop IPs and RTT per hop.
-- Phase 2: Service enrichment -- reads existing port data from DB hosts table and
-  optionally verifies a handful of key ports with TCP connect probes.
-- Phase 3: Builds a topology graph data structure (nodes + edges + metadata).
-- Phase 4: Aggregates with topology data from previous runs (merge / deduplicate).
-- Phase 5: Saves the combined topology as JSON to data/output/topology/.
-
-No matplotlib or networkx dependency -- pure JSON output.
-Updates EPD fields: bjorn_orch_status, bjorn_status_text2, comment_params, bjorn_progress.
+Uses scapy ICMP (fallback: subprocess) and merges results across runs.
 """
 
 import json
@@ -105,7 +94,7 @@ b_examples = [
 b_docs_url = "docs/actions/YggdrasilMapper.md"
 
 # -------------------- Constants --------------------
-_DATA_DIR   = "/home/bjorn/Bjorn/data"
+_DATA_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 OUTPUT_DIR  = os.path.join(_DATA_DIR, "output", "topology")
 
 # Ports to verify during service enrichment (small set to stay Pi Zero friendly).
@@ -423,8 +412,8 @@ class YggdrasilMapper:
 
         # Query DB for known ports to prioritize probing
         db_ports = []
+        host_data = None
         try:
-            # mac is available in the scope
             host_data = self.shared_data.db.get_host_by_mac(mac)
             if host_data and host_data.get("ports"):
                 # Normalize ports from DB string

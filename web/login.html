@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Login - Bjorn</title>
+    <link rel="icon" href="web/images/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="web/css/global.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" sizes="192x192" href="web/images/icon-192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ff0000">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#ff0000">
+    <style>
+        /* Importation de la police personnalisée */
+        @font-face {
+            font-family: 'Viking';
+            src: url('/web/css/fonts/Viking.TTF') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        body, html {
+            height: 100%;
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .rgb-border {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, #ff0000, #00ff00, #0000ff, #ff0000);
+            background-size: 400% 400%;
+            animation: rgb 10s ease infinite;
+            filter: blur(20px);
+            opacity: 0.5;
+            z-index: 0;
+        }
+
+        @keyframes rgb {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .login-container {
+            background: rgba(10, 10, 10, 0.8);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(
+                transparent,
+                transparent,
+                transparent,
+                var(--rgb-color)
+            );
+            animation: rotate 4s linear infinite;
+            opacity: 0.1;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        h2 {
+            color: #fff;
+            margin-bottom: 20px;
+            font-size: 2em;
+            text-shadow: 0 0 10px rgba(var(--rgb-values), 0.5);
+            font-family: 'Viking', sans-serif; /* Application de la police Viking */
+        }
+
+        .input-group {
+            position: relative;
+            margin: 20px 0;
+            z-index: 2;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            transition: all 0.3s;
+            box-sizing: border-box;
+            min-height: 44px;
+            -webkit-tap-highlight-color: rgba(255,255,255,0.1);
+        }
+
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 15px rgba(var(--rgb-values), 0.3);
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: rgba(255, 255, 255, 0.5);
+            user-select: none;
+            z-index: 3;
+            padding: 15px;
+            -webkit-touch-callout: none;
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(45deg, #ff0000, #00ff00, #0000ff);
+            background-size: 200% 200%;
+            animation: rgb 10s ease infinite;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+            position: relative;
+            z-index: 2;
+            min-height: 44px;
+            font-family: 'Viking', sans-serif; /* Application de la police Viking */
+        }
+
+        .login-button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(var(--rgb-values), 0.4);
+        }
+
+        .login-button:active {
+            transform: scale(0.98);
+        }
+
+        .auth-options {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            margin: 20px 0;
+            gap: 10px;
+            z-index: 2;
+            position: relative;
+        }
+
+        /* Styles pour le toggle switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            background: #ccc;
+            border-radius: 24px;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            transition: background 0.4s;
+        }
+
+        .slider::before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            border-radius: 50%;
+            transition: transform 0.4s;
+        }
+
+        input:checked + .slider {
+            background: var(--rgb-color);
+        }
+
+        input:checked + .slider::before {
+            transform: translateX(26px);
+        }
+
+        /* Optional: Adding a hue animation to the slider */
+        @keyframes hue {
+            from { background: red; }
+            to { background: red; }
+        }
+
+        :root {
+            --rgb-color: #ff0000;
+            --rgb-values: 255, 0, 0;
+        }
+
+        @media (max-width: 600px) {
+            .login-container {
+                padding: 20px;
+                width: 85%;
+            }
+
+            h2 {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="rgb-border"></div>
+    <div class="login-container">
+        <h2>Bjorn Login</h2>
+        <form method="POST" action="/login">
+            <div class="input-group">
+                <input type="text" name="username" placeholder="Username" required>
+            </div>
+            <div class="input-group">
+                <input type="password" name="password" id="password" placeholder="Password" required>
+                <span class="password-toggle" onclick="togglePassword()">👁️</span>
+            </div>
+            <div class="auth-options">
+                <label class="switch">
+                    <input type="checkbox" id="alwaysAuth" name="alwaysAuth">
+                    <span class="slider"></span>
+                </label>
+                <span>Always require authentication</span>
+            </div>
+            <button type="submit" class="login-button">Login</button>
+        </form>
+    </div>
+
+    <script>
+    // Password visibility toggle
+    function togglePassword() {
+        const password = document.getElementById('password');
+        password.type = password.type === 'password' ? 'text' : 'password';
+    }
+
+    // Dynamic RGB color and theme-color update
+    function updateRGBColor() {
+        const r = Math.sin(Date.now() * 0.001) * 127 + 128;
+        const g = Math.sin(Date.now() * 0.001 + 2) * 127 + 128;
+        const b = Math.sin(Date.now() * 0.001 + 4) * 127 + 128;
+        
+        const rgbColor = `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+        document.documentElement.style.setProperty('--rgb-color', rgbColor);
+        document.documentElement.style.setProperty('--rgb-values', `${Math.round(r)},${Math.round(g)},${Math.round(b)}`);
+        
+        // Update theme-color meta tags
+        const themeColorLight = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]');
+        const themeColorDark = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]');
+        if (themeColorLight) themeColorLight.setAttribute('content', rgbColor);
+        if (themeColorDark) themeColorDark.setAttribute('content', rgbColor);
+        
+        requestAnimationFrame(updateRGBColor);
+    }
+
+    // Enhanced mobile touch handling
+    document.addEventListener('DOMContentLoaded', function() {
+        const passwordToggle = document.querySelector('.password-toggle');
+        passwordToggle.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            togglePassword();
+        });
+
+        // **Suppression du gestionnaire touchend pour le slider**
+        /*
+        const checkbox = document.getElementById('alwaysAuth');
+        checkbox.parentElement.addEventListener('touchend', function(e) {
+            e.stopPropagation();
+            checkbox.checked = !checkbox.checked;
+        });
+        */
+    });
+
+    updateRGBColor();
+    </script>
+</body>
+</html>

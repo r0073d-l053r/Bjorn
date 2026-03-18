@@ -1,4 +1,4 @@
-# webutils/index_utils.py
+"""index_utils.py - Dashboard index page data and system status endpoints."""
 from __future__ import annotations
 import os
 import json
@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any, Dict, Tuple
 
 
-# --------- Singleton module (évite recréation à chaque requête) ----------
+# Singleton module (avoids re-creation on every request)
 logger = Logger(name="index_utils.py", level=logging.DEBUG)
 
 
@@ -27,17 +27,17 @@ class IndexUtils:
 
         self.db = shared_data.db
         
-        # Cache pour l'assemblage de stats (champs dynamiques)
+        # Stats assembly cache (dynamic fields)
         self._last_stats: Dict[str, Any] = {}
         self._last_stats_ts: float = 0.0
         self._cache_ttl: float = 5.0  # 5s
 
-        # Cache pour l'info système (rarement changeant)
+        # System info cache (rarely changes)
         self._system_info_cache: Dict[str, Any] = {}
         self._system_info_ts: float = 0.0
         self._system_cache_ttl: float = 300.0  # 5 min
 
-        # Cache wardrive (compte Wi-Fi connus)
+        # Wardrive cache (known WiFi count)
         self._wardrive_cache_mem: Optional[int] = None
         self._wardrive_ts_mem: float = 0.0
         self._wardrive_ttl: float = 600.0  # 10 min
@@ -55,14 +55,14 @@ class IndexUtils:
             return 0, 0
 
     def _open_fds_count(self) -> int:
-        """Compte le nombre de file descriptors ouverts (proc global)."""
+        """Count total open file descriptors (global /proc)."""
         try:
             return len(glob.glob("/proc/*/fd/*"))
         except Exception as e:
             # self.logger.debug(f"FD probe error: {e}")
             return 0
         
-    # ---------------------- Helpers JSON ----------------------
+    # ---------------------- JSON helpers ----------------------
     def _to_jsonable(self, obj):
         if obj is None or isinstance(obj, (bool, int, float, str)):
             return obj
@@ -80,7 +80,7 @@ class IndexUtils:
     def _json(self, handler, code: int, obj):
         payload = json.dumps(self._to_jsonable(obj), ensure_ascii=False).encode("utf-8")
         handler.send_response(code)
-        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
         handler.send_header("Content-Length", str(len(payload)))
         handler.end_headers()
         try:
@@ -96,7 +96,7 @@ class IndexUtils:
         except Exception:
             return None
 
-    # ---------------------- Config store ----------------------
+    # ---------------------- Config store -------------------------
     def _cfg_get(self, key: str, default=None):
         try:
             row = self.db.query_one("SELECT value FROM config WHERE key=? LIMIT 1;", (key,))
@@ -123,7 +123,7 @@ class IndexUtils:
             (key, s),
         )
 
-    # ---------------------- Info système ----------------------
+    # ---------------------- System info ----------------------
     def _get_system_info(self) -> Dict[str, Any]:
         now = time.time()
         if self._system_info_cache and (now - self._system_info_ts) < self._system_cache_ttl:
@@ -171,7 +171,7 @@ class IndexUtils:
         return platform.machine()
 
     def _check_epd_connected(self) -> bool:
-        # I2C puis fallback SPI
+        # I2C first, fallback to SPI
         try:
             result = subprocess.run(["i2cdetect", "-y", "1"], capture_output=True, text=True, timeout=1)
             if result.returncode == 0:
@@ -266,7 +266,7 @@ class IndexUtils:
             # self.logger.debug(f"Battery probe error: {e}")
             return {"present": False}
 
-    # ---------------------- Réseau ----------------------
+    # ---------------------- Network ----------------------
     def _quick_internet(self, timeout: float = 1.0) -> bool:
         try:
             for server in ["1.1.1.1", "8.8.8.8"]:
@@ -499,7 +499,7 @@ class IndexUtils:
         except Exception:
             return 0
 
-    # ---------------------- Wi-Fi connus (profils NM) ----------------------
+    # ---------------------- Known WiFi (NM profiles) ----------------------
     def _run_nmcli(self, args: list[str], timeout: float = 4.0) -> Optional[str]:
         import shutil, os as _os
         nmcli_path = shutil.which("nmcli") or "/usr/bin/nmcli"
@@ -520,14 +520,14 @@ class IndexUtils:
             # self.logger.debug(f"nmcli rc={out.returncode} args={args} stderr={(out.stderr or '').strip()}")
             return None
         except FileNotFoundError:
-            # self.logger.debug("nmcli introuvable")
+            # self.logger.debug("nmcli not found")
             return None
         except Exception as e:
             # self.logger.debug(f"nmcli exception {args}: {e}")
             return None
 
     def _known_wifi_count_nmcli(self) -> int:
-        # Try 1: simple (une valeur par ligne)
+        # Try 1: simple (one value per line)
         out = self._run_nmcli(["-t", "-g", "TYPE", "connection", "show"])
         if out:
             cnt = sum(1 for line in out.splitlines()
@@ -573,20 +573,20 @@ class IndexUtils:
         except Exception:
             pass
 
-        # Dernier recours: config persistée
+        # Last resort: persisted config value
         v = self._cfg_get("wardrive_known", 0)
         # self.logger.debug(f"known wifi via cfg fallback = {v}")
         return int(v) if isinstance(v, (int, float)) else 0
 
-    # Cache wardrive: mémoire (par process) + DB (partagé multi-workers)
+    # Wardrive cache: in-memory (per-process) + DB (shared across workers)
     def _wardrive_known_cached(self) -> int:
         now = time.time()
 
-        # 1) cache mémoire
+        # 1) in-memory cache
         if self._wardrive_cache_mem is not None and (now - self._wardrive_ts_mem) < self._wardrive_ttl:
             return int(self._wardrive_cache_mem)
 
-        # 2) cache partagé en DB
+        # 2) shared DB cache
         try:
             row = self.db.query_one("SELECT value FROM config WHERE key='wardrive_cache' LIMIT 1;")
             if row and row.get("value"):
@@ -600,17 +600,17 @@ class IndexUtils:
         except Exception:
             pass
 
-        # 3) refresh si nécessaire
+        # 3) refresh if needed
         val = int(self._known_wifi_count_nmcli())
 
-        # maj caches
+        # update caches
         self._wardrive_cache_mem = val
         self._wardrive_ts_mem = now
         self._cfg_set("wardrive_cache", {"val": val, "ts": now})
 
         return val
 
-    # ---------------------- Accès direct shared_data ----------------------
+    # ---------------------- Direct shared_data access ----------------------
     def _count_open_ports_total(self) -> int:
         try:
             val = int(getattr(self.shared_data, "port_count", -1))
@@ -677,7 +677,7 @@ class IndexUtils:
         except Exception:
             return str(self._cfg_get("bjorn_mode", "AUTO")).upper()
 
-    # ---------------------- Delta vuln depuis dernier scan ----------------------
+    # ---------------------- Vuln delta since last scan ----------------------
     def _vulns_delta(self) -> int:
         last_scan_ts = self._cfg_get("vuln_last_scan_ts")
         if not last_scan_ts:
@@ -707,7 +707,7 @@ class IndexUtils:
         except Exception:
             return 0
 
-    # ---------------------- Assemblage principal ----------------------
+    # ---------------------- Main stats assembly ----------------------
     def _assemble_stats(self) -> Dict[str, Any]:
         now = time.time()
         if self._last_stats and (now - self._last_stats_ts) < self._cache_ttl:
@@ -725,7 +725,7 @@ class IndexUtils:
             scripts_count = self._scripts_count()
             wardrive = self._wardrive_known_cached()
 
-            # Système
+            # System
             sys_info = self._get_system_info()
             uptime = self._uptime_str()
             first_init = self._first_init_ts()
@@ -741,7 +741,7 @@ class IndexUtils:
             # Batterie
             batt = self._battery_probe()
 
-            # Réseau
+            # Network
             internet_ok = self._quick_internet()
             gw, dns = self._gw_dns()
             wifi_ip = self._ip_for("wlan0")
@@ -775,12 +775,12 @@ class IndexUtils:
                 "bjorn_level": bjorn_level,
                 "internet_access": bool(internet_ok),
 
-                # Hôtes & ports
+                # Hosts & ports
                 "known_hosts_total": int(total),
                 "alive_hosts": int(alive),
                 "open_ports_alive_total": int(open_ports_total),
 
-                # Comptes sécurité
+                # Security counters
                 "wardrive_known": int(wardrive),
                 "vulnerabilities": int(vulns_total),
                 "vulns_delta": int(vulns_delta),
@@ -918,35 +918,35 @@ class IndexUtils:
 
 
     def reload_generate_actions_json(self, handler):
-        """Recharge le fichier actions.json en exécutant generate_actions_json."""
+        """Reload actions.json by running generate_actions_json."""
         try:
             self.shared_data.generate_actions_json()
             handler.send_response(200)
-            handler.send_header('Content-Type', 'application/json')
+            handler.send_header('Content-Type', 'application/json; charset=utf-8')
             handler.end_headers()
             handler.wfile.write(json.dumps({'status': 'success', 'message': 'actions.json reloaded successfully.'}).encode('utf-8'))
         except Exception as e:
             self.logger.error(f"Error in reload_generate_actions_json: {e}")
             handler.send_response(500)
-            handler.send_header('Content-Type', 'application/json')
+            handler.send_header('Content-Type', 'application/json; charset=utf-8')
             handler.end_headers()
             handler.wfile.write(json.dumps({'status': 'error', 'message': str(e)}).encode('utf-8'))
 
 
     def clear_shared_config_json(self, handler, restart=True):
-        """Reset config à partir des defaults, en DB."""
+        """Reset config to defaults in DB."""
         try:
             self.shared_data.config = self.shared_data.get_default_config()
             self.shared_data.save_config()   # -> DB
             if restart:
                 self.restart_bjorn_service(handler)
             handler.send_response(200)
-            handler.send_header("Content-type","application/json")
+            handler.send_header("Content-Type", "application/json; charset=utf-8")
             handler.end_headers()
             handler.wfile.write(json.dumps({"status":"success","message":"Configuration reset to defaults"}).encode("utf-8"))
         except Exception as e:
             handler.send_response(500)
-            handler.send_header("Content-type","application/json")
+            handler.send_header("Content-Type", "application/json; charset=utf-8")
             handler.end_headers()
             handler.wfile.write(json.dumps({"status":"error","message":str(e)}).encode("utf-8"))
 
@@ -968,7 +968,7 @@ class IndexUtils:
 
     def serve_manifest(self, handler):
         handler.send_response(200)
-        handler.send_header("Content-type", "application/json")
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
         handler.end_headers()
         manifest_path = os.path.join(self.shared_data.web_dir, 'manifest.json')
         try:
@@ -992,7 +992,7 @@ class IndexUtils:
 
 
 
-                # --- Nouveaux probes "radio / link" ---
+    # --- Radio / link probes ---
     def _wifi_radio_on(self) -> bool:
         # nmcli (NetworkManager)
         try:
@@ -1019,7 +1019,7 @@ class IndexUtils:
         btctl = shutil.which("bluetoothctl") or "/usr/bin/bluetoothctl"
         env = _os.environ.copy()
         env.setdefault("PATH", "/usr/sbin:/usr/bin:/sbin:/bin")
-        # important quand on tourne en service systemd
+        # needed when running as a systemd service
         env.setdefault("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/run/dbus/system_bus_socket")
 
         try:
@@ -1027,7 +1027,7 @@ class IndexUtils:
             if out.returncode == 0:
                 txt = (out.stdout or "").lower()
                 if "no default controller available" in txt:
-                    # Essayer de lister et cibler le premier contrôleur
+                    # Try listing and targeting the first controller
                     ls = subprocess.run([btctl, "list"], capture_output=True, text=True, timeout=1.2, env=env)
                     if ls.returncode == 0:
                         for line in (ls.stdout or "").splitlines():
@@ -1038,7 +1038,7 @@ class IndexUtils:
                                 if sh.returncode == 0 and "powered: yes" in (sh.stdout or "").lower():
                                     return True
                     return False
-                # cas normal
+                # normal case
                 if "powered: yes" in txt:
                     return True
         except Exception:
@@ -1068,7 +1068,7 @@ class IndexUtils:
                 return ("STATE UP" in t) or ("LOWER_UP" in t)
         except Exception:
             pass
-        # ethtool (si dispo)
+        # ethtool fallback
         try:
             out = subprocess.run(["ethtool", ifname], capture_output=True, text=True, timeout=1)
             if out.returncode == 0:
@@ -1080,7 +1080,7 @@ class IndexUtils:
         return False
 
     def _usb_gadget_active(self) -> bool:
-        # actif si un UDC est attaché
+        # active if a UDC is attached
         try:
             udc = self._read_text("/sys/kernel/config/usb_gadget/g1/UDC")
             return bool(udc and udc.strip())

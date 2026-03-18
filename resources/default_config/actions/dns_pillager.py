@@ -1,11 +1,4 @@
-# DNS Pillager for reconnaissance and enumeration of DNS infrastructure.
-# Saves settings in `/home/bjorn/.settings_bjorn/dns_pillager_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -d, --domain       Target domain for enumeration (overrides saved value).
-# -w, --wordlist     Path to subdomain wordlist (default: built-in list).
-# -o, --output       Output directory (default: /home/bjorn/Bjorn/data/output/dns).
-# -t, --threads      Number of threads for scanning (default: 10).
-# -r, --recursive    Enable recursive enumeration of discovered subdomains.
+"""dns_pillager.py - DNS recon and subdomain enumeration with threaded brute."""
 
 import os
 import json

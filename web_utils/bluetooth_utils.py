@@ -1,8 +1,4 @@
-# web_utils/bluetooth_utils.py
-"""
-Bluetooth device management utilities.
-Handles Bluetooth scanning, pairing, connection, and device management.
-"""
+"""bluetooth_utils.py - Bluetooth scanning, pairing, connection, and device management."""
 from __future__ import annotations
 import json
 import subprocess

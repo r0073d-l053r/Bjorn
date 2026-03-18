@@ -1,5 +1,4 @@
-# wpasec_potfiles.py
-# WPAsec Potfile Manager - Download, clean, import, or erase WiFi credentials
+"""wpasec_potfiles.py - Download, clean, import, or erase WiFi credentials from wpa-sec.stanev.org."""
 
 import os
 import json
@@ -25,6 +24,19 @@ b_description = (
 b_author      = "Infinition"
 b_version     = "1.0.0"
 b_icon        = f"/actions_icons/{b_class}.png"
+b_port = None
+b_service = "[]"
+b_trigger = None
+b_priority = 30
+b_timeout = 300
+b_cooldown = 3600
+b_stealth_level = 10
+b_risk_level = "low"
+b_status = "wpasec_potfiles"
+b_parent = None
+b_rate_limit = None
+b_max_retries = 1
+b_tags = ["wifi", "wpa", "potfile", "credentials"]
 b_docs_url    = "https://wpa-sec.stanev.org/?api"
 
 b_args = {
@@ -110,8 +122,8 @@ def compute_dynamic_b_args(base: dict) -> dict:
 
 # ── CLASS IMPLEMENTATION ─────────────────────────────────────────────────────
 class WPAsecPotfileManager:
-    DEFAULT_SAVE_DIR = "/home/bjorn/Bjorn/data/input/potfiles"
-    DEFAULT_SETTINGS_DIR = "/home/bjorn/.settings_bjorn"
+    DEFAULT_SAVE_DIR = os.path.join(os.path.expanduser("~"), "Bjorn", "data", "input", "potfiles")
+    DEFAULT_SETTINGS_DIR = os.path.join(os.path.expanduser("~"), ".settings_bjorn")
     SETTINGS_FILE = os.path.join(DEFAULT_SETTINGS_DIR, "wpasec_settings.json")
     DOWNLOAD_URL = "https://wpa-sec.stanev.org/?api&dl=1"
 
@@ -121,7 +133,6 @@ class WPAsecPotfileManager:
         Even if unused here, we store it for compatibility.
         """
         self.shared_data = shared_data
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
     # --- Orchestrator entry point ---
     def execute(self, ip=None, port=None, row=None, status_key=None):
@@ -130,16 +141,23 @@ class WPAsecPotfileManager:
         By default: download latest potfile if API key is available.
         """
         self.shared_data.bjorn_orch_status = "WPAsecPotfileManager"
-        self.shared_data.comment_params = {"ip": ip, "port": port}
+        # EPD live status
+        self.shared_data.comment_params = {"action": "download", "status": "starting"}
 
-        api_key = self.load_api_key()
-        if api_key:
-            logging.info("WPAsecPotfileManager: downloading latest potfile (orchestrator trigger).")
-            self.download_potfile(self.DEFAULT_SAVE_DIR, api_key)
-            return "success"
-        else:
-            logging.warning("WPAsecPotfileManager: no API key found, nothing done.")
-            return "failed"
+        try:
+            api_key = self.load_api_key()
+            if api_key:
+                logging.info("WPAsecPotfileManager: downloading latest potfile (orchestrator trigger).")
+                self.download_potfile(self.DEFAULT_SAVE_DIR, api_key)
+                # EPD live status update
+                self.shared_data.comment_params = {"action": "download", "status": "complete"}
+                return "success"
+            else:
+                logging.warning("WPAsecPotfileManager: no API key found, nothing done.")
+                return "failed"
+        finally:
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}
 
     # --- API Key Handling ---
     def save_api_key(self, api_key: str):

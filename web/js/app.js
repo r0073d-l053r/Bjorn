@@ -65,6 +65,7 @@ function bootUI() {
   router.route('/bjorn', () => import('./pages/bjorn.js'));
   router.route('/llm-chat',   () => import('./pages/llm-chat.js'));
   router.route('/llm-config', () => import('./pages/llm-config.js'));
+  router.route('/plugins',    () => import('./pages/plugins.js'));
 
   // 404 fallback
   router.setNotFound((container, path) => {
@@ -150,7 +151,7 @@ function ensureBjornProgress() {
   const host = document.querySelector('.status-left .status-text');
   if (!host) return;
 
-  if (document.getElementById('bjornProgress')) return; // déjà là
+  if (document.getElementById('bjornProgress')) return;
 
   const progress = el('div', {
     id: 'bjornProgress',
@@ -165,7 +166,7 @@ function ensureBjornProgress() {
 }
 
 function startGlobalPollers() {
-  // Status (Toutes les 6s)
+  // Status poll (every 6s)
   const statusPoller = new Poller(async () => {
     try {
       const data = await api.get('/bjorn_status', { timeout: 5000, retries: 0 });
@@ -208,7 +209,7 @@ function startGlobalPollers() {
     } catch (e) { }
   }, 6000);
 
-  // Character (Toutes les 10s - C'est suffisant pour une icône)
+  // Character icon poll (every 10s)
   const charPoller = new Poller(async () => {
     try {
       const imgEl = $('#bjorncharacter');
@@ -221,7 +222,7 @@ function startGlobalPollers() {
     } catch (e) { }
   }, 10000);
 
-  // Say (Toutes les 8s)
+  // Say text poll (every 8s)
   const sayPoller = new Poller(async () => {
     try {
       const data = await api.get('/bjorn_say', { timeout: 5000, retries: 0 });
@@ -263,7 +264,7 @@ function wireTopbar() {
 }
 
 /* =========================================
- * Liveview dropdown (BÉTON EDITION)
+ * Liveview dropdown
  * Uses recursive setTimeout to prevent thread stacking
  * ========================================= */
 
@@ -279,19 +280,19 @@ function wireLiveview() {
 
   const liveImg = $('#screenImage_Home', dropdown);
   let timer = null;
-  const LIVE_DELAY = 4000; // On passe à 4s pour matcher display.py
+  const LIVE_DELAY = 4000; // 4s to match display.py refresh rate
 
   function updateLive() {
-    if (dropdown.style.display !== 'block') return; // Stop si caché
+    if (dropdown.style.display !== 'block') return; // stop if hidden
 
     const n = new Image();
     n.onload = () => {
       liveImg.src = n.src;
-      // On ne planifie la suivante QUE quand celle-ci est affichée
+      // Schedule next frame only after current one is rendered
       timer = setTimeout(updateLive, LIVE_DELAY);
     };
     n.onerror = () => {
-      // En cas d'erreur, on attend un peu avant de réessayer
+      // On error, wait longer before retrying
       timer = setTimeout(updateLive, LIVE_DELAY * 2);
     };
     n.src = '/web/screen.png?t=' + Date.now();
@@ -420,6 +421,7 @@ const PAGES = [
   { path: '/bjorn-debug', icon: 'database.png',    label: 'Bjorn Debug' },
   { path: '/llm-chat',   icon: 'ai.png',           label: 'nav.llm_chat' },
   { path: '/llm-config', icon: 'ai_dashboard.png', label: 'nav.llm_config' },
+  { path: '/plugins',    icon: 'actions_launcher.png', label: 'nav.plugins' },
 ];
 
 function wireLauncher() {

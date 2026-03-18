@@ -107,7 +107,7 @@ async function fetchActions(){
     const r = await fetch(`${API_BASE}/studio/actions_studio`);
     if(!r.ok) throw 0; const j = await r.json(); return Array.isArray(j)?j:(j.data||[]);
   }catch{
-    // Fallback de démo
+    // Demo fallback data
     return [
       { b_class:'NetworkScanner', b_module:'network_scanner', b_action:'global', b_trigger:'on_interval:600', b_priority:10, b_enabled:1, b_icon:'NetworkScanner.png' },
       { b_class:'SSHbruteforce', b_module:'ssh_bruteforce',  b_trigger:'on_new_port:22', b_priority:70, b_enabled:1, b_port:22, b_service:'["ssh"]', b_icon:'SSHbruteforce.png' },
@@ -736,11 +736,11 @@ function evaluateHostToAction(link){
   return {ok,label:link.label|| (link.mode==='trigger'?'trigger':'requires')};
 }
 
-// remplace complètement la fonction existante
+// Repel overlapping nodes while keeping hosts pinned to their column
 function repelLayout(iter = 16, str = 0.6) {
-  const HOST_X  = 80;   // X fixe pour la colonne des hosts (même valeur que l’autolayout)
-  const TOP_Y   = 60;   // Y de départ de la colonne
-  const V_GAP   = 160;  // espacement vertical entre hosts
+  const HOST_X  = 80;   // Fixed X for host column (matches autoLayout)
+  const TOP_Y   = 60;   // Column start Y
+  const V_GAP   = 160;  // Vertical gap between hosts
 
   const ids = [...state.nodes.keys()];
   const boxes = ids.map(id => {
@@ -757,7 +757,7 @@ function repelLayout(iter = 16, str = 0.6) {
 
   if (boxes.length < 2) { LinkEngine.render(); return; }
 
-  // répulsion douce en évitant de bouger les hosts en X
+  // Soft repulsion — hosts are locked on the X axis
   for (let it = 0; it < iter; it++) {
     for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {
@@ -769,16 +769,16 @@ function repelLayout(iter = 16, str = 0.6) {
           const pushX = (ox/2) * str * Math.sign(dx || (Math.random() - .5));
           const pushY = (oy/2) * str * Math.sign(dy || (Math.random() - .5));
 
-          // Sur l’axe X, on NE BOUGE PAS les hosts
+          // Hosts stay pinned on X axis
           const aCanX = a.type !== 'host';
           const bCanX = b.type !== 'host';
 
-          if (ox > oy) { // pousser surtout en X
+          if (ox > oy) { // push mainly on X
             if (aCanX && bCanX) { a.x -= pushX; a.cx -= pushX; b.x += pushX; b.cx += pushX; }
             else if (aCanX)      { a.x -= 2*pushX; a.cx -= 2*pushX; }
             else if (bCanX)      { b.x += 2*pushX; b.cx += 2*pushX; }
-            // sinon (deux hosts) : on ne touche pas l’axe X
-          } else {        // pousser surtout en Y (hosts OK en Y)
+            // both hosts — don’t move X
+          } else {        // push mainly on Y (hosts can move vertically)
             a.y -= pushY; a.cy -= pushY;
             b.y += pushY; b.cy += pushY;
           }
@@ -787,11 +787,11 @@ function repelLayout(iter = 16, str = 0.6) {
     }
   }
 
-  // Snap final : hosts parfaitement en colonne et espacés régulièrement
+  // Final snap: align hosts into a uniform vertical column
   const hosts = boxes.filter(b => b.type === 'host').sort((u, v) => u.y - v.y);
   hosts.forEach((b, i) => { b.x = HOST_X; b.cx = b.x + b.w/2; b.y = TOP_Y + i * V_GAP; b.cy = b.y + b.h/2; });
 
-  // appliquer positions au DOM + state
+  // Apply positions to DOM + state
   boxes.forEach(b => {
     const n  = state.nodes.get(b.id);
     const el = document.querySelector(`[data-id="${b.id}"]`);
@@ -802,15 +802,15 @@ function repelLayout(iter = 16, str = 0.6) {
 
   LinkEngine.render();
 }
-/* ===== Auto-layout: hosts en colonne verticale (X constant), actions à droite ===== */
+/* ===== Auto-layout: hosts in vertical column (fixed X), actions to the right ===== */
 function autoLayout(){
   const col = new Map(); // id -> column
   const set=(id,c)=>col.set(id, Math.max(c, col.get(id)??-Infinity));
 
-  // Colonne 0 = HOSTS
+  // Column 0 = HOSTS
   state.nodes.forEach((n,id)=>{ if(n.type==='host') set(id,0); });
 
-  // Colonnes suivantes = actions (en fonction des dépendances action->action)
+  // Subsequent columns = actions (based on action->action dependencies)
   const edges=[];
   state.links.forEach(l=>{
     const A=state.nodes.get(l.from), B=state.nodes.get(l.to);
@@ -831,7 +831,7 @@ function autoLayout(){
       if(up.length===0) return 0;
       return up.reduce((s,p)=> s + (state.nodes.get(p).y||0),0)/up.length;
     };
-    // tri : hosts triés par hostname/IP/MAC pour une colonne bien lisible
+    // Sort hosts by hostname/IP/MAC for readable column ordering
     ids.sort((a,b)=>{
       if(c===0){
         const na=state.nodes.get(a), nb=state.nodes.get(b);
@@ -847,8 +847,8 @@ function autoLayout(){
       el.style.left=n.x+'px'; el.style.top=n.y+'px';
     });
   });
-  // à la fin d'autoLayout():
-  repelLayout(6, 0.4); // applique aussi le snap vertical des hosts
+  // Post-layout: repel overlaps + snap hosts vertically
+  repelLayout(6, 0.4);
 
   toast(t('studio.autoLayoutApplied'),'success');
 }
@@ -1381,7 +1381,7 @@ function isHostRuleInRequires(req){
 function importActionsForHostsAndDeps(){
   const aliveHosts=[...state.hosts.values()].filter(h=>parseInt(h.alive)==1);
 
-  // 1) actions liées aux hôtes (triggers/requires) => placer + lier
+  // 1) Place actions linked to hosts via triggers/requires and create edges
   for(const a of state.actions.values()){
     const matches = aliveHosts.filter(h=> hostMatchesActionByTriggers(a,h) || (isHostRuleInRequires(a.b_requires) && checkHostRequires(a.b_requires,h)) );
     if(matches.length===0) continue;
@@ -1393,7 +1393,7 @@ function importActionsForHostsAndDeps(){
     }
   }
 
-  // 2) dépendances entre actions (on_success/on_failure + requires action)
+  // 2) Inter-action dependencies (on_success/on_failure + requires action)
   state.nodes.forEach((nA,idA)=>{
     if(nA.type!=='action') return;
     const a=nA.data;
@@ -1413,14 +1413,12 @@ async function init(){
   const actions=await fetchActions(); const hosts=await fetchHosts();
   actions.forEach(a=>state.actions.set(a.b_class,a)); hosts.forEach(h=>state.hosts.set(h.mac_address,h));
 
-  // >>> plus de BJORN ni NetworkScanner auto-placés
-
-  // 1) Tous les hosts ALIVE sont importés (vertical)
+  // 1) Import all ALIVE hosts (vertical column)
   placeAllAliveHosts();
 
   buildPalette(); buildHostPalette();
 
-  // 2) Auto-import des actions dont trigger/require matchent les hôtes + liens
+  // 2) Auto-import actions whose triggers/requires match placed hosts + create links
   importActionsForHostsAndDeps();
 
   // 3) Layout + rendu

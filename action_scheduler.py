@@ -1,18 +1,4 @@
-# action_scheduler.py testsdd
-# Smart Action Scheduler for Bjorn - queue-only implementation
-# Handles trigger evaluation, requirements checking, and queue management.
-#
-# Invariants we enforce:
-#   - At most ONE "active" row per (action_name, mac_address, COALESCE(port,0))
-#     where active ∈ {'scheduled','pending','running'}.
-#   - Retries for failed entries are coordinated by cleanup_queue() (with backoff)
-#     and never compete with trigger-based enqueues.
-#
-# Runtime knobs (from shared.py):
-#   shared_data.retry_success_actions : bool (default False)
-#   shared_data.retry_failed_actions  : bool (default True)
-#
-# These take precedence over cooldown / rate-limit for NON-interval triggers.
+"""action_scheduler.py - Trigger evaluation, queue management, and dedup for scheduled actions."""
 
 from __future__ import annotations
 
@@ -82,6 +68,9 @@ class ActionScheduler:
         self._last_cache_refresh = 0.0
         self._cache_ttl = 60.0  # seconds
 
+        # Lock for global action evaluation (must be created here, not lazily)
+        self._globals_lock = threading.Lock()
+
         # Memory for global actions
         self._last_global_runs: Dict[str, float] = {}
         # Actions Studio last source type
@@ -133,7 +122,7 @@ class ActionScheduler:
                 # Keep queue consistent with current enable/disable flags.
                 self._cancel_queued_disabled_actions()
 
-                # 1) Promote scheduled actions that are due (always — queue hygiene)
+                # 1) Promote scheduled actions that are due (always - queue hygiene)
                 self._promote_scheduled_to_pending()
 
                 # When LLM autonomous mode owns scheduling, skip trigger evaluation
@@ -158,7 +147,7 @@ class ActionScheduler:
 
                 if not _llm_skip:
                     if _llm_wants_skip and _queue_empty:
-                        logger.info("Scheduler: LLM queue empty — heuristic fallback active")
+                        logger.info("Scheduler: LLM queue empty - heuristic fallback active")
                     # 2) Publish next scheduled occurrences for interval actions
                     self._publish_all_upcoming()
 
@@ -170,7 +159,7 @@ class ActionScheduler:
                 else:
                     logger.debug("Scheduler: trigger evaluation skipped (LLM autonomous owns scheduling)")
 
-                # 5) Queue maintenance (always — starvation prevention + cleanup)
+                # 5) Queue maintenance (always - starvation prevention + cleanup)
                 self.cleanup_queue()
                 self.update_priorities()
 
@@ -768,8 +757,6 @@ class ActionScheduler:
 
     def _evaluate_global_actions(self):
         """Evaluate and queue global actions with on_start trigger."""
-        self._globals_lock = getattr(self, "_globals_lock", threading.Lock())
-
         with self._globals_lock:
             try:
                 for action in self._action_definitions.values():

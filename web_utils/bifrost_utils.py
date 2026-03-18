@@ -1,6 +1,4 @@
-"""
-Bifrost web API endpoints.
-"""
+"""bifrost_utils.py - Bifrost web API endpoints."""
 import json
 import logging
 from typing import Dict
@@ -22,7 +20,7 @@ class BifrostUtils:
     # ── GET endpoints (handler signature) ─────────────────────
 
     def get_status(self, handler):
-        """GET /api/bifrost/status — full engine state."""
+        """GET /api/bifrost/status - full engine state."""
         engine = self._engine
         if engine:
             data = engine.get_status()
@@ -37,7 +35,7 @@ class BifrostUtils:
         self._send_json(handler, data)
 
     def get_networks(self, handler):
-        """GET /api/bifrost/networks — discovered WiFi networks."""
+        """GET /api/bifrost/networks - discovered WiFi networks."""
         try:
             rows = self.shared_data.db.query(
                 "SELECT * FROM bifrost_networks ORDER BY rssi DESC LIMIT 200"
@@ -48,7 +46,7 @@ class BifrostUtils:
             self._send_json(handler, {'networks': []})
 
     def get_handshakes(self, handler):
-        """GET /api/bifrost/handshakes — captured handshakes."""
+        """GET /api/bifrost/handshakes - captured handshakes."""
         try:
             rows = self.shared_data.db.query(
                 "SELECT * FROM bifrost_handshakes ORDER BY captured_at DESC LIMIT 200"
@@ -59,7 +57,7 @@ class BifrostUtils:
             self._send_json(handler, {'handshakes': []})
 
     def get_activity(self, handler):
-        """GET /api/bifrost/activity — recent activity feed."""
+        """GET /api/bifrost/activity - recent activity feed."""
         try:
             qs = parse_qs(urlparse(handler.path).query)
             limit = int(qs.get('limit', [50])[0])
@@ -73,7 +71,7 @@ class BifrostUtils:
             self._send_json(handler, {'activity': []})
 
     def get_epochs(self, handler):
-        """GET /api/bifrost/epochs — epoch history."""
+        """GET /api/bifrost/epochs - epoch history."""
         try:
             rows = self.shared_data.db.query(
                 "SELECT * FROM bifrost_epochs ORDER BY id DESC LIMIT 100"
@@ -84,7 +82,7 @@ class BifrostUtils:
             self._send_json(handler, {'epochs': []})
 
     def get_stats(self, handler):
-        """GET /api/bifrost/stats — aggregate statistics."""
+        """GET /api/bifrost/stats - aggregate statistics."""
         try:
             db = self.shared_data.db
             nets = db.query_one("SELECT COUNT(*) AS c FROM bifrost_networks") or {}
@@ -114,7 +112,7 @@ class BifrostUtils:
             })
 
     def get_plugins(self, handler):
-        """GET /api/bifrost/plugins — loaded plugin list."""
+        """GET /api/bifrost/plugins - loaded plugin list."""
         try:
             from bifrost.plugins import get_loaded_info
             self._send_json(handler, {'plugins': get_loaded_info()})
@@ -125,7 +123,7 @@ class BifrostUtils:
     # ── POST endpoints (JSON data signature) ──────────────────
 
     def toggle_bifrost(self, data: Dict) -> Dict:
-        """POST /api/bifrost/toggle — switch to/from BIFROST mode.
+        """POST /api/bifrost/toggle - switch to/from BIFROST mode.
 
         BIFROST is a 4th exclusive operation mode. Enabling it stops the
         orchestrator (Manual/Auto/AI) because WiFi goes into monitor mode.
@@ -141,7 +139,7 @@ class BifrostUtils:
         return {'status': 'ok', 'enabled': enabled}
 
     def set_mode(self, data: Dict) -> Dict:
-        """POST /api/bifrost/mode — set auto/manual."""
+        """POST /api/bifrost/mode - set auto/manual."""
         mode = data.get('mode', 'auto')
         engine = self._engine
         if engine and engine.agent:
@@ -149,7 +147,7 @@ class BifrostUtils:
         return {'status': 'ok', 'mode': mode}
 
     def toggle_plugin(self, data: Dict) -> Dict:
-        """POST /api/bifrost/plugin/toggle — enable/disable a plugin."""
+        """POST /api/bifrost/plugin/toggle - enable/disable a plugin."""
         try:
             from bifrost.plugins import toggle_plugin
             name = data.get('name', '')
@@ -160,7 +158,7 @@ class BifrostUtils:
             return {'status': 'error', 'message': str(e)}
 
     def clear_activity(self, data: Dict) -> Dict:
-        """POST /api/bifrost/activity/clear — clear activity log."""
+        """POST /api/bifrost/activity/clear - clear activity log."""
         try:
             self.shared_data.db.execute("DELETE FROM bifrost_activity")
             return {'status': 'ok'}
@@ -168,7 +166,7 @@ class BifrostUtils:
             return {'status': 'error', 'message': str(e)}
 
     def update_whitelist(self, data: Dict) -> Dict:
-        """POST /api/bifrost/whitelist — update AP whitelist."""
+        """POST /api/bifrost/whitelist - update AP whitelist."""
         try:
             whitelist = data.get('whitelist', '')
             self.shared_data.config['bifrost_whitelist'] = whitelist

@@ -1,19 +1,4 @@
-"""
-dns_pillager.py - DNS reconnaissance and enumeration action for Bjorn.
-
-Performs comprehensive DNS intelligence gathering on discovered hosts:
-- Reverse DNS lookup on target IP
-- Full DNS record enumeration (A, AAAA, MX, NS, TXT, CNAME, SOA, SRV, PTR)
-- Zone transfer (AXFR) attempts against discovered nameservers
-- Subdomain brute-force enumeration with threading
-
-SQL mode:
-- Targets provided by the orchestrator (ip + port)
-- IP -> (MAC, hostname) mapping read from DB 'hosts'
-- Discovered hostnames are written back to DB hosts table
-- Results saved as JSON in data/output/dns/
-- Action status recorded in DB.action_results (via DNSPillager.execute)
-"""
+"""dns_pillager.py - DNS recon: reverse lookups, record enumeration, zone transfers, subdomain brute."""
 
 import os
 import json
@@ -29,7 +14,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from shared import SharedData
 from logger import Logger
 
-# Configure the logger
 logger = Logger(name="dns_pillager.py", level=logging.DEBUG)
 
 # ---------------------------------------------------------------------------

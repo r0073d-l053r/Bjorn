@@ -1,8 +1,4 @@
-# web_utils/script_utils.py
-"""
-Script launcher and execution utilities.
-Handles script management, execution, monitoring, and output capture.
-"""
+"""script_utils.py - Script management, execution, monitoring, and output capture."""
 from __future__ import annotations
 import json
 import subprocess
@@ -97,12 +93,82 @@ import logging
 from logger import Logger
 logger = Logger(name="script_utils.py", level=logging.DEBUG)
 
+# AST parse cache: {path: (mtime, format)} - avoids re-parsing on every list_scripts call
+_format_cache: dict = {}
+_vars_cache: dict = {}
+_MAX_CACHE_ENTRIES = 200
+
+
+def _detect_script_format(script_path: str) -> str:
+    """Check if a script uses Bjorn action format (has b_class) or is a free script. Cached by mtime."""
+    try:
+        mtime = os.path.getmtime(script_path)
+        cached = _format_cache.get(script_path)
+        if cached and cached[0] == mtime:
+            return cached[1]
+    except OSError:
+        return "free"
+
+    fmt = "free"
+    try:
+        with open(script_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=script_path)
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "b_class":
+                        fmt = "bjorn"
+                        break
+                if fmt == "bjorn":
+                    break
+    except Exception:
+        pass
+
+    if len(_format_cache) >= _MAX_CACHE_ENTRIES:
+        _format_cache.clear()
+    _format_cache[script_path] = (mtime, fmt)
+    return fmt
+
+
+def _extract_module_vars(script_path: str, *var_names: str) -> dict:
+    """Safely extract module-level variable assignments via AST (no exec). Cached by mtime."""
+    try:
+        mtime = os.path.getmtime(script_path)
+        cache_key = (script_path, var_names)
+        cached = _vars_cache.get(cache_key)
+        if cached and cached[0] == mtime:
+            return cached[1]
+    except OSError:
+        return {}
+
+    result = {}
+    try:
+        with open(script_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=script_path)
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target = node.targets[0]
+                if isinstance(target, ast.Name) and target.id in var_names:
+                    try:
+                        result[target.id] = ast.literal_eval(node.value)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    if len(_vars_cache) >= _MAX_CACHE_ENTRIES:
+        _vars_cache.clear()
+    _vars_cache[cache_key] = (mtime, result)
+    return result
+
+
 class ScriptUtils:
     """Utilities for script management and execution."""
 
     def __init__(self, shared_data):
         self.logger = logger
         self.shared_data = shared_data
+        self._last_custom_scan = 0.0
 
     def get_script_description(self, script_path: Path) -> str:
         """Extract description from script comments."""
@@ -126,16 +192,74 @@ class ScriptUtils:
             self.logger.error(f"Error reading script description: {e}")
             return "Error reading description"
 
+    def _resolve_action_path(self, b_module: str) -> str:
+        """Resolve filesystem path for an action module (handles custom/ prefix)."""
+        return os.path.join(self.shared_data.actions_dir, f"{b_module}.py")
+
+    def _auto_register_custom_scripts(self, known_modules: set):
+        """Scan custom_scripts_dir for .py files not yet in DB. Throttled to once per 30s."""
+        now = time.time()
+        if now - self._last_custom_scan < 30:
+            return
+        self._last_custom_scan = now
+
+        custom_dir = self.shared_data.custom_scripts_dir
+        if not os.path.isdir(custom_dir):
+            return
+        for fname in os.listdir(custom_dir):
+            if not fname.endswith(".py") or fname == "__init__.py":
+                continue
+            stem = fname[:-3]
+            module_key = f"custom/{stem}"
+            if module_key in known_modules:
+                continue
+            # Auto-register
+            script_path = os.path.join(custom_dir, fname)
+            fmt = _detect_script_format(script_path)
+            meta = _extract_module_vars(
+                script_path,
+                "b_class", "b_name", "b_description", "b_author",
+                "b_version", "b_args", "b_tags", "b_examples", "b_icon"
+            )
+            b_class = meta.get("b_class", f"Custom_{stem}")
+            try:
+                self.shared_data.db.upsert_simple_action(
+                    b_class=b_class,
+                    b_module=module_key,
+                    b_action="custom",
+                    b_name=meta.get("b_name", stem),
+                    b_description=meta.get("b_description", "Custom script"),
+                    b_author=meta.get("b_author"),
+                    b_version=meta.get("b_version"),
+                    b_icon=meta.get("b_icon"),
+                    b_args=json.dumps(meta["b_args"]) if "b_args" in meta else None,
+                    b_tags=json.dumps(meta["b_tags"]) if "b_tags" in meta else None,
+                    b_examples=json.dumps(meta["b_examples"]) if "b_examples" in meta else None,
+                    b_enabled=1,
+                    b_priority=50,
+                )
+                self.logger.info(f"Auto-registered custom script: {module_key} ({fmt})")
+            except Exception as e:
+                self.logger.warning(f"Failed to auto-register {module_key}: {e}")
+
     def list_scripts(self) -> Dict:
         """List all actions with metadata for the launcher."""
         try:
             actions_out: list[dict] = []
             db_actions = self.shared_data.db.list_actions()
 
+            # Auto-register untracked custom scripts
+            known_modules = {(r.get("b_module") or "").strip() for r in db_actions}
+            self._auto_register_custom_scripts(known_modules)
+            # Re-query if new scripts were registered
+            new_known = {(r.get("b_module") or "").strip() for r in self.shared_data.db.list_actions()}
+            if new_known != known_modules:
+                db_actions = self.shared_data.db.list_actions()
+
             for row in db_actions:
                 b_class = (row.get("b_class") or "").strip()
                 b_module = (row.get("b_module") or "").strip()
-                action_path = os.path.join(self.shared_data.actions_dir, f"{b_module}.py")
+                action_path = self._resolve_action_path(b_module)
 
                 # Load b_args from DB (priority)
                 db_args_raw = row.get("b_args")
@@ -172,31 +296,48 @@ class ScriptUtils:
                     except Exception:
                         b_examples = None
 
-                # Enrich from module if available
+                # Enrich metadata from module file (AST for static fields, exec only for dynamic b_args)
                 try:
                     if os.path.exists(action_path):
-                        spec = importlib.util.spec_from_file_location(b_module, action_path)
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
+                        # Static metadata via AST (no exec, no sys.modules pollution)
+                        static_vars = _extract_module_vars(
+                            action_path,
+                            "b_name", "b_description", "b_author", "b_version",
+                            "b_icon", "b_docs_url", "b_examples", "b_args"
+                        )
+                        if static_vars.get("b_name"): b_name = static_vars["b_name"]
+                        if static_vars.get("b_description"): b_description = static_vars["b_description"]
+                        if static_vars.get("b_author"): b_author = static_vars["b_author"]
+                        if static_vars.get("b_version"): b_version = static_vars["b_version"]
+                        if static_vars.get("b_icon"): b_icon = static_vars["b_icon"]
+                        if static_vars.get("b_docs_url"): b_docs_url = static_vars["b_docs_url"]
+                        if static_vars.get("b_examples"): b_examples = static_vars["b_examples"]
+                        if static_vars.get("b_args") and not b_args:
+                            b_args = static_vars["b_args"]
 
-                        # Dynamic b_args
-                        if hasattr(module, "compute_dynamic_b_args"):
-                            try:
-                                b_args = module.compute_dynamic_b_args(b_args or {})
-                            except Exception as e:
-                                self.logger.warning(f"compute_dynamic_b_args failed for {b_module}: {e}")
+                        # Only exec module if it has compute_dynamic_b_args (rare)
+                        # Check via simple text search first to avoid unnecessary imports
+                        try:
+                            with open(action_path, "r", encoding="utf-8") as _f:
+                                has_dynamic = "compute_dynamic_b_args" in _f.read()
+                        except Exception:
+                            has_dynamic = False
 
-                        # Enrich fields
-                        if getattr(module, "b_name", None): b_name = module.b_name
-                        if getattr(module, "b_description", None): b_description = module.b_description
-                        if getattr(module, "b_author", None): b_author = module.b_author
-                        if getattr(module, "b_version", None): b_version = module.b_version
-                        if getattr(module, "b_icon", None): b_icon = module.b_icon
-                        if getattr(module, "b_docs_url", None): b_docs_url = module.b_docs_url
-                        if getattr(module, "b_examples", None): b_examples = module.b_examples
+                        if has_dynamic:
+                            import sys as _sys
+                            spec = importlib.util.spec_from_file_location(f"_tmp_{b_module}", action_path)
+                            module = importlib.util.module_from_spec(spec)
+                            spec.loader.exec_module(module)
+                            if hasattr(module, "compute_dynamic_b_args"):
+                                try:
+                                    b_args = module.compute_dynamic_b_args(b_args or {})
+                                except Exception as e:
+                                    self.logger.warning(f"compute_dynamic_b_args failed for {b_module}: {e}")
+                            # Remove from sys.modules to prevent accumulation
+                            _sys.modules.pop(f"_tmp_{b_module}", None)
 
                 except Exception as e:
-                    self.logger.warning(f"Could not import {b_module} for dynamic/meta: {e}")
+                    self.logger.warning(f"Could not enrich {b_module}: {e}")
 
                 # Parse tags
                 tags_raw = row.get("b_tags")
@@ -218,6 +359,12 @@ class ScriptUtils:
                 # Icon URL
                 icon_url = self._normalize_icon_url(b_icon, b_class)
 
+                # Custom script detection
+                is_custom = b_module.startswith("custom/")
+                script_format = ""
+                if is_custom and os.path.exists(action_path):
+                    script_format = _detect_script_format(action_path)
+
                 # Build action info
                 action_info = {
                     "name": display_name,
@@ -236,6 +383,8 @@ class ScriptUtils:
                     "b_icon": icon_url,
                     "b_docs_url": b_docs_url,
                     "b_examples": b_examples,
+                    "is_custom": is_custom,
+                    "script_format": script_format,
                     "is_running": False,
                     "output": []
                 }
@@ -302,27 +451,36 @@ class ScriptUtils:
                 return {"status": "error", "message": f"Action {script_key} not found"}
             
             module_name = action["b_module"]
-            script_path = os.path.join(self.shared_data.actions_dir, f"{module_name}.py")
-            
+            script_path = self._resolve_action_path(module_name)
+
             if not os.path.exists(script_path):
                 return {"status": "error", "message": f"Script file {script_path} not found"}
-            
+
+            is_custom = module_name.startswith("custom/")
+            script_format = _detect_script_format(script_path) if is_custom else "bjorn"
+
             # Check if already running
             with self.shared_data.scripts_lock:
                 if script_path in self.shared_data.running_scripts and \
                    self.shared_data.running_scripts[script_path].get("is_running", False):
                     return {"status": "error", "message": f"Script {module_name} is already running"}
-                
+
                 # Prepare environment
                 env = dict(os.environ)
                 env["PYTHONUNBUFFERED"] = "1"
                 env["BJORN_EMBEDDED"] = "1"
-                
-                # Start process
-                cmd = ["sudo", "python3", "-u", script_path]
+
+                # Build command based on script format
+                if script_format == "free":
+                    # Free scripts run directly as standalone Python
+                    cmd = ["sudo", "python3", "-u", script_path]
+                else:
+                    # Bjorn-format actions go through action_runner (bootstraps shared_data)
+                    runner_path = os.path.join(self.shared_data.current_dir, "action_runner.py")
+                    cmd = ["sudo", "python3", "-u", runner_path, module_name, action["b_class"]]
                 if args:
                     cmd.extend(args.split())
-                
+
                 process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -330,7 +488,7 @@ class ScriptUtils:
                     bufsize=1,
                     universal_newlines=True,
                     env=env,
-                    cwd=self.shared_data.actions_dir
+                    cwd=self.shared_data.current_dir
                 )
                 
                 # Store process info
@@ -469,40 +627,51 @@ class ScriptUtils:
             self.logger.error(f"Error getting script output: {e}")
             return {"status": "error", "message": str(e)}
 
+    MAX_OUTPUT_LINES = 2000
+
     def monitor_script_output(self, script_path: str, process: subprocess.Popen):
-        """Monitor script output in real-time."""
+        """Monitor script output in real-time with bounded buffer."""
         try:
             self.logger.debug(f"Starting output monitoring for: {script_path}")
-            
+
             while True:
                 line = process.stdout.readline()
-                
+
                 if not line and process.poll() is not None:
                     break
-                
+
                 if line:
                     line = line.rstrip()
                     with self.shared_data.scripts_lock:
                         if script_path in self.shared_data.running_scripts:
-                            self.shared_data.running_scripts[script_path]["output"].append(line)
-                            self.logger.debug(f"[{os.path.basename(script_path)}] {line}")
-            
-            # Process ended
+                            output = self.shared_data.running_scripts[script_path]["output"]
+                            output.append(line)
+                            # Cap output to prevent unbounded memory growth
+                            if len(output) > self.MAX_OUTPUT_LINES:
+                                del output[:len(output) - self.MAX_OUTPUT_LINES]
+
+            # Process ended - close stdout FD explicitly
+            if process.stdout:
+                process.stdout.close()
+
             return_code = process.poll()
             with self.shared_data.scripts_lock:
                 if script_path in self.shared_data.running_scripts:
                     info = self.shared_data.running_scripts[script_path]
                     info["process"] = None
                     info["is_running"] = False
-                    
+
                     if return_code == 0:
                         info["output"].append("Script completed successfully")
                     else:
                         info["output"].append(f"Script exited with code {return_code}")
                         info["last_error"] = f"Exit code: {return_code}"
-            
+
+                # Prune old finished entries (keep max 20 historical)
+                self._prune_finished_scripts()
+
             self.logger.info(f"Script {script_path} finished with code {return_code}")
-            
+
         except Exception as e:
             self.logger.error(f"Error monitoring output for {script_path}: {e}")
             with self.shared_data.scripts_lock:
@@ -512,6 +681,29 @@ class ScriptUtils:
                     info["last_error"] = str(e)
                     info["process"] = None
                     info["is_running"] = False
+        finally:
+            # Ensure process resources are released
+            try:
+                if process.stdout and not process.stdout.closed:
+                    process.stdout.close()
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+            except Exception:
+                pass
+
+    def _prune_finished_scripts(self):
+        """Remove oldest finished script entries to bound memory. Caller must hold scripts_lock."""
+        MAX_FINISHED = 20
+        finished = [
+            (k, v.get("start_time", 0))
+            for k, v in self.shared_data.running_scripts.items()
+            if not v.get("is_running", False) and v.get("process") is None
+        ]
+        if len(finished) > MAX_FINISHED:
+            finished.sort(key=lambda x: x[1])
+            for k, _ in finished[:len(finished) - MAX_FINISHED]:
+                del self.shared_data.running_scripts[k]
 
     def upload_script(self, handler) -> None:
         """Upload a new script file."""
@@ -567,7 +759,7 @@ class ScriptUtils:
             script_name = data.get('script_name')
             if not script_name:
                 return {"status": "error", "message": "Missing script_name"}
-            
+
             rows = self.shared_data.db.query("SELECT * FROM scripts WHERE name=?", (script_name,))
             if not rows:
                 return {"status": "error", "message": f"Script '{script_name}' not found in DB"}
@@ -591,6 +783,116 @@ class ScriptUtils:
             return {"status": "success", "message": f"{'Project' if is_project else 'Script'} '{script_name}' deleted."}
         except Exception as e:
             self.logger.error(f"Error deleting script: {e}")
+            return {"status": "error", "message": str(e)}
+
+    # --- Custom scripts management ---
+
+    def upload_custom_script(self, handler) -> None:
+        """Upload a custom script to actions/custom/."""
+        try:
+            form = _MultipartForm(
+                fp=handler.rfile,
+                headers=handler.headers,
+                environ={'REQUEST_METHOD': 'POST'}
+            )
+            if 'script_file' not in form:
+                resp = {"status": "error", "message": "Missing 'script_file'"}
+                handler.send_response(400)
+            else:
+                file_item = form['script_file']
+                if not file_item.filename.endswith('.py'):
+                    resp = {"status": "error", "message": "Only .py files allowed"}
+                    handler.send_response(400)
+                else:
+                    script_name = os.path.basename(file_item.filename)
+                    stem = script_name[:-3]
+                    script_path = Path(self.shared_data.custom_scripts_dir) / script_name
+
+                    if script_path.exists():
+                        resp = {"status": "error", "message": f"Script '{script_name}' already exists. Delete it first."}
+                        handler.send_response(400)
+                    else:
+                        with open(script_path, 'wb') as f:
+                            f.write(file_item.file.read())
+
+                        # Extract metadata via AST (safe, no exec)
+                        fmt = _detect_script_format(str(script_path))
+                        meta = _extract_module_vars(
+                            str(script_path),
+                            "b_class", "b_name", "b_description", "b_author",
+                            "b_version", "b_args", "b_tags", "b_examples", "b_icon"
+                        )
+
+                        b_class = meta.get("b_class", f"Custom_{stem}")
+                        module_key = f"custom/{stem}"
+
+                        self.shared_data.db.upsert_simple_action(
+                            b_class=b_class,
+                            b_module=module_key,
+                            b_action="custom",
+                            b_name=meta.get("b_name", stem),
+                            b_description=meta.get("b_description", "Custom script"),
+                            b_author=meta.get("b_author"),
+                            b_version=meta.get("b_version"),
+                            b_icon=meta.get("b_icon"),
+                            b_args=json.dumps(meta["b_args"]) if "b_args" in meta else None,
+                            b_tags=json.dumps(meta["b_tags"]) if "b_tags" in meta else None,
+                            b_examples=json.dumps(meta["b_examples"]) if "b_examples" in meta else None,
+                            b_enabled=1,
+                            b_priority=50,
+                        )
+
+                        resp = {
+                            "status": "success",
+                            "message": f"Custom script '{script_name}' uploaded ({fmt} format).",
+                            "data": {"b_class": b_class, "b_module": module_key, "format": fmt}
+                        }
+                        handler.send_response(200)
+
+            handler.send_header('Content-Type', 'application/json')
+            handler.end_headers()
+            handler.wfile.write(json.dumps(resp).encode('utf-8'))
+        except Exception as e:
+            self.logger.error(f"Error uploading custom script: {e}")
+            handler.send_response(500)
+            handler.send_header('Content-Type', 'application/json')
+            handler.end_headers()
+            handler.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+
+    def delete_custom_script(self, data: Dict) -> Dict:
+        """Delete a custom script (refuses to delete built-in actions)."""
+        try:
+            b_class = data.get("script_name") or data.get("b_class")
+            if not b_class:
+                return {"status": "error", "message": "Missing script_name"}
+
+            # Look up in actions table
+            action = self.shared_data.db.get_action_by_class(b_class)
+            if not action:
+                return {"status": "error", "message": f"Action '{b_class}' not found"}
+
+            b_module = action.get("b_module", "")
+            if action.get("b_action") != "custom" and not b_module.startswith("custom/"):
+                return {"status": "error", "message": "Cannot delete built-in actions"}
+
+            script_path = self._resolve_action_path(b_module)
+
+            # Check if running
+            with self.shared_data.scripts_lock:
+                if script_path in self.shared_data.running_scripts and \
+                   self.shared_data.running_scripts[script_path].get("is_running", False):
+                    return {"status": "error", "message": f"Script '{b_class}' is currently running. Stop it first."}
+
+            # Delete file
+            if os.path.exists(script_path):
+                os.remove(script_path)
+
+            # Delete from DB
+            self.shared_data.db.delete_action(b_class)
+
+            return {"status": "success", "message": f"Custom script '{b_class}' deleted."}
+        except Exception as e:
+            self.logger.error(f"Error deleting custom script: {e}")
             return {"status": "error", "message": str(e)}
 
     def upload_project(self, handler) -> None:

@@ -1,4 +1,5 @@
-﻿# logger.py
+﻿"""logger.py - Rotating file + console logger with custom SUCCESS level."""
+
 import logging
 import os
 import threading

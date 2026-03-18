@@ -1,7 +1,6 @@
-"""
-Bifrost — Plugin system.
+"""plugins.py - Bifrost plugin system.
+
 Ported from pwnagotchi/plugins/__init__.py with ThreadPoolExecutor.
-Compatible with existing pwnagotchi plugin files.
 """
 import os
 import glob
@@ -130,7 +129,7 @@ def load_from_path(path, enabled=()):
     if not path or not os.path.isdir(path):
         return loaded
 
-    logger.debug("loading plugins from %s — enabled: %s", path, enabled)
+    logger.debug("loading plugins from %s - enabled: %s", path, enabled)
     for filename in glob.glob(os.path.join(path, "*.py")):
         plugin_name = os.path.basename(filename.replace(".py", ""))
         database[plugin_name] = filename

@@ -1,17 +1,6 @@
-"""
-HIDScript parser and executor for Loki.
+"""hidscript.py - P4wnP1-compatible HIDScript parser and executor.
 
-Supports P4wnP1-compatible HIDScript syntax:
-  - Function calls: type("hello"); press("GUI r"); delay(500);
-  - var declarations: var x = 1;
-  - for / while loops
-  - if / else conditionals
-  - // and /* */ comments
-  - String concatenation with +
-  - Basic arithmetic (+, -, *, /)
-  - console.log() for job output
-
-Zero external dependencies — pure Python DSL parser.
+Pure Python DSL parser supporting type/press/delay, loops, conditionals, and variables.
 """
 import re
 import time
@@ -240,7 +229,7 @@ class HIDScriptParser:
                 else_body = source[after_else+1:eb_end]
                 next_pos = eb_end + 1
             elif source[after_else:after_else+2] == 'if':
-                # else if — parse recursively
+                # else if - parse recursively
                 inner_if, next_pos = self._parse_if(source, after_else)
                 else_body = inner_if  # will be a dict, handle in exec
             else:

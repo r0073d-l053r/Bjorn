@@ -1,6 +1,6 @@
-# db_utils/base.py
-# Base database connection and transaction management
+"""base.py - Base database connection and transaction management."""
 
+import re
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -11,6 +11,16 @@ import logging
 from logger import Logger
 
 logger = Logger(name="db_utils.base", level=logging.DEBUG)
+
+# Regex for valid SQLite identifiers: alphanumeric + underscore, must start with letter/underscore
+_SAFE_IDENT_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def _validate_identifier(name: str, kind: str = "identifier") -> str:
+    """Validate that a SQL identifier (table/column name) is safe against injection."""
+    if not name or not _SAFE_IDENT_RE.match(name):
+        raise ValueError(f"Invalid SQL {kind}: {name!r}")
+    return name
 
 
 class DatabaseBase:
@@ -120,12 +130,15 @@ class DatabaseBase:
     
     def _column_names(self, table: str) -> List[str]:
         """Return a list of column names for a given table (empty if table missing)"""
+        _validate_identifier(table, "table name")
         with self._cursor() as c:
             c.execute(f"PRAGMA table_info({table});")
             return [r[1] for r in c.fetchall()]
-    
+
     def _ensure_column(self, table: str, column: str, ddl: str) -> None:
         """Add a column with the provided DDL if it does not exist yet"""
+        _validate_identifier(table, "table name")
+        _validate_identifier(column, "column name")
         cols = self._column_names(table) if self._table_exists(table) else []
         if column not in cols:
             self.execute(f"ALTER TABLE {table} ADD COLUMN {ddl};")
@@ -134,13 +147,15 @@ class DatabaseBase:
     # MAINTENANCE OPERATIONS
     # =========================================================================
     
+    _VALID_CHECKPOINT_MODES = {"PASSIVE", "FULL", "RESTART", "TRUNCATE"}
+
     def checkpoint(self, mode: str = "TRUNCATE") -> Tuple[int, int, int]:
         """
         Force a WAL checkpoint. Returns (busy, log_frames, checkpointed_frames).
         mode ∈ {PASSIVE, FULL, RESTART, TRUNCATE}
         """
         mode = (mode or "PASSIVE").upper()
-        if mode not in {"PASSIVE", "FULL", "RESTART", "TRUNCATE"}:
+        if mode not in self._VALID_CHECKPOINT_MODES:
             mode = "PASSIVE"
         with self._cursor() as c:
             c.execute(f"PRAGMA wal_checkpoint({mode});")

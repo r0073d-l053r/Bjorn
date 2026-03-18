@@ -1,4 +1,4 @@
-# image_utils.py
+"""image_utils.py - Image upload, processing, and gallery management."""
 from __future__ import annotations
 import os, json, re, shutil, io, logging
 from io import BytesIO
@@ -231,7 +231,7 @@ class ImageUtils:
 
         try:
             ctype, pdict = _parse_header(h.headers.get('Content-Type'))
-            if ctype != 'multipart/form-data': raise ValueError('Content-Type doit être multipart/form-data')
+            if ctype != 'multipart/form-data': raise ValueError('Content-Type must be multipart/form-data')
             pdict['boundary']=bytes(pdict['boundary'],'utf-8'); pdict['CONTENT-LENGTH']=int(h.headers.get('Content-Length'))
             form = _MultipartForm(fp=BytesIO(h.rfile.read(pdict['CONTENT-LENGTH'])),
                                     headers=h.headers, environ={'REQUEST_METHOD':'POST'}, keep_blank_values=True)
@@ -298,11 +298,11 @@ class ImageUtils:
 
         try:
             ctype, pdict = _parse_header(h.headers.get('Content-Type'))
-            if ctype != 'multipart/form-data': raise ValueError('Content-Type doit être multipart/form-data')
+            if ctype != 'multipart/form-data': raise ValueError('Content-Type must be multipart/form-data')
             pdict['boundary']=bytes(pdict['boundary'],'utf-8'); pdict['CONTENT-LENGTH']=int(h.headers.get('Content-Length'))
             form = _MultipartForm(fp=BytesIO(h.rfile.read(pdict['CONTENT-LENGTH'])),
                                     headers=h.headers, environ={'REQUEST_METHOD':'POST'}, keep_blank_values=True)
-            if 'web_image' not in form or not getattr(form['web_image'],'filename',''): raise ValueError('Aucun fichier web_image fourni')
+            if 'web_image' not in form or not getattr(form['web_image'],'filename',''): raise ValueError('No web_image file provided')
             file_item = form['web_image']; filename = self._safe(file_item.filename)
             base, ext = os.path.splitext(filename); 
             if ext.lower() not in ALLOWED_IMAGE_EXTS: filename = base + '.png'
@@ -332,11 +332,11 @@ class ImageUtils:
 
         try:
             ctype, pdict = _parse_header(h.headers.get('Content-Type'))
-            if ctype != 'multipart/form-data': raise ValueError('Content-Type doit être multipart/form-data')
+            if ctype != 'multipart/form-data': raise ValueError('Content-Type must be multipart/form-data')
             pdict['boundary']=bytes(pdict['boundary'],'utf-8'); pdict['CONTENT-LENGTH']=int(h.headers.get('Content-Length'))
             form = _MultipartForm(fp=BytesIO(h.rfile.read(pdict['CONTENT-LENGTH'])),
                                     headers=h.headers, environ={'REQUEST_METHOD':'POST'}, keep_blank_values=True)
-            if 'icon_image' not in form or not getattr(form['icon_image'],'filename',''): raise ValueError('Aucun fichier icon_image fourni')
+            if 'icon_image' not in form or not getattr(form['icon_image'],'filename',''): raise ValueError('No icon_image file provided')
             file_item = form['icon_image']; filename = self._safe(file_item.filename)
             base, ext = os.path.splitext(filename); 
             if ext.lower() not in ALLOWED_IMAGE_EXTS: filename = base + '.png'

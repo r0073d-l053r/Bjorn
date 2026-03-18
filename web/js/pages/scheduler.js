@@ -5,8 +5,9 @@
  */
 import { ResourceTracker } from '../core/resource-tracker.js';
 import { api, Poller } from '../core/api.js';
-import { el, $, $$, empty } from '../core/dom.js';
+import { el, $, $$, empty, toast } from '../core/dom.js';
 import { t } from '../core/i18n.js';
+import { buildConditionEditor, getConditions } from '../core/condition-builder.js';
 
 const PAGE = 'scheduler';
 const PAGE_SIZE = 100;
@@ -36,6 +37,12 @@ let iconCache = new Map();
 /** Map<lane, Map<cardKey, DOM element>> for incremental updates */
 let laneCardMaps = new Map();
 
+/* ── tab state ── */
+let activeTab = 'queue';
+let schedulePoller = null;
+let triggerPoller = null;
+let scriptsList = [];
+
 /* ── lifecycle ── */
 export async function mount(container) {
   tracker = new ResourceTracker(PAGE);
@@ -43,14 +50,16 @@ export async function mount(container) {
   tracker.trackEventListener(window, 'keydown', (e) => {
     if (e.key === 'Escape') closeModal();
   });
-  await tick();
-  setLive(true);
+  fetchScriptsList();
+  switchTab('queue');
 }
 
 export function unmount() {
   clearTimeout(searchDeb);
   searchDeb = null;
   if (poller) { poller.stop(); poller = null; }
+  if (schedulePoller) { schedulePoller.stop(); schedulePoller = null; }
+  if (triggerPoller) { triggerPoller.stop(); triggerPoller = null; }
   if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
   if (tracker) { tracker.cleanupAll(); tracker = null; }
   lastBuckets = null;
@@ -58,6 +67,8 @@ export function unmount() {
   lastFilterKey = '';
   iconCache.clear();
   laneCardMaps.clear();
+  scriptsList = [];
+  activeTab = 'queue';
   LIVE = true; FOCUS = false; COMPACT = false;
   COLLAPSED = false; INCLUDE_SUPERSEDED = false;
 }
@@ -66,21 +77,38 @@ export function unmount() {
 function buildShell() {
   return el('div', { class: 'scheduler-container' }, [
     el('div', { id: 'sched-errorBar', class: 'notice', style: 'display:none' }),
-    el('div', { class: 'controls' }, [
-      el('input', {
-        type: 'text', id: 'sched-search', placeholder: t('sched.filterPlaceholder'),
-        oninput: onSearch
-      }),
-      pill('sched-liveBtn', t('common.on'), true, () => setLive(!LIVE)),
-      pill('sched-refBtn', t('common.refresh'), false, () => tick()),
-      pill('sched-focBtn', t('sched.focusActive'), false, () => { FOCUS = !FOCUS; $('#sched-focBtn')?.classList.toggle('active', FOCUS); lastFilterKey = ''; tick(); }),
-      pill('sched-cmpBtn', t('sched.compact'), false, () => { COMPACT = !COMPACT; $('#sched-cmpBtn')?.classList.toggle('active', COMPACT); lastFilterKey = ''; tick(); }),
-      pill('sched-colBtn', t('sched.collapse'), false, toggleCollapse),
-      pill('sched-supBtn', INCLUDE_SUPERSEDED ? t('sched.hideSuperseded') : t('sched.showSuperseded'), false, toggleSuperseded),
-      el('span', { id: 'sched-stats', class: 'stats' }),
+    /* ── tab bar ── */
+    el('div', { class: 'sched-tabs' }, [
+      el('button', { class: 'sched-tab sched-tab-active', 'data-tab': 'queue', onclick: () => switchTab('queue') }, ['Queue']),
+      el('button', { class: 'sched-tab', 'data-tab': 'schedules', onclick: () => switchTab('schedules') }, ['Schedules']),
+      el('button', { class: 'sched-tab', 'data-tab': 'triggers', onclick: () => switchTab('triggers') }, ['Triggers']),
     ]),
-    el('div', { id: 'sched-boardWrap', class: 'boardWrap' }, [
-      el('div', { id: 'sched-board', class: 'board' }),
+    /* ── Queue tab content (existing kanban) ── */
+    el('div', { id: 'sched-tab-queue', class: 'sched-tab-content' }, [
+      el('div', { class: 'controls' }, [
+        el('input', {
+          type: 'text', id: 'sched-search', placeholder: t('sched.filterPlaceholder'),
+          oninput: onSearch
+        }),
+        pill('sched-liveBtn', t('common.on'), true, () => setLive(!LIVE)),
+        pill('sched-refBtn', t('common.refresh'), false, () => tick()),
+        pill('sched-focBtn', t('sched.focusActive'), false, () => { FOCUS = !FOCUS; $('#sched-focBtn')?.classList.toggle('active', FOCUS); lastFilterKey = ''; tick(); }),
+        pill('sched-cmpBtn', t('sched.compact'), false, () => { COMPACT = !COMPACT; $('#sched-cmpBtn')?.classList.toggle('active', COMPACT); lastFilterKey = ''; tick(); }),
+        pill('sched-colBtn', t('sched.collapse'), false, toggleCollapse),
+        pill('sched-supBtn', INCLUDE_SUPERSEDED ? t('sched.hideSuperseded') : t('sched.showSuperseded'), false, toggleSuperseded),
+        el('span', { id: 'sched-stats', class: 'stats' }),
+      ]),
+      el('div', { id: 'sched-boardWrap', class: 'boardWrap' }, [
+        el('div', { id: 'sched-board', class: 'board' }),
+      ]),
+    ]),
+    /* ── Schedules tab content ── */
+    el('div', { id: 'sched-tab-schedules', class: 'sched-tab-content', style: 'display:none' }, [
+      buildSchedulesPanel(),
+    ]),
+    /* ── Triggers tab content ── */
+    el('div', { id: 'sched-tab-triggers', class: 'sched-tab-content', style: 'display:none' }, [
+      buildTriggersPanel(),
     ]),
     /* history modal */
     el('div', {
@@ -101,6 +129,485 @@ function buildShell() {
       ]),
     ]),
   ]);
+}
+
+/* ── tab switching ── */
+function switchTab(tab) {
+  activeTab = tab;
+
+  /* update tab buttons */
+  $$('.sched-tab').forEach(btn => {
+    btn.classList.toggle('sched-tab-active', btn.dataset.tab === tab);
+  });
+
+  /* show/hide tab content */
+  ['queue', 'schedules', 'triggers'].forEach(id => {
+    const panel = $(`#sched-tab-${id}`);
+    if (panel) panel.style.display = id === tab ? '' : 'none';
+  });
+
+  /* stop all pollers first */
+  if (poller) { poller.stop(); poller = null; }
+  if (schedulePoller) { schedulePoller.stop(); schedulePoller = null; }
+  if (triggerPoller) { triggerPoller.stop(); triggerPoller = null; }
+
+  /* start relevant pollers */
+  if (tab === 'queue') {
+    tick();
+    setLive(true);
+  } else if (tab === 'schedules') {
+    refreshScheduleList();
+    schedulePoller = new Poller(refreshScheduleList, 10000, { immediate: false });
+    schedulePoller.start();
+  } else if (tab === 'triggers') {
+    refreshTriggerList();
+    triggerPoller = new Poller(refreshTriggerList, 10000, { immediate: false });
+    triggerPoller.start();
+  }
+}
+
+/* ── fetch scripts list ── */
+async function fetchScriptsList() {
+  try {
+    const data = await api.get('/list_scripts', { timeout: 12000 });
+    scriptsList = Array.isArray(data) ? data : (data?.scripts || data?.actions || []);
+  } catch (e) {
+    scriptsList = [];
+  }
+}
+
+function populateScriptSelect(selectEl) {
+  empty(selectEl);
+  selectEl.appendChild(el('option', { value: '' }, ['-- Select script --']));
+  scriptsList.forEach(s => {
+    const name = typeof s === 'string' ? s : (s.name || s.action_name || '');
+    if (name) selectEl.appendChild(el('option', { value: name }, [name]));
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SCHEDULES TAB
+   ══════════════════════════════════════════════════════════════════ */
+
+function buildSchedulesPanel() {
+  return el('div', { class: 'schedules-panel' }, [
+    buildScheduleForm(),
+    el('div', { id: 'sched-schedule-list' }),
+  ]);
+}
+
+function buildScheduleForm() {
+  const typeToggle = el('select', { id: 'sched-sform-type', onchange: onScheduleTypeChange }, [
+    el('option', { value: 'recurring' }, ['Recurring']),
+    el('option', { value: 'oneshot' }, ['One-shot']),
+  ]);
+
+  const presets = [
+    { label: '60s', val: 60 }, { label: '5m', val: 300 }, { label: '15m', val: 900 },
+    { label: '30m', val: 1800 }, { label: '1h', val: 3600 }, { label: '6h', val: 21600 },
+    { label: '24h', val: 86400 },
+  ];
+
+  const intervalRow = el('div', { id: 'sched-sform-interval-row' }, [
+    el('label', {}, ['Interval (seconds): ']),
+    el('input', { type: 'number', id: 'sched-sform-interval', min: '1', value: '300', style: 'width:100px' }),
+    el('span', { style: 'margin-left:8px' },
+      presets.map(p =>
+        el('button', {
+          class: 'pill', type: 'button', style: 'margin:0 2px',
+          onclick: () => { const inp = $('#sched-sform-interval'); if (inp) inp.value = p.val; }
+        }, [p.label])
+      )
+    ),
+  ]);
+
+  const runAtRow = el('div', { id: 'sched-sform-runat-row', style: 'display:none' }, [
+    el('label', {}, ['Run at: ']),
+    el('input', { type: 'datetime-local', id: 'sched-sform-runat' }),
+  ]);
+
+  return el('div', { class: 'schedules-form' }, [
+    el('h3', {}, ['Create Schedule']),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Script: ']),
+      el('select', { id: 'sched-sform-script' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Type: ']),
+      typeToggle,
+    ]),
+    intervalRow,
+    runAtRow,
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Args (optional): ']),
+      el('input', { type: 'text', id: 'sched-sform-args', placeholder: 'CLI arguments' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('button', { class: 'btn', onclick: createSchedule }, ['Create']),
+    ]),
+  ]);
+}
+
+function onScheduleTypeChange() {
+  const type = $('#sched-sform-type')?.value;
+  const intervalRow = $('#sched-sform-interval-row');
+  const runAtRow = $('#sched-sform-runat-row');
+  if (intervalRow) intervalRow.style.display = type === 'recurring' ? '' : 'none';
+  if (runAtRow) runAtRow.style.display = type === 'oneshot' ? '' : 'none';
+}
+
+async function createSchedule() {
+  const script = $('#sched-sform-script')?.value;
+  if (!script) { toast('Please select a script', 2600, 'error'); return; }
+
+  const type = $('#sched-sform-type')?.value || 'recurring';
+  const args = $('#sched-sform-args')?.value || '';
+
+  const payload = { script, type, args };
+  if (type === 'recurring') {
+    payload.interval = parseInt($('#sched-sform-interval')?.value || '300', 10);
+  } else {
+    payload.run_at = $('#sched-sform-runat')?.value || '';
+    if (!payload.run_at) { toast('Please set a run time', 2600, 'error'); return; }
+  }
+
+  try {
+    await api.post('/api/schedules/create', payload);
+    toast('Schedule created');
+    refreshScheduleList();
+  } catch (e) {
+    toast('Failed to create schedule: ' + e.message, 3000, 'error');
+  }
+}
+
+async function refreshScheduleList() {
+  const container = $('#sched-schedule-list');
+  if (!container) return;
+
+  /* also refresh script selector */
+  const sel = $('#sched-sform-script');
+  if (sel && sel.children.length <= 1) populateScriptSelect(sel);
+
+  try {
+    const data = await api.post('/api/schedules/list', {});
+    const schedules = Array.isArray(data) ? data : (data?.schedules || []);
+    renderScheduleList(container, schedules);
+  } catch (e) {
+    empty(container);
+    container.appendChild(el('div', { class: 'notice error' }, ['Failed to load schedules: ' + e.message]));
+  }
+}
+
+function renderScheduleList(container, schedules) {
+  empty(container);
+  if (!schedules.length) {
+    container.appendChild(el('div', { class: 'empty' }, ['No schedules configured']));
+    return;
+  }
+
+  schedules.forEach(s => {
+    const typeBadge = el('span', { class: `badge status-${s.type === 'recurring' ? 'running' : 'upcoming'}` }, [s.type || 'recurring']);
+    const timing = s.type === 'oneshot'
+      ? `Run at: ${fmt(s.run_at)}`
+      : `Every ${ms2str((s.interval || 0) * 1000)}`;
+
+    const nextRun = s.next_run_at ? `Next: ${fmt(s.next_run_at)}` : '';
+    const statusBadge = s.last_status
+      ? el('span', { class: `badge status-${s.last_status}` }, [s.last_status])
+      : el('span', { class: 'badge' }, ['never run']);
+
+    const toggleBtn = el('label', { class: 'toggle-switch' }, [
+      el('input', {
+        type: 'checkbox',
+        checked: s.enabled !== false,
+        onchange: () => toggleSchedule(s.id, !s.enabled)
+      }),
+      el('span', { class: 'toggle-slider' }),
+    ]);
+
+    const deleteBtn = el('button', { class: 'btn danger', onclick: () => deleteSchedule(s.id) }, ['Delete']);
+    const editBtn = el('button', { class: 'btn', onclick: () => editScheduleInline(s) }, ['Edit']);
+
+    container.appendChild(el('div', { class: 'card', 'data-schedule-id': s.id }, [
+      el('div', { class: 'cardHeader' }, [
+        el('div', { class: 'actionName' }, [
+          el('span', { class: 'chip', style: `--h:${hashHue(s.script || '')}` }, [s.script || '']),
+        ]),
+        typeBadge,
+        toggleBtn,
+      ]),
+      el('div', { class: 'meta' }, [
+        el('span', {}, [timing]),
+        nextRun ? el('span', {}, [nextRun]) : null,
+        el('span', {}, [`Runs: ${s.run_count || 0}`]),
+        statusBadge,
+      ].filter(Boolean)),
+      s.args ? el('div', { class: 'kv' }, [el('span', {}, [`Args: ${s.args}`])]) : null,
+      el('div', { class: 'btns' }, [editBtn, deleteBtn]),
+    ].filter(Boolean)));
+  });
+}
+
+async function toggleSchedule(id, enabled) {
+  try {
+    await api.post('/api/schedules/toggle', { id, enabled });
+    toast(enabled ? 'Schedule enabled' : 'Schedule disabled');
+    refreshScheduleList();
+  } catch (e) {
+    toast('Toggle failed: ' + e.message, 3000, 'error');
+  }
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Delete this schedule?')) return;
+  try {
+    await api.post('/api/schedules/delete', { id });
+    toast('Schedule deleted');
+    refreshScheduleList();
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 3000, 'error');
+  }
+}
+
+function editScheduleInline(s) {
+  const card = $(`[data-schedule-id="${s.id}"]`);
+  if (!card) return;
+
+  empty(card);
+
+  const isRecurring = s.type === 'recurring';
+
+  card.appendChild(el('div', { class: 'schedules-form' }, [
+    el('h3', {}, ['Edit Schedule']),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Script: ']),
+      (() => {
+        const sel = el('select', { id: `sched-edit-script-${s.id}` });
+        populateScriptSelect(sel);
+        sel.value = s.script || '';
+        return sel;
+      })(),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Type: ']),
+      (() => {
+        const sel = el('select', { id: `sched-edit-type-${s.id}` }, [
+          el('option', { value: 'recurring' }, ['Recurring']),
+          el('option', { value: 'oneshot' }, ['One-shot']),
+        ]);
+        sel.value = s.type || 'recurring';
+        return sel;
+      })(),
+    ]),
+    isRecurring
+      ? el('div', { class: 'form-row' }, [
+          el('label', {}, ['Interval (seconds): ']),
+          el('input', { type: 'number', id: `sched-edit-interval-${s.id}`, value: String(s.interval || 300), min: '1', style: 'width:100px' }),
+        ])
+      : el('div', { class: 'form-row' }, [
+          el('label', {}, ['Run at: ']),
+          el('input', { type: 'datetime-local', id: `sched-edit-runat-${s.id}`, value: s.run_at || '' }),
+        ]),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Args: ']),
+      el('input', { type: 'text', id: `sched-edit-args-${s.id}`, value: s.args || '' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('button', { class: 'btn', onclick: async () => {
+        const payload = {
+          id: s.id,
+          script: $(`#sched-edit-script-${s.id}`)?.value,
+          type: $(`#sched-edit-type-${s.id}`)?.value,
+          args: $(`#sched-edit-args-${s.id}`)?.value || '',
+        };
+        if (payload.type === 'recurring') {
+          payload.interval = parseInt($(`#sched-edit-interval-${s.id}`)?.value || '300', 10);
+        } else {
+          payload.run_at = $(`#sched-edit-runat-${s.id}`)?.value || '';
+        }
+        try {
+          await api.post('/api/schedules/update', payload);
+          toast('Schedule updated');
+          refreshScheduleList();
+        } catch (e) {
+          toast('Update failed: ' + e.message, 3000, 'error');
+        }
+      }}, ['Save']),
+      el('button', { class: 'btn warn', onclick: () => refreshScheduleList() }, ['Cancel']),
+    ]),
+  ]));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TRIGGERS TAB
+   ══════════════════════════════════════════════════════════════════ */
+
+function buildTriggersPanel() {
+  return el('div', { class: 'triggers-panel' }, [
+    buildTriggerForm(),
+    el('div', { id: 'sched-trigger-list' }),
+  ]);
+}
+
+function buildTriggerForm() {
+  const conditionContainer = el('div', { id: 'sched-tform-conditions' });
+
+  const form = el('div', { class: 'triggers-form' }, [
+    el('h3', {}, ['Create Trigger']),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Script: ']),
+      el('select', { id: 'sched-tform-script' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Trigger name: ']),
+      el('input', { type: 'text', id: 'sched-tform-name', placeholder: 'Trigger name' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Conditions:']),
+      conditionContainer,
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Cooldown (seconds): ']),
+      el('input', { type: 'number', id: 'sched-tform-cooldown', value: '60', min: '0', style: 'width:100px' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('label', {}, ['Args (optional): ']),
+      el('input', { type: 'text', id: 'sched-tform-args', placeholder: 'CLI arguments' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('button', { class: 'btn', onclick: testTriggerConditions }, ['Test Conditions']),
+      el('span', { id: 'sched-tform-test-result', style: 'margin-left:8px' }),
+    ]),
+    el('div', { class: 'form-row' }, [
+      el('button', { class: 'btn', onclick: createTrigger }, ['Create Trigger']),
+    ]),
+  ]);
+
+  /* initialize condition builder after DOM is ready */
+  setTimeout(() => {
+    const cond = $('#sched-tform-conditions');
+    if (cond) buildConditionEditor(cond);
+  }, 0);
+
+  return form;
+}
+
+async function testTriggerConditions() {
+  const condContainer = $('#sched-tform-conditions');
+  const resultEl = $('#sched-tform-test-result');
+  if (!condContainer || !resultEl) return;
+
+  const conditions = getConditions(condContainer);
+  try {
+    const data = await api.post('/api/triggers/test', { conditions });
+    resultEl.textContent = data?.result ? 'Result: TRUE' : 'Result: FALSE';
+    resultEl.style.color = data?.result ? 'var(--green, #0f0)' : 'var(--red, #f00)';
+  } catch (e) {
+    resultEl.textContent = 'Test failed: ' + e.message;
+    resultEl.style.color = 'var(--red, #f00)';
+  }
+}
+
+async function createTrigger() {
+  const script = $('#sched-tform-script')?.value;
+  const name = $('#sched-tform-name')?.value;
+  if (!script) { toast('Please select a script', 2600, 'error'); return; }
+  if (!name) { toast('Please enter a trigger name', 2600, 'error'); return; }
+
+  const condContainer = $('#sched-tform-conditions');
+  const conditions = condContainer ? getConditions(condContainer) : [];
+  const cooldown = parseInt($('#sched-tform-cooldown')?.value || '60', 10);
+  const args = $('#sched-tform-args')?.value || '';
+
+  try {
+    await api.post('/api/triggers/create', { script, name, conditions, cooldown, args });
+    toast('Trigger created');
+    $('#sched-tform-name').value = '';
+    refreshTriggerList();
+  } catch (e) {
+    toast('Failed to create trigger: ' + e.message, 3000, 'error');
+  }
+}
+
+async function refreshTriggerList() {
+  const container = $('#sched-trigger-list');
+  if (!container) return;
+
+  /* also refresh script selector */
+  const sel = $('#sched-tform-script');
+  if (sel && sel.children.length <= 1) populateScriptSelect(sel);
+
+  try {
+    const data = await api.post('/api/triggers/list', {});
+    const triggers = Array.isArray(data) ? data : (data?.triggers || []);
+    renderTriggerList(container, triggers);
+  } catch (e) {
+    empty(container);
+    container.appendChild(el('div', { class: 'notice error' }, ['Failed to load triggers: ' + e.message]));
+  }
+}
+
+function renderTriggerList(container, triggers) {
+  empty(container);
+  if (!triggers.length) {
+    container.appendChild(el('div', { class: 'empty' }, ['No triggers configured']));
+    return;
+  }
+
+  triggers.forEach(trig => {
+    const condCount = Array.isArray(trig.conditions) ? trig.conditions.length : 0;
+
+    const toggleBtn = el('label', { class: 'toggle-switch' }, [
+      el('input', {
+        type: 'checkbox',
+        checked: trig.enabled !== false,
+        onchange: () => toggleTrigger(trig.id, !trig.enabled)
+      }),
+      el('span', { class: 'toggle-slider' }),
+    ]);
+
+    const deleteBtn = el('button', { class: 'btn danger', onclick: () => deleteTrigger(trig.id) }, ['Delete']);
+
+    container.appendChild(el('div', { class: 'card' }, [
+      el('div', { class: 'cardHeader' }, [
+        el('div', { class: 'actionName' }, [
+          el('strong', {}, [trig.name || '']),
+          el('span', { style: 'margin-left:8px' }, [' \u2192 ']),
+          el('span', { class: 'chip', style: `--h:${hashHue(trig.script || '')}` }, [trig.script || '']),
+        ]),
+        toggleBtn,
+      ]),
+      el('div', { class: 'meta' }, [
+        el('span', {}, [`${condCount} condition${condCount !== 1 ? 's' : ''}`]),
+        el('span', {}, [`Cooldown: ${ms2str(( trig.cooldown || 0) * 1000)}`]),
+        el('span', {}, [`Fired: ${trig.fire_count || 0}`]),
+        trig.last_fired_at ? el('span', {}, [`Last: ${fmt(trig.last_fired_at)}`]) : null,
+      ].filter(Boolean)),
+      trig.args ? el('div', { class: 'kv' }, [el('span', {}, [`Args: ${trig.args}`])]) : null,
+      el('div', { class: 'btns' }, [deleteBtn]),
+    ].filter(Boolean)));
+  });
+}
+
+async function toggleTrigger(id, enabled) {
+  try {
+    await api.post('/api/triggers/toggle', { id, enabled });
+    toast(enabled ? 'Trigger enabled' : 'Trigger disabled');
+    refreshTriggerList();
+  } catch (e) {
+    toast('Toggle failed: ' + e.message, 3000, 'error');
+  }
+}
+
+async function deleteTrigger(id) {
+  if (!confirm('Delete this trigger?')) return;
+  try {
+    await api.post('/api/triggers/delete', { id });
+    toast('Trigger deleted');
+    refreshTriggerList();
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 3000, 'error');
+  }
 }
 
 function pill(id, text, active, onclick) {

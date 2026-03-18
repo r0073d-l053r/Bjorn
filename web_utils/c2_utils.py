@@ -1,11 +1,10 @@
-# webutils/c2_utils.py
+"""c2_utils.py - Command and control agent management endpoints."""
 from c2_manager import c2_manager
 import base64
 import time
 from pathlib import Path
 import json
 from datetime import datetime
-# to import logging from the previous path you can use:
 import logging
 from logger import Logger
 logger = Logger(name="c2_utils.py", level=logging.DEBUG)
@@ -15,12 +14,12 @@ class C2Utils:
     def __init__(self, shared_data):
         self.logger = logger
         self.shared_data = shared_data
-        # --- Anti-yoyo: cache du dernier snapshot "sain" d'agents ---
-        self._last_agents = []        # liste d'agents normalisés
-        self._last_agents_ts = 0.0    # epoch seconds du snapshot
-        self._snapshot_ttl = 10.0     # tolérance (s) si /c2/agents flanche
+        # Anti-flap: cache last healthy agent snapshot
+        self._last_agents = []
+        self._last_agents_ts = 0.0
+        self._snapshot_ttl = 10.0     # grace period (s) if /c2/agents fails
 
-    # ---------------------- Helpers JSON ----------------------
+    # ---------------------- JSON helpers ----------------------
 
     def _to_jsonable(self, obj):
         if obj is None or isinstance(obj, (bool, int, float, str)):
@@ -49,29 +48,27 @@ class C2Utils:
         except BrokenPipeError:
             pass
 
-    # ---------------------- Normalisation Agents ----------------------
+    # ---------------------- Agent normalization ----------------------
 
     def _normalize_agent(self, a):
-        """
-        Uniformise l'agent (id, last_seen en ISO) sans casser les autres champs.
-        """
+        """Normalize agent fields (id, last_seen as ISO) without breaking other fields."""
         a = dict(a) if isinstance(a, dict) else {}
         a["id"] = a.get("id") or a.get("agent_id") or a.get("client_id")
 
         ls = a.get("last_seen")
         if isinstance(ls, (int, float)):
-            # epoch seconds -> ISO
+            # epoch seconds to ISO
             try:
                 a["last_seen"] = datetime.fromtimestamp(ls).isoformat()
             except Exception:
                 a["last_seen"] = None
         elif isinstance(ls, str):
-            # ISO (avec ou sans Z)
+            # ISO (with or without Z)
             try:
                 dt = datetime.fromisoformat(ls.replace("Z", "+00:00"))
                 a["last_seen"] = dt.isoformat()
             except Exception:
-                # format inconnu -> laisser tel quel
+                # unknown format, leave as-is
                 pass
         elif isinstance(ls, datetime):
             a["last_seen"] = ls.isoformat()
@@ -80,7 +77,7 @@ class C2Utils:
 
         return a
 
-    # ---------------------- Handlers REST ----------------------
+    # ---------------------- REST handlers ----------------------
 
     def c2_start(self, handler, data):
         port = int(data.get("port", 5555))
@@ -95,10 +92,8 @@ class C2Utils:
         return self._json(handler, 200, c2_manager.status())
 
     def c2_agents(self, handler):
-        """
-        Renvoie la liste des agents (tableau JSON).
-        Anti-yoyo : si c2_manager.list_agents() renvoie [] mais que
-        nous avons un snapshot récent (< TTL), renvoyer ce snapshot.
+        """Return agent list as JSON array.
+        Anti-flap: if list_agents() returns [] but we have a recent snapshot (< TTL), serve that instead.
         """
         try:
             raw = c2_manager.list_agents() or []
@@ -106,16 +101,16 @@ class C2Utils:
 
             now = time.time()
             if len(agents) == 0 and len(self._last_agents) > 0 and (now - self._last_agents_ts) <= self._snapshot_ttl:
-                # Fallback rapide : on sert le dernier snapshot non-vide
+                # Quick fallback: serve last non-empty snapshot
                 return self._json(handler, 200, self._last_agents)
 
-            # Snapshot frais (même si vide réel)
+            # Fresh snapshot (even if actually empty)
             self._last_agents = agents
             self._last_agents_ts = now
             return self._json(handler, 200, agents)
 
         except Exception as e:
-            # En cas d'erreur, si snapshot récent dispo, on le sert
+            # On error, serve recent snapshot if available
             now = time.time()
             if len(self._last_agents) > 0 and (now - self._last_agents_ts) <= self._snapshot_ttl:
                 self.logger.warning(f"/c2/agents fallback to snapshot after error: {e}")
@@ -167,17 +162,17 @@ class C2Utils:
         except Exception as e:
             return self._json(handler, 500, {"status": "error", "message": str(e)})
 
-    # ---------------------- SSE: stream d'événements ----------------------
+    # ---------------------- SSE: event stream ----------------------
 
     def c2_events_sse(self, handler):
         handler.send_response(200)
         handler.send_header("Content-Type", "text/event-stream")
         handler.send_header("Cache-Control", "no-cache")
         handler.send_header("Connection", "keep-alive")
-        handler.send_header("X-Accel-Buffering", "no")  # utile derrière Nginx/Traefik
+        handler.send_header("X-Accel-Buffering", "no")  # needed behind Nginx/Traefik
         handler.end_headers()
 
-        # Indiquer au client un backoff de reconnexion (évite les tempêtes)
+        # Tell client to back off on reconnect (avoids thundering herd)
         try:
             handler.wfile.write(b"retry: 5000\n\n")  # 5s
             handler.wfile.flush()
@@ -194,7 +189,7 @@ class C2Utils:
                 handler.wfile.write(payload.encode("utf-8"))
                 handler.wfile.flush()
             except Exception:
-                # Connexion rompue : on se désabonne proprement
+                # Connection broken: unsubscribe cleanly
                 try:
                     c2_manager.bus.unsubscribe(push)
                 except Exception:
@@ -202,11 +197,11 @@ class C2Utils:
 
         c2_manager.bus.subscribe(push)
         try:
-            # Keep-alive périodique pour maintenir le flux ouvert
+            # Periodic keep-alive to maintain the stream
             while True:
                 time.sleep(15)
                 try:
-                    handler.wfile.write(b": keep-alive\n\n")  # commentaire SSE
+                    handler.wfile.write(b": keep-alive\n\n")  # SSE comment
                     handler.wfile.flush()
                 except Exception:
                     break
@@ -216,7 +211,7 @@ class C2Utils:
             except Exception:
                 pass
 
-    # ---------------------- Gestion des fichiers client ----------------------
+    # ---------------------- Client file management ----------------------
 
     def c2_download_client(self, handler, filename):
         """Serve generated client file for download"""

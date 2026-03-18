@@ -1,4 +1,5 @@
-# utils.py (pattern lazy __getattr__)
+"""utils.py - Lazy-loading registry for web utility classes."""
+
 import importlib
 import threading
 
@@ -26,6 +27,9 @@ class WebUtils:
         "bifrost": ("web_utils.bifrost_utils", "BifrostUtils"),
         "loki": ("web_utils.loki_utils", "LokiUtils"),
         "llm_utils": ("web_utils.llm_utils", "LLMUtils"),
+        "schedule_utils": ("web_utils.schedule_utils", "ScheduleUtils"),
+        "package_utils": ("web_utils.package_utils", "PackageUtils"),
+        "plugin_utils": ("web_utils.plugin_utils", "PluginUtils"),
     }
 
 

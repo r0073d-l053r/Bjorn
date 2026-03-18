@@ -1,8 +1,4 @@
-# web_utils/studio_utils.py
-"""
-Studio visual editor utilities.
-Handles action/edge/host management for the visual workflow editor.
-"""
+"""studio_utils.py - Action/edge/host management for the visual workflow editor."""
 from __future__ import annotations
 import json
 from typing import Any, Dict, Optional

@@ -1,3 +1,5 @@
+"""idle.py - No-op placeholder action for when Bjorn has nothing to do."""
+
 from shared import SharedData
 
 b_class = "IDLE"   

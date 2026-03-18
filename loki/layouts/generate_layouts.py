@@ -1,11 +1,13 @@
+"""generate_layouts.py - Generates localized keyboard layout JSON files from a US base layout."""
+
 import json
 import os
 
-# Chargement de la base US existante
+# Load the US base layout
 with open("us.json", "r") as f:
     US_BASE = json.load(f)
 
-# Définition des différences par rapport au clavier US
+# Key differences from the US layout
 # 0 = Normal, 2 = Shift, 64 = AltGr (Right Alt)
 LAYOUT_DIFFS = {
     "fr": {
@@ -59,20 +61,18 @@ LAYOUT_DIFFS = {
         "б": [0, 54], "ю": [0, 55], "ё": [0, 53], ".": [0, 56], ",": [2, 56],
         "№": [2, 32], ";": [2, 33], ":": [2, 35], "?": [2, 36]
     },
-    "zh": {} # ZH utilise exactement le layout US
+    "zh": {}  # ZH uses the exact US layout
 }
 
 def generate_layouts():
     for lang, diff in LAYOUT_DIFFS.items():
-        # Copie de la base US
         new_layout = dict(US_BASE)
-        # Application des modifications
         new_layout.update(diff)
         
         filename = f"{lang}.json"
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(new_layout, f, indent=4, ensure_ascii=False)
-        print(f"Généré : {filename} ({len(new_layout)} touches)")
+        print(f"Generated: {filename} ({len(new_layout)} keys)")
 
 if __name__ == "__main__":
     generate_layouts()

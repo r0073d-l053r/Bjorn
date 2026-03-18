@@ -1,11 +1,10 @@
-"""
-Sentinel DB operations — events, rules, known devices baseline.
-"""
+"""sentinel.py - Events, rules, and known devices baseline."""
 import json
 import logging
 from typing import Any, Dict, List, Optional
 
 from logger import Logger
+from db_utils.base import _validate_identifier
 
 logger = Logger(name="db_utils.sentinel", level=logging.DEBUG)
 
@@ -17,7 +16,7 @@ class SentinelOps:
     def create_tables(self):
         """Create all Sentinel tables."""
 
-        # Known device baselines — MAC → expected behavior
+        # Known device baselines - MAC → expected behavior
         self.base.execute("""
             CREATE TABLE IF NOT EXISTS sentinel_devices (
                 mac_address   TEXT PRIMARY KEY,
@@ -261,9 +260,11 @@ class SentinelOps:
         if existing:
             sets = []
             params = []
+            _ALLOWED_DEVICE_COLS = {"alias", "trusted", "watch", "expected_ips",
+                                     "expected_ports", "notes"}
             for k, v in kwargs.items():
-                if k in ("alias", "trusted", "watch", "expected_ips",
-                         "expected_ports", "notes"):
+                if k in _ALLOWED_DEVICE_COLS:
+                    _validate_identifier(k, "column name")
                     sets.append(f"{k} = ?")
                     params.append(v)
             sets.append("last_seen = CURRENT_TIMESTAMP")

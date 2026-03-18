@@ -1,7 +1,4 @@
-# web_utils/llm_utils.py
-# HTTP endpoints for LLM chat, LLM bridge config, and MCP server config.
-# Follows the same pattern as all other web_utils classes in this project.
-
+"""llm_utils.py - HTTP endpoints for LLM chat, bridge config, and MCP server config."""
 import json
 import uuid
 from typing import Any, Dict

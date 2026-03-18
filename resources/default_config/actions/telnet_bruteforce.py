@@ -1,10 +1,4 @@
-"""
-telnet_bruteforce.py — Telnet bruteforce (DB-backed, no CSV/JSON, no rich)
-- Cibles: (ip, port) par l’orchestrateur
-- IP -> (MAC, hostname) via DB.hosts
-- Succès -> DB.creds (service='telnet')
-- Conserve la logique d’origine (telnetlib, queue/threads)
-"""
+"""telnet_bruteforce.py - Telnet bruteforce with DB-backed credential storage."""
 
 import os
 import telnetlib
@@ -27,11 +21,11 @@ b_parent = None
 b_service = '["telnet"]'
 b_trigger = 'on_any:["on_service:telnet","on_new_port:23"]'
 b_priority = 70  
-b_cooldown = 1800            # 30 minutes entre deux runs
-b_rate_limit = '3/86400'     # 3 fois par jour max
+b_cooldown = 1800            # 30 min between runs
+b_rate_limit = '3/86400'     # max 3 per day
 
 class TelnetBruteforce:
-    """Wrapper orchestrateur -> TelnetConnector."""
+    """Orchestrator wrapper -> TelnetConnector."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
@@ -39,11 +33,11 @@ class TelnetBruteforce:
         logger.info("TelnetConnector initialized.")
 
     def bruteforce_telnet(self, ip, port):
-        """Lance le bruteforce Telnet pour (ip, port)."""
+        """Run Telnet bruteforce for (ip, port)."""
         return self.telnet_bruteforce.run_bruteforce(ip, port)
 
     def execute(self, ip, port, row, status_key):
-        """Point d’entrée orchestrateur (retour 'success' / 'failed')."""
+        """Orchestrator entry point (returns ‘success’ / ‘failed’)."""
         logger.info(f"Executing TelnetBruteforce on {ip}:{port}")
         self.shared_data.bjorn_orch_status = "TelnetBruteforce"
         success, results = self.bruteforce_telnet(ip, port)
@@ -51,12 +45,11 @@ class TelnetBruteforce:
 
 
 class TelnetConnector:
-    """Gère les tentatives Telnet, persistance DB, mapping IP→(MAC, Hostname)."""
+    """Handles Telnet attempts, DB persistence, IP->(MAC, Hostname) mapping."""
 
     def __init__(self, shared_data):
         self.shared_data = shared_data
 
-        # Wordlists inchangées
         self.users = self._read_lines(shared_data.users_file)
         self.passwords = self._read_lines(shared_data.passwords_file)
 
@@ -68,7 +61,7 @@ class TelnetConnector:
         self.results: List[List[str]] = []  # [mac, ip, hostname, user, password, port]
         self.queue = Queue()
 
-    # ---------- util fichiers ----------
+    # ---------- file utils ----------
     @staticmethod
     def _read_lines(path: str) -> List[str]:
         try:

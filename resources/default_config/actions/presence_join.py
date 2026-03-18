@@ -1,11 +1,5 @@
-# actions/presence_join.py
 # -*- coding: utf-8 -*-
-"""
-PresenceJoin — Sends a Discord webhook when the targeted host JOINS the network.
-- Triggered by the scheduler ONLY on transition OFF->ON (b_trigger="on_join").
-- Targeting via b_requires (e.g. {"any":[{"mac_is":"AA:BB:..."}]}).
-- The action does not query anything: it only notifies when called.
-"""
+"""presence_join.py - Discord webhook notification when a target host joins the network."""
 
 import requests
 from typing import Optional

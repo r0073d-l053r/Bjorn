@@ -2453,7 +2453,11 @@
         "I'm like a web spelunker, diving into hidden directories.",
         "Let's see what hidden directories I can find today!",
         "Hey, you know what's fun? Finding hidden directories!",
-        "You never know what you'll find in a hidden directory!"
+        "You never know what you'll find in a hidden directory!",
+        "Gobuster scanning {url}...",
+        "Found {found} paths on {ip}:{port} so far!",
+        "Last discovery: {last} on {ip}",
+        "Directory brute-force on {url}... {found} hits"
     ],
     "NetworkScanner": [
         "Scanning the network for open ports...",
@@ -2552,7 +2556,12 @@
         "What’s a hacker’s favorite snack? Cookies, but not the edible kind!",
         "Think of me as your digital bodyguard, keeping you safe.",
         "Why did the hacker get a job? To pay off his ransomware!",
-        "Just like a digital Sherlock Holmes, always on the case."
+        "Just like a digital Sherlock Holmes, always on the case.",
+        "Scanning network {network}...",
+        "Found {hosts_found} hosts on {network}!",
+        "Discovered {ip} ({hostname}) — vendor: {vendor}",
+        "Network scan: {alive_hosts} alive, {total_ports} open ports",
+        "Resolved MAC {mac} for {ip}..."
     ],
     "NmapVulnScanner": [
         "Scanning for vulnerabilities with Nmap...",
@@ -2654,13 +2663,24 @@
         "Almost there... unveiling the hidden secrets.",
         "What do you call an alien computer? A UFO: Unidentified Functioning Object!",
         "Scanning is like detective work, every clue counts.",
-        "Why don’t hackers need glasses? Because they can C#!"
+        "Why don’t hackers need glasses? Because they can C#!",
+        "Scanning {ports} port(s) on {ip} for CVEs...",
+        "Found {vulns_found} vulnerabilities on {ip}!",
+        "Vuln scan progress: {progress} on {ip}...",
+        "Batch [{current_batch}] scanning on {ip}..."
     ],
     "SSHBruteforce": [
         "Attempting brute-force login over SSH...",
         "Trying default credentials on {ip}...",
         "Rapid SSH login attempts detected.",
-        "Testing user={user} against {ip}:{port}."
+        "Testing user={user} against {ip}:{port}.",
+        "Hammering SSH on {ip}:{port}... user={user}",
+        "Brute-forcing {ip}:{port} — trying '{user}'...",
+        "SSH login attempt: {user}@{ip}:{port}",
+        "Cracking SSH credentials on {ip}...",
+        "Will {user} work on {ip}:{port}? Let's find out!",
+        "SSH door-knocking: {user}@{ip}",
+        "Password spray in progress on {ip}:{port}..."
     ],
     "FTPBruteforce": [
         "Not smart, SFTP was complicated?! I'm going to enjoy this!",
@@ -2705,7 +2725,11 @@
         "FTP brute force ongoing...",
         "FTP cracking attempt...",
         "Compromising FTP server...",
-        "Let's see if FTP is secure..."
+        "Let's see if FTP is secure...",
+        "FTP cracking {user}@{ip}:{port}...",
+        "Trying {user} on FTP {ip}:{port}...",
+        "Knocking on FTP door at {ip}:{port}...",
+        "FTP login spray: {user}@{ip}"
     ],
     "SMBBruteforce": [
         "Have you checked the security of your SMB share recently?",
@@ -2752,7 +2776,11 @@
         "SMB brute force ongoing...",
         "SMB cracking attempt...",
         "Compromising SMB shares...",
-        "Let's see if SMB is secure..."
+        "Let's see if SMB is secure...",
+        "SMB cracking {user}@{ip}:{port}...",
+        "Trying {user} on share {share} at {ip}...",
+        "Enumerating SMB shares on {ip}:{port}...",
+        "SMB login spray: {user}@{ip}"
     ],
     "TelnetBruteforce": [
         "Telnet is not secure. Switch to SSH for better security!",
@@ -2778,7 +2806,10 @@
         "Telnet brute force ongoing...",
         "Telnet cracking attempt...",
         "Compromising Telnet server...",
-        "Let's see if Telnet is secure..."
+        "Let's see if Telnet is secure...",
+        "Telnet cracking {user}@{ip}:{port}...",
+        "Trying {user} on Telnet at {ip}...",
+        "Telnet login spray: {user}@{ip}:{port}"
     ],
     "SQLBruteforce": [
         "SQL databases are often targeted by attackers. Secure yours!",
@@ -2803,7 +2834,11 @@
         "SQL brute force ongoing...",
         "SQL cracking attempt...",
         "Compromising SQL server...",
-        "Let's see if SQL is secure..."
+        "Let's see if SQL is secure...",
+        "SQL cracking {user}@{ip}:{port}...",
+        "Trying {user} on MySQL at {ip}...",
+        "Found {databases} database(s) on {ip}!",
+        "SQL login spray: {user}@{ip}:{port}"
     ],
     "StealFilesSSH": [
         "Yum, yum, files to steal!",
@@ -2871,7 +2906,10 @@
         "Can't wait to see what's inside these files!",
         "I'm like a kid in a candy store, but with SSH files!",
         "What do you call a fish with no eyes? Fsh!",
-        "Where do fish keep their money? In the river bank!"
+        "Where do fish keep their money? In the river bank!",
+        "Looting {path} from {ip}:{port}...",
+        "SFTP grab: downloading from {ip}...",
+        "Exfiltrating files via SSH on {ip}:{port}..."
     ],
     "StealFilesSMB": [
         "Yum, yum, files to steal!",
@@ -2887,7 +2925,10 @@
         "Stealing files in progress...",
         "Compromising SMB files...",
         "Accessing sensitive information...",
-        "Retrieving data from SMB..."
+        "Retrieving data from SMB...",
+        "Looting share {share} on {ip}:{port}...",
+        "Downloaded {files} file(s) from {ip}...",
+        "SMB grab: exfiltrating from {share}@{ip}..."
     ],
     "StealFilesTelnet": [
         "Yum, yum, files to steal!",
@@ -2897,13 +2938,19 @@
         "Telnet files can be easily accessed by unauthorized users. Secure them!",
         "Telnet connections are vulnerable to attacks. Secure them!",
         "Time to steal some files!",
-        "Accessing Telnet files..."
+        "Accessing Telnet files...",
+        "Telnet file grab on {ip}:{port}...",
+        "Downloaded {files} file(s) via Telnet from {ip}...",
+        "Exfiltrating data over Telnet on {ip}..."
     ],
     "StealFilesFTP": [
         "Yum, yum, files to steal!",
         "FTP files can contain sensitive information. Protect them!",
         "FTP files are often targeted by attackers. Be vigilant!",
-        "Unencrypted FTP connections can be easily intercepted."
+        "Unencrypted FTP connections can be easily intercepted.",
+        "FTP file grab on {ip}:{port}...",
+        "Downloaded {files} file(s) from FTP {ip}...",
+        "Looting the FTP server at {ip}:{port}..."
     ],
     "StealDataSQL": [
         "Yum, yum, files to steal!",
@@ -2919,7 +2966,180 @@
         "Stealing files in progress...",
         "Compromising SQL files...",
         "Accessing sensitive information...",
-        "Retrieving data from SQL..."
+        "Retrieving data from SQL...",
+        "Exfiltrating {databases} database(s) from {ip}...",
+        "Dumping {tables} table(s) from {ip}:{port}...",
+        "SQL data grab: extracting CSV from {ip}...",
+        "Looting MySQL on {ip}:{port}..."
+    ],
+    "DNSPillager": [
+        "DNS recon on {ip}... hunting for records.",
+        "Zone transfer attempt on {domain}...",
+        "Enumerating subdomains for {domain}...",
+        "DNS pillaging: {records} records found so far!",
+        "Probing DNS at {ip}:{port}...",
+        "Reverse lookup: who lives at {ip}?",
+        "Subdomain brute-force in progress on {domain}...",
+        "DNS zone transfer: jackpot or bust?",
+        "Checking MX, NS, TXT records for {domain}...",
+        "DNS enumeration reveals hidden infrastructure..."
+    ],
+    "ValkyrieScout": [
+        "Scouting web paths on {ip}:{port}...",
+        "Probing {path} — status {status}...",
+        "Looking for auth surfaces on {ip}...",
+        "Valkyrie scouting: login found at {login}!",
+        "Web path enumeration on {ip}:{port}...",
+        "Checking for debug leaks and admin panels...",
+        "Scanning for exposed login forms...",
+        "Auth surface discovery in progress...",
+        "Probing common web paths for vulnerabilities...",
+        "Valkyrie rides! Scouting {ip} for weak points..."
+    ],
+    "WebLoginProfiler": [
+        "Profiling login forms on {ip}:{port}...",
+        "Checking {path} for auth controls...",
+        "Login detected at {login} on {ip}!",
+        "Web login profiling: scanning for forms...",
+        "Analyzing authentication surfaces on {ip}...",
+        "CSRF tokens? Rate limiting? Let's check {ip}...",
+        "Profiling web authentication on {ip}:{port}...",
+        "Detecting login mechanisms on the target...",
+        "Looking for weak auth implementations..."
+    ],
+    "WebSurfaceMapper": [
+        "Mapping attack surface on {ip}:{port}...",
+        "Risk score: {top_score} for {top_path}!",
+        "Analyzed {count} endpoints, avg score: {avg_score}",
+        "Surface mapping: {ip} risk assessment...",
+        "Top risk path: {top_path} (score: {top_score})",
+        "Aggregating login profiler findings for {ip}...",
+        "Attack surface analysis in progress...",
+        "Mapping web risk landscape on {ip}..."
+    ],
+    "ThorHammer": [
+        "Banner grabbing on {ip}:{port}...",
+        "Service: {svc} detected on port {port}!",
+        "TCP fingerprinting {ip} — {open} port(s) open...",
+        "Thor's hammer strikes {ip}:{port}!",
+        "Service identification in progress...",
+        "Grabbing banners from {ip}...",
+        "Fingerprinting services on the target...",
+        "What service lurks on port {port}?"
+    ],
+    "OdinEye": [
+        "Watching traffic on {iface}...",
+        "Captured {packets} packets so far...",
+        "Credentials found: {creds}!",
+        "Odin's eye sees all traffic on {iface}...",
+        "Passive sniffing: filter = {filter}",
+        "Hunting for credentials in the wire...",
+        "Packet analysis in progress...",
+        "Network sniffer active — watching for secrets...",
+        "Analyzing traffic patterns on {iface}..."
+    ],
+    "ARPSpoof": [
+        "ARP poisoning {ip} <-> {gateway}...",
+        "MITM active: spoofing {ip}...",
+        "ARP spoof: injecting poison packets...",
+        "Gateway {gateway} <-> Target {ip}: poisoned!",
+        "ARP cache poisoning in progress...",
+        "Bidirectional ARP spoof active on {ip}...",
+        "Man-in-the-middle positioning on {ip}...",
+        "Restoring ARP tables after spoof..."
+    ],
+    "BerserkerForce": [
+        "Stress testing {ip} ({mode} mode)...",
+        "Probing {ports} port(s) at {rate} req/s...",
+        "Baseline measurement on {ip}...",
+        "Berserker rage! Stress test on {ip}...",
+        "Phase: {phase} — testing {ip} resilience...",
+        "Service degradation analysis in progress...",
+        "Rate-limited stress test: {rate} probes/s...",
+        "Measuring response times on {ip}..."
+    ],
+    "HeimdallGuard": [
+        "Stealth mode active: {mode} on {iface}...",
+        "Heimdall guards the bridge on {iface}...",
+        "IDS evasion: {mode} mode engaged...",
+        "Stealth operations on {ip}...",
+        "Packet fragmentation active on {iface}...",
+        "Heimdall's watch: guarding traffic...",
+        "TTL manipulation in progress...",
+        "Timing randomization active..."
+    ],
+    "LokiDeceiver": [
+        "Rogue AP '{ssid}' active — {clients} client(s)!",
+        "Loki's trap: broadcasting {ssid} on ch{channel}...",
+        "WiFi deception: {ssid} on {iface}...",
+        "Uptime: {uptime}s — {clients} victim(s) connected!",
+        "EAPOL capture active on {ssid}...",
+        "Rogue access point running: {ssid}...",
+        "Loki deceives: fake AP luring clients...",
+        "WiFi honeypot active on channel {channel}..."
+    ],
+    "YggdrasilMapper": [
+        "Tracing route to {ip}...",
+        "Topology: {nodes} nodes, {edges} edges...",
+        "Phase: {phase} — mapping {ip}...",
+        "Discovered {hops} hops to {ip}!",
+        "Network topology mapping in progress...",
+        "Building the world tree for {ip}...",
+        "Yggdrasil grows: {nodes} nodes mapped...",
+        "Traceroute complete — enriching topology..."
+    ],
+    "RuneCracker": [
+        "Cracking {hashes} hashes... {cracked} found!",
+        "Hash cracking engine active...",
+        "Rune cracker: testing candidates...",
+        "Cracked {cracked} of {hashes} hashes so far!",
+        "Dictionary attack on hash database...",
+        "Breaking hashes with mutations...",
+        "Password cracking in progress...",
+        "Brute-forcing hash values..."
+    ],
+    "FreyaHarvest": [
+        "Harvesting intelligence: {items} item(s)...",
+        "Scanning {input} for new findings...",
+        "Freya gathers: {items} intel items collected!",
+        "Data aggregation in progress...",
+        "Consolidating findings from all modules...",
+        "Intelligence report generation...",
+        "Monitoring output directories for new data...",
+        "Freya's harvest: collecting the spoils..."
+    ],
+    "WPAsecPotfileManager": [
+        "WPA potfile {action}: {status}...",
+        "Downloading latest potfile from WPAsec...",
+        "WiFi credential management in progress...",
+        "Potfile operation: {action}...",
+        "WPAsec sync: {status}...",
+        "Managing WiFi credentials...",
+        "Importing WPA credentials...",
+        "WPAsec potfile download complete!"
+    ],
+    "PresenceJoin": [
+        "Host joined: {host} ({mac})!",
+        "Welcome back, {host} at {ip}!",
+        "New device detected: {mac}...",
+        "Presence alert: {host} is online!",
+        "Discord notification: {host} joined the network!",
+        "{mac} appeared on the network!"
+    ],
+    "PresenceLeave": [
+        "Host left: {host} ({mac})!",
+        "Goodbye, {host} at {ip}!",
+        "Device disconnected: {mac}...",
+        "Presence alert: {host} went offline!",
+        "Discord notification: {host} left the network!",
+        "{mac} disappeared from the network!"
+    ],
+    "DemoAction": [
+        "Demo action running... status: {status}",
+        "Template action executing...",
+        "Demo mode: all systems nominal!",
+        "Testing action framework...",
+        "Demo action: {status}..."
     ],
     "TestStandalone": [
         "Logging in as root...",

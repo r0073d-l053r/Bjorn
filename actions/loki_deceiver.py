@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 import re
+import tempfile
 import datetime
 
 from typing import Any, Dict, List, Optional
@@ -126,7 +127,7 @@ class LokiDeceiver:
                 'rsn_pairwise=CCMP'
             ])
         
-        h_path = '/tmp/bjorn_hostapd.conf'
+        h_path = os.path.join(tempfile.gettempdir(), 'bjorn_hostapd.conf')
         with open(h_path, 'w') as f:
             f.write('\n'.join(h_conf))
 
@@ -140,7 +141,7 @@ class LokiDeceiver:
             'log-queries',
             'log-dhcp'
         ]
-        d_path = '/tmp/bjorn_dnsmasq.conf'
+        d_path = os.path.join(tempfile.gettempdir(), 'bjorn_dnsmasq.conf')
         with open(d_path, 'w') as f:
             f.write('\n'.join(d_conf))
         
@@ -170,10 +171,16 @@ class LokiDeceiver:
         channel = int(getattr(self.shared_data, "loki_deceiver_channel", 6))
         password = getattr(self.shared_data, "loki_deceiver_password", "")
         timeout = int(getattr(self.shared_data, "loki_deceiver_timeout", 600))
-        output_dir = getattr(self.shared_data, "loki_deceiver_output", "/home/bjorn/Bjorn/data/output/wifi")
+        _fallback_dir = os.path.join(getattr(self.shared_data, "data_dir", "/home/bjorn/Bjorn/data"), "output", "wifi")
+        output_dir = getattr(self.shared_data, "loki_deceiver_output", _fallback_dir)
+
+        # Reset per-run state
+        self.active_clients.clear()
 
         logger.info(f"LokiDeceiver: Starting Rogue AP '{ssid}' on {iface}")
         self.shared_data.log_milestone(b_class, "Startup", f"Creating AP: {ssid}")
+        # EPD live status
+        self.shared_data.comment_params = {"ssid": ssid, "iface": iface, "channel": str(channel)}
 
         try:
             self.stop_event.clear()
@@ -181,7 +188,8 @@ class LokiDeceiver:
             h_path, d_path = self._create_configs(iface, ssid, channel, password)
             
             # Set IP for interface
-            subprocess.run(['sudo', 'ifconfig', iface, '192.168.1.1', 'netmask', '255.255.255.0'], capture_output=True)
+            subprocess.run(['sudo', 'ip', 'addr', 'add', '192.168.1.1/24', 'dev', iface], capture_output=True)
+            subprocess.run(['sudo', 'ip', 'link', 'set', iface, 'up'], capture_output=True)
 
             # Start processes
             # Use DEVNULL to avoid blocking on unread PIPE buffers.
@@ -208,8 +216,9 @@ class LokiDeceiver:
             start_time = time.time()
             while time.time() - start_time < timeout:
                 if self.shared_data.orchestrator_should_exit:
-                    break
-                
+                    logger.info("LokiDeceiver: Interrupted by orchestrator.")
+                    return "interrupted"
+
                 # Check if procs still alive
                 if self.hostapd_proc.poll() is not None:
                     logger.error("LokiDeceiver: hostapd crashed.")
@@ -219,7 +228,9 @@ class LokiDeceiver:
                 elapsed = int(time.time() - start_time)
                 prog = int((elapsed / timeout) * 100)
                 self.shared_data.bjorn_progress = f"{prog}%"
-                
+                # EPD live status update
+                self.shared_data.comment_params = {"ssid": ssid, "clients": str(len(self.active_clients)), "uptime": str(elapsed)}
+
                 if elapsed % 60 == 0:
                     self.shared_data.log_milestone(b_class, "Status", f"Uptime: {elapsed}s | Clients: {len(self.active_clients)}")
                 
@@ -244,10 +255,12 @@ class LokiDeceiver:
             for p in [self.hostapd_proc, self.dnsmasq_proc]:
                 if p:
                     try: p.terminate(); p.wait(timeout=5)
-                    except: pass
+                    except Exception: pass
             
             # Restore NetworkManager if needed (custom logic based on usage)
             # subprocess.run(['sudo', 'systemctl', 'start', 'NetworkManager'], capture_output=True)
+            self.shared_data.bjorn_progress = ""
+            self.shared_data.comment_params = {}
 
         return "success"
 

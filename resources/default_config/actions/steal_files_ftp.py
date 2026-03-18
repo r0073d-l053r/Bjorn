@@ -1,12 +1,4 @@
-"""
-steal_files_ftp.py — FTP file looter (DB-backed)
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (FTPBruteforce).
-- FTP credentials are read from DB.creds (service='ftp'); anonymous is also tried.
-- IP -> (MAC, hostname) via DB.hosts.
-- Loot saved under: {data_stolen_dir}/ftp/{mac}_{ip}/(anonymous|<username>)/...
-"""
+"""steal_files_ftp.py - FTP file exfiltration using DB creds from FTPBruteforce."""
 
 import os
 import logging

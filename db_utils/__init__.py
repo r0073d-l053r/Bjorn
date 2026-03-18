@@ -1,5 +1,4 @@
-# db_utils/__init__.py
-# Database utilities package
+"""__init__.py - Database utilities package."""
 
 from .base import DatabaseBase
 from .config import ConfigOps
@@ -17,6 +16,8 @@ from .comments import CommentOps
 from .agents import AgentOps
 from .studio import StudioOps
 from .webenum import WebEnumOps
+from .schedules import ScheduleOps
+from .packages import PackageOps
 
 __all__ = [
     'DatabaseBase',
@@ -35,4 +36,6 @@ __all__ = [
     'AgentOps',
     'StudioOps',
     'WebEnumOps',
+    'ScheduleOps',
+    'PackageOps',
 ]

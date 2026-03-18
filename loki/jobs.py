@@ -1,5 +1,5 @@
-"""
-Loki job manager — tracks HIDScript execution jobs.
+"""jobs.py - Loki job manager, tracks HIDScript execution jobs.
+
 Each job runs in its own daemon thread.
 """
 import uuid

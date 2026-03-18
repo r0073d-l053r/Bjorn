@@ -1,22 +1,4 @@
-"""
-feature_logger.py - Dynamic Feature Logging Engine for Bjorn
-═══════════════════════════════════════════════════════════════════════════
-
-Purpose:
-    Automatically capture ALL relevant features from action executions
-    for deep learning model training. No manual feature declaration needed.
-
-Architecture:
-    - Automatic feature extraction from all data sources
-    - Time-series aggregation
-    - Network topology features
-    - Action success patterns
-    - Lightweight storage optimized for Pi Zero
-    - Export format ready for deep learning
-
-Author: Bjorn Team (Enhanced AI Version)
-Version: 2.0.0
-"""
+"""feature_logger.py - Auto-capture action execution features for deep learning training."""
 
 import json
 import time
@@ -220,7 +202,8 @@ class FeatureLogger:
                 'success': success,
                 'timestamp': time.time()
             })
-            self._prune_host_history()
+            if len(self.host_history) > 1000:
+                self._prune_host_history()
             
             logger.debug(
                 f"Logged features for {action_name} on {mac_address} "

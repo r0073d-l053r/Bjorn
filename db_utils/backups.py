@@ -1,5 +1,4 @@
-# db_utils/backups.py
-# Backup registry and management operations
+"""backups.py - Backup registry and management operations."""
 
 from typing import Any, Dict, List
 import logging

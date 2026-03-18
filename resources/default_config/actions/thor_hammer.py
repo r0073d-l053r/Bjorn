@@ -1,11 +1,4 @@
-# Service fingerprinting and version detection tool for vulnerability identification.
-# Saves settings in `/home/bjorn/.settings_bjorn/thor_hammer_settings.json`.
-# Automatically loads saved settings if arguments are not provided.
-# -t, --target       Target IP or hostname to scan (overrides saved value).
-# -p, --ports        Ports to scan (default: common ports, comma-separated).
-# -o, --output       Output directory (default: /home/bjorn/Bjorn/data/output/services).
-# -d, --delay        Delay between probes in seconds (default: 1).
-# -v, --verbose      Enable verbose output for detailed service information.
+"""thor_hammer.py - Service fingerprinting and version detection for vuln identification."""
 
 import os
 import json

@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-web_surface_mapper.py — Post-profiler web surface scoring (no exploitation).
-
-Trigger idea: run after WebLoginProfiler to compute a summary and a "risk score"
-from recent webenum rows written by tool='login_profiler'.
-
-Writes one summary row into `webenum` (tool='surface_mapper') so it appears in UI.
-Updates EPD UI fields: bjorn_orch_status, bjorn_status_text2, comment_params, bjorn_progress.
-"""
+"""web_surface_mapper.py - Aggregate login_profiler findings into a per-target risk score."""
 
 import json
 import logging
@@ -33,6 +25,17 @@ b_action = "normal"
 b_cooldown = 600
 b_rate_limit = "48/86400"
 b_enabled = 1
+b_timeout = 300
+b_max_retries = 2
+b_stealth_level = 6
+b_risk_level = "low"
+b_tags = ["web", "login", "risk", "mapper"]
+b_category = "recon"
+b_name = "Web Surface Mapper"
+b_description = "Aggregates login profiler findings into a per-target risk score."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "WebSurfaceMapper.png"
 
 
 def _scheme_for_port(port: int) -> str:
@@ -226,6 +229,9 @@ class WebSurfaceMapper:
 
             progress.set_complete()
             return "success"
+        except Exception as e:
+            logger.error(f"WebSurfaceMapper failed for {ip}:{port_i}: {e}")
+            return "failed"
         finally:
             self.shared_data.bjorn_progress = ""
             self.shared_data.comment_params = {}

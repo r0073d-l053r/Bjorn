@@ -1,3 +1,5 @@
+"""bruteforce_common.py - Shared helpers for all bruteforce actions (progress tracking, password generation)."""
+
 import itertools
 import threading
 import time

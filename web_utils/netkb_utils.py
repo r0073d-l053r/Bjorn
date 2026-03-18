@@ -1,8 +1,4 @@
-# web_utils/netkb_utils.py
-"""
-Network Knowledge Base utilities.
-Handles network discovery data, host information, and action queue management.
-"""
+"""netkb_utils.py - Network discovery data, host info, and action queue management."""
 from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
@@ -23,13 +19,20 @@ class NetKBUtils:
         try:
             hosts = self.shared_data.db.get_all_hosts()
             actions_meta = self.shared_data.db.list_actions()
-            action_names = [a["b_class"] for a in actions_meta]
+            builtin_actions = []
+            custom_actions = []
+            for a in actions_meta:
+                if a.get("b_action") == "custom" or (a.get("b_module") or "").startswith("custom/"):
+                    custom_actions.append(a["b_class"])
+                else:
+                    builtin_actions.append(a["b_class"])
 
             alive = [h for h in hosts if int(h.get("alive") or 0) == 1]
             response_data = {
                 "ips": [h.get("ips", "") for h in alive],
                 "ports": {h.get("ips", ""): (h.get("ports", "") or "").split(';') for h in alive},
-                "actions": action_names
+                "actions": builtin_actions,
+                "custom_actions": custom_actions,
             }
             handler.send_response(200)
             handler.send_header("Content-type", "application/json")

@@ -1,11 +1,5 @@
-# actions/presence_left.py
 # -*- coding: utf-8 -*-
-"""
-PresenceLeave — Sends a Discord webhook when the targeted host LEAVES the network.
-- Triggered by the scheduler ONLY on transition ON->OFF (b_trigger="on_leave").
-- Targeting via b_requires (e.g. {"any":[{"mac_is":"AA:BB:..."}]}).
-- The action does not query anything: it only notifies when called.
-"""
+"""presence_left.py - Discord webhook notification when a target host leaves the network."""
 
 import requests
 from typing import Optional

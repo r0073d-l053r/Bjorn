@@ -1,16 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-thor_hammer.py — Service fingerprinting (Pi Zero friendly, orchestrator compatible).
-
-What it does:
-- For a given target (ip, port), tries a fast TCP connect + banner grab.
-- Optionally stores a service fingerprint into DB.port_services via db.upsert_port_service.
-- Updates EPD fields: bjorn_orch_status, bjorn_status_text2, comment_params, bjorn_progress.
-
-Notes:
-- Avoids spawning nmap per-port (too heavy). If you want nmap, add a dedicated action.
-"""
+"""thor_hammer.py - Fast TCP banner grab and service fingerprinting per port."""
 
 import logging
 import socket
@@ -35,6 +25,17 @@ b_action = "normal"
 b_cooldown = 1200
 b_rate_limit = "24/86400"
 b_enabled = 0  # keep disabled by default; enable via Actions UI/DB when ready.
+b_timeout = 300
+b_max_retries = 2
+b_stealth_level = 5
+b_risk_level = "low"
+b_tags = ["banner", "fingerprint", "service", "tcp"]
+b_category = "recon"
+b_name = "Thor Hammer"
+b_description = "Fast TCP banner grab and service fingerprinting per port."
+b_author = "Bjorn Team"
+b_version = "2.0.0"
+b_icon = "ThorHammer.png"
 
 
 def _guess_service_from_port(port: int) -> str:
@@ -167,7 +168,7 @@ class ThorHammer:
                 progress.advance(1)
 
             progress.set_complete()
-            return "success" if any_open else "failed"
+            return "success"
         finally:
             self.shared_data.bjorn_progress = ""
             self.shared_data.comment_params = {}

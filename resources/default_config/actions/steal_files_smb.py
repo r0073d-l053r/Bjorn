@@ -1,12 +1,4 @@
-"""
-steal_files_smb.py — SMB file looter (DB-backed).
-
-SQL mode:
-- Orchestrator provides (ip, port) after parent success (SMBBruteforce).
-- DB.creds (service='smb') provides credentials; 'database' column stores share name.
-- Also try anonymous (''/'').
-- Output under: {data_stolen_dir}/smb/{mac}_{ip}/{share}/...
-"""
+"""steal_files_smb.py - SMB share exfiltration using DB creds from SMBBruteforce."""
 
 import os
 import logging
