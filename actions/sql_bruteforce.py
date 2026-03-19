@@ -1,4 +1,4 @@
-﻿“””sql_bruteforce.py - Threaded MySQL credential bruteforcer with database enumeration.”””
+"""sql_bruteforce.py - Threaded MySQL credential bruteforcer with database enumeration."""
 
 import os
 import pymysql

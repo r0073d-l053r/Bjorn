@@ -976,3 +976,297 @@
   }
 }
 
+/* ===== Schedules & Triggers form panels ===== */
+.schedules-panel,
+.triggers-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.schedules-form,
+.triggers-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-panel);
+}
+
+.schedules-form h3,
+.triggers-form h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--acid);
+}
+
+.schedules-form .form-row,
+.triggers-form .form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedules-form label,
+.triggers-form label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  min-width: 110px;
+}
+
+.schedules-form input,
+.schedules-form select,
+.triggers-form input,
+.triggers-form select {
+  padding: 5px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.schedules-form input:focus,
+.triggers-form input:focus,
+.schedules-form select:focus,
+.triggers-form select:focus {
+  outline: 1px solid var(--acid);
+  border-color: var(--acid);
+}
+
+/* Toggle switch (used in schedule/trigger cards) */
+.scheduler-container .toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.scheduler-container .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.scheduler-container .toggle-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+  background: var(--c-border);
+  transition: background .2s;
+}
+.scheduler-container .toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 2px;
+  bottom: 2px;
+  border-radius: 50%;
+  background: var(--ink);
+  transition: transform .2s;
+}
+.scheduler-container .toggle-switch input:checked + .toggle-slider { background: var(--acid); }
+.scheduler-container .toggle-switch input:checked + .toggle-slider::before { transform: translateX(14px); }
+
+/* ===== Condition builder ===== */
+.cond-editor {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in oklab, var(--bg) 80%, var(--c-panel));
+}
+
+.cond-group {
+  border-left: 3px solid var(--acid);
+  padding: 6px 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--acid) 4%, transparent);
+}
+.cond-group-or { border-left-color: #f59e0b; background: color-mix(in oklab, #f59e0b 4%, transparent); }
+
+.cond-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.cond-op-toggle {
+  padding: 2px 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--acid);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cond-children {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cond-item-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.cond-item-wrapper > :first-child { flex: 1; }
+
+.cond-delete-btn {
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.cond-delete-btn:hover { background: color-mix(in oklab, #ef4444 15%, transparent); }
+
+.cond-block {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-panel);
+}
+
+.cond-source-select {
+  padding: 3px 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.cond-params {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cond-param-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.cond-param-name { font-weight: 600; }
+
+.cond-param-input {
+  padding: 3px 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 11px;
+  width: 80px;
+}
+.cond-param-input[type="number"] { width: 60px; }
+
+.cond-add-btn {
+  padding: 3px 10px;
+  border: 1px dashed var(--c-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.cond-add-btn:hover { color: var(--acid); border-color: var(--acid); }
+
+.cond-group-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+/* ===== Packages tab (in Actions page) ===== */
+.pkg-install-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 0;
+}
+.pkg-install-form input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12px;
+}
+.pkg-install-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--acid);
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--acid) 15%, transparent);
+  color: var(--acid);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 12px;
+}
+.pkg-install-btn:hover { background: color-mix(in oklab, var(--acid) 25%, transparent); }
+
+.pkg-console {
+  background: #0a0d10;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--acid);
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  display: none;
+}
+.pkg-console.active { display: block; }
+
+.pkg-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pkg-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-panel);
+  font-size: 12px;
+}
+.pkg-item .pkg-name { font-weight: 600; color: var(--ink); }
+.pkg-item .pkg-version { color: var(--muted); font-size: 11px; }
+.pkg-item .pkg-uninstall {
+  padding: 2px 8px;
+  border: 1px solid #ef4444;
+  border-radius: 4px;
+  background: transparent;
+  color: #ef4444;
+  font-size: 10px;
+  cursor: pointer;
+}
+.pkg-item .pkg-uninstall:hover { background: color-mix(in oklab, #ef4444 15%, transparent); }
+

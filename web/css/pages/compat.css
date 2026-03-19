@@ -1768,9 +1768,7 @@
 }
 
 /* ---- Final parity aliases ---- */
-.actions-container .sidebar-page {
-  display: block;
-}
+/* .actions-container .sidebar-page moved to actions.css */
 
 .vuln-container.page-with-sidebar {
   --page-sidebar-w: 300px;

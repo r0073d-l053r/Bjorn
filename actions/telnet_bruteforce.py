@@ -1,4 +1,4 @@
-﻿“””telnet_bruteforce.py - Threaded Telnet credential bruteforcer.”””
+"""telnet_bruteforce.py - Threaded Telnet credential bruteforcer."""
 
 import os
 import telnetlib

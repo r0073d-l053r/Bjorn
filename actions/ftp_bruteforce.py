@@ -1,4 +1,4 @@
-﻿“””ftp_bruteforce.py - Threaded FTP credential bruteforcer, results stored in DB.”””
+"""ftp_bruteforce.py - Threaded FTP credential bruteforcer, results stored in DB."""
 
 import os
 import threading

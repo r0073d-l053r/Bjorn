@@ -1,4 +1,4 @@
-﻿“””smb_bruteforce.py - Threaded SMB credential bruteforcer with share enumeration.”””
+"""smb_bruteforce.py - Threaded SMB credential bruteforcer with share enumeration."""
 
 import os
 import shlex

@@ -13,8 +13,10 @@
 @import url("./pages/files.css");
 @import url("./pages/compat.css");
 @import url("./pages/backup.css");
+@import url("./pages/actions.css");
 @import url("./pages/actions-studio.css");
 @import url("./pages/sentinel.css");
 @import url("./pages/bifrost.css");
 @import url("./pages/loki.css");
 @import url("./pages/llm.css");
+@import url("./pages/plugins.css");

@@ -19,6 +19,7 @@ let activeActionId = null;
 let panes = [null, null, null, null];
 let split = 1;
 let assignTargetPaneIndex = null;
+let focusedPaneIndex = 0;
 let searchQuery = '';
 let currentTab = 'actions';
 
@@ -28,6 +29,63 @@ const autoClearPane = [false, false, false, false];
 
 function isMobile() {
   return window.matchMedia('(max-width: 860px)').matches;
+}
+
+const STATE_KEY = 'bjorn.actions.state';
+
+function saveState() {
+  try {
+    sessionStorage.setItem(STATE_KEY, JSON.stringify({
+      split,
+      panes,
+      activeActionId,
+      focusedPaneIndex,
+      autoClear: [...autoClearPane],
+    }));
+  } catch { /* noop */ }
+}
+
+function restoreState() {
+  try {
+    const raw = sessionStorage.getItem(STATE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (typeof s.split === 'number' && s.split >= 1 && s.split <= 4) split = s.split;
+    if (Array.isArray(s.panes)) {
+      panes = s.panes.slice(0, 4).map(v => v || null);
+      while (panes.length < 4) panes.push(null);
+    }
+    if (s.activeActionId) activeActionId = s.activeActionId;
+    if (typeof s.focusedPaneIndex === 'number') focusedPaneIndex = s.focusedPaneIndex;
+    if (Array.isArray(s.autoClear)) {
+      for (let i = 0; i < 4; i++) autoClearPane[i] = !!s.autoClear[i];
+    }
+    return true;
+  } catch { return false; }
+}
+
+async function recoverLogs() {
+  const seen = new Set();
+  for (const actionId of panes) {
+    if (!actionId || seen.has(actionId)) continue;
+    seen.add(actionId);
+    const action = actions.find(a => a.id === actionId);
+    if (!action) continue;
+    try {
+      const scriptPath = action.path || action.module || action.id;
+      const res = await api.get('/get_script_output/' + encodeURIComponent(scriptPath), { timeout: 8000, retries: 0 });
+      if (res?.status === 'success' && res.data) {
+        const output = Array.isArray(res.data.output) ? res.data.output : [];
+        if (output.length) logsByAction.set(actionId, output);
+        if (res.data.is_running) {
+          action.status = 'running';
+          startOutputPolling(actionId);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  renderActionsList();
+  renderConsoles();
 }
 
 function q(sel, base = root) { return base?.querySelector(sel) || null; }
@@ -47,11 +105,25 @@ export async function mount(container) {
   enforceMobileOnePane();
 
   await loadActions();
+  const restored = restoreState();
+  if (restored) {
+    // Validate pane assignments
+    for (let i = 0; i < panes.length; i++) {
+      if (panes[i] && !actions.some(a => a.id === panes[i])) panes[i] = null;
+    }
+    // Update split segment buttons
+    $$('#splitSeg button', root).forEach(btn =>
+      btn.classList.toggle('active', Number(btn.dataset.split) === split)
+    );
+  }
+  enforceMobileOnePane();
   renderActionsList();
   renderConsoles();
+  if (restored) recoverLogs();
 }
 
 export function unmount() {
+  saveState();
   if (typeof sidebarLayoutCleanup === 'function') {
     sidebarLayoutCleanup();
     sidebarLayoutCleanup = null;
@@ -74,6 +146,7 @@ export function unmount() {
   panes = [null, null, null, null];
   split = 1;
   assignTargetPaneIndex = null;
+  focusedPaneIndex = 0;
   searchQuery = '';
   currentTab = 'actions';
   logsByAction.clear();
@@ -102,8 +175,15 @@ function buildShell() {
     ]),
   ]);
 
-  const actionsSidebar = el('div', { id: 'tab-actions', class: 'sidebar-page' }, [
-    el('div', { id: 'actionsList', class: 'al-list' }),
+  const actionsSidebar = el('div', { id: 'tab-actions', class: 'sidebar-page al-split-layout' }, [
+    el('div', { id: 'actionsList', class: 'al-list al-builtins-scroll' }),
+    el('div', { class: 'al-custom-section' }, [
+      el('div', { class: 'al-section-divider' }, [
+        el('span', { class: 'al-section-title' }, ['Custom Scripts']),
+        el('button', { class: 'al-btn al-upload-btn', type: 'button' }, ['\u2B06 Upload']),
+      ]),
+      el('div', { id: 'customActionsList', class: 'al-list al-custom-scroll' }),
+    ]),
   ]);
 
   const argsSidebar = el('div', { id: 'tab-arguments', class: 'sidebar-page', style: 'display:none' }, [
@@ -170,6 +250,15 @@ function bindStaticEvents() {
     }
   });
 
+  // Wire upload button (now static in buildShell)
+  const uploadBtnStatic = q('.al-upload-btn');
+  if (uploadBtnStatic) {
+    tracker.trackEventListener(uploadBtnStatic, 'click', () => {
+      const fi = q('#customScriptFileInput');
+      if (fi) fi.click();
+    });
+  }
+
   const tabActions = q('#tabBtnActions');
   const tabArgs = q('#tabBtnArgs');
   const tabPkgs = q('#tabBtnPkgs');
@@ -198,6 +287,7 @@ function bindStaticEvents() {
       split = Number(btn.dataset.split || '1');
       $$('#splitSeg button', root).forEach((b) => b.classList.toggle('active', b === btn));
       renderConsoles();
+      saveState();
     });
   });
 
@@ -313,9 +403,11 @@ function normalizeAction(raw) {
 }
 
 function renderActionsList() {
-  const container = q('#actionsList');
-  if (!container) return;
-  empty(container);
+  const builtinContainer = q('#actionsList');
+  const customContainer = q('#customActionsList');
+  if (!builtinContainer) return;
+  empty(builtinContainer);
+  if (customContainer) empty(customContainer);
 
   const filtered = actions.filter((a) => {
     if (!searchQuery) return true;
@@ -323,40 +415,28 @@ function renderActionsList() {
     return searchQuery.split(/\s+/).every((term) => hay.includes(term));
   });
 
-  if (!filtered.length) {
-    container.appendChild(el('div', { class: 'sub' }, [t('actions.noActions')]));
-    return;
-  }
-
   const builtIn = filtered.filter((a) => a.category !== 'custom');
   const custom = filtered.filter((a) => a.category === 'custom');
 
+  if (!builtIn.length && !custom.length) {
+    builtinContainer.appendChild(el('div', { class: 'sub' }, [t('actions.noActions')]));
+    return;
+  }
+
   for (const a of builtIn) {
-    container.appendChild(buildActionRow(a));
+    builtinContainer.appendChild(buildActionRow(a));
+  }
+  if (!builtIn.length) {
+    builtinContainer.appendChild(el('div', { class: 'sub' }, [t('actions.noActions')]));
   }
 
-  // Custom Scripts section
-  const sectionHeader = el('div', { class: 'al-section-divider' }, [
-    el('span', { class: 'al-section-title' }, ['Custom Scripts']),
-    el('button', { class: 'al-btn al-upload-btn', type: 'button' }, ['\u2B06 Upload']),
-  ]);
-
-  const uploadBtn = sectionHeader.querySelector('.al-upload-btn');
-  if (uploadBtn) {
-    tracker.trackEventListener(uploadBtn, 'click', () => {
-      const fileInput = q('#customScriptFileInput');
-      if (fileInput) fileInput.click();
-    });
-  }
-
-  container.appendChild(sectionHeader);
-
-  if (!custom.length) {
-    container.appendChild(el('div', { class: 'sub', style: 'padding:6px 12px' }, ['No custom scripts uploaded.']));
-  }
-
-  for (const a of custom) {
-    container.appendChild(buildActionRow(a, true));
+  if (customContainer) {
+    if (!custom.length) {
+      customContainer.appendChild(el('div', { class: 'sub', style: 'padding:6px 12px;font-size:11px' }, ['No custom scripts uploaded.']));
+    }
+    for (const a of custom) {
+      customContainer.appendChild(buildActionRow(a, true));
+    }
   }
 }
 
@@ -481,6 +561,7 @@ function onActionSelected(actionId) {
   if (target < 0) target = 0;
   panes[target] = actionId;
   renderConsoles();
+  saveState();
 }
 
 function renderArguments(action) {
@@ -491,6 +572,10 @@ function renderArguments(action) {
   if (!builder || !chips) return;
   empty(builder);
   empty(chips);
+
+  builder.appendChild(el('div', { class: 'args-pane-label' }, [
+    `Pane ${focusedPaneIndex + 1}: ${action.name}`
+  ]));
 
   const metaBits = [];
   if (action.version) metaBits.push(`v${action.version}`);
@@ -726,6 +811,19 @@ function renderConsoles() {
       if (!dropped) return;
       panes[i] = dropped;
       renderConsoles();
+      saveState();
+    });
+
+    tracker.trackEventListener(pane, 'click', () => {
+      focusedPaneIndex = i;
+      $$('.pane', root).forEach((p, idx) => p.classList.toggle('paneFocused', idx === i));
+      const pAction = actionId ? actions.find(a => a.id === actionId) : null;
+      if (pAction) {
+        activeActionId = pAction.id;
+        renderArguments(pAction);
+        renderActionsList();
+      }
+      saveState();
     });
 
     renderPaneLog(i, actionId);
@@ -799,6 +897,13 @@ async function runActionInPane(index) {
     return;
   }
 
+  // Auto-focus pane and render its args before collecting
+  if (focusedPaneIndex !== index) {
+    focusedPaneIndex = index;
+    $$('.pane', root).forEach((p, idx) => p.classList.toggle('paneFocused', idx === index));
+    if (action) renderArguments(action);
+  }
+
   if (!panes[index]) panes[index] = action.id;
   if (autoClearPane[index]) clearActionLogs(action.id);
 
@@ -813,6 +918,7 @@ async function runActionInPane(index) {
     const res = await api.post('/run_script', { script_name: action.module || action.id, args });
     if (res.status !== 'success') throw new Error(res.message || 'Run failed');
     startOutputPolling(action.id);
+    saveState();
   } catch (err) {
     action.status = 'error';
     appendActionLog(action.id, `Error: ${err.message}`);
@@ -836,6 +942,7 @@ async function stopActionInPane(index) {
     appendActionLog(action.id, t('actions.toast.stoppedByUser'));
     renderActionsList();
     renderConsoles();
+    saveState();
   } catch (err) {
     toast(`${t('actions.toast.failedToStop')}: ${err.message}`, 2600, 'error');
   }

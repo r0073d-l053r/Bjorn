@@ -84,7 +84,7 @@ function buildShell() {
       el('button', { class: 'sched-tab', 'data-tab': 'triggers', onclick: () => switchTab('triggers') }, ['Triggers']),
     ]),
     /* ── Queue tab content (existing kanban) ── */
-    el('div', { id: 'sched-tab-queue', class: 'sched-tab-content' }, [
+    el('div', { id: 'sched-tab-queue', class: 'sched-tab-content active' }, [
       el('div', { class: 'controls' }, [
         el('input', {
           type: 'text', id: 'sched-search', placeholder: t('sched.filterPlaceholder'),
@@ -103,11 +103,11 @@ function buildShell() {
       ]),
     ]),
     /* ── Schedules tab content ── */
-    el('div', { id: 'sched-tab-schedules', class: 'sched-tab-content', style: 'display:none' }, [
+    el('div', { id: 'sched-tab-schedules', class: 'sched-tab-content' }, [
       buildSchedulesPanel(),
     ]),
     /* ── Triggers tab content ── */
-    el('div', { id: 'sched-tab-triggers', class: 'sched-tab-content', style: 'display:none' }, [
+    el('div', { id: 'sched-tab-triggers', class: 'sched-tab-content' }, [
       buildTriggersPanel(),
     ]),
     /* history modal */
@@ -143,7 +143,7 @@ function switchTab(tab) {
   /* show/hide tab content */
   ['queue', 'schedules', 'triggers'].forEach(id => {
     const panel = $(`#sched-tab-${id}`);
-    if (panel) panel.style.display = id === tab ? '' : 'none';
+    if (panel) panel.classList.toggle('active', id === tab);
   });
 
   /* stop all pollers first */
@@ -170,7 +170,7 @@ function switchTab(tab) {
 async function fetchScriptsList() {
   try {
     const data = await api.get('/list_scripts', { timeout: 12000 });
-    scriptsList = Array.isArray(data) ? data : (data?.scripts || data?.actions || []);
+    scriptsList = Array.isArray(data) ? data : (data?.data || data?.scripts || data?.actions || []);
   } catch (e) {
     scriptsList = [];
   }
@@ -180,8 +180,13 @@ function populateScriptSelect(selectEl) {
   empty(selectEl);
   selectEl.appendChild(el('option', { value: '' }, ['-- Select script --']));
   scriptsList.forEach(s => {
-    const name = typeof s === 'string' ? s : (s.name || s.action_name || '');
-    if (name) selectEl.appendChild(el('option', { value: name }, [name]));
+    if (typeof s === 'string') {
+      if (s) selectEl.appendChild(el('option', { value: s }, [s]));
+    } else {
+      const value = s.b_module || s.b_class || s.name || '';
+      const label = s.name || value;
+      if (value) selectEl.appendChild(el('option', { value }, [label]));
+    }
   });
 }
 
@@ -263,9 +268,9 @@ async function createSchedule() {
   const type = $('#sched-sform-type')?.value || 'recurring';
   const args = $('#sched-sform-args')?.value || '';
 
-  const payload = { script, type, args };
+  const payload = { script_name: script, schedule_type: type, args };
   if (type === 'recurring') {
-    payload.interval = parseInt($('#sched-sform-interval')?.value || '300', 10);
+    payload.interval_seconds = parseInt($('#sched-sform-interval')?.value || '300', 10);
   } else {
     payload.run_at = $('#sched-sform-runat')?.value || '';
     if (!payload.run_at) { toast('Please set a run time', 2600, 'error'); return; }
@@ -289,8 +294,8 @@ async function refreshScheduleList() {
   if (sel && sel.children.length <= 1) populateScriptSelect(sel);
 
   try {
-    const data = await api.post('/api/schedules/list', {});
-    const schedules = Array.isArray(data) ? data : (data?.schedules || []);
+    const resp = await api.post('/api/schedules/list', {});
+    const schedules = Array.isArray(resp) ? resp : (resp?.data || []);
     renderScheduleList(container, schedules);
   } catch (e) {
     empty(container);
@@ -306,10 +311,14 @@ function renderScheduleList(container, schedules) {
   }
 
   schedules.forEach(s => {
-    const typeBadge = el('span', { class: `badge status-${s.type === 'recurring' ? 'running' : 'upcoming'}` }, [s.type || 'recurring']);
-    const timing = s.type === 'oneshot'
+    const sType = s.schedule_type || s.type || 'recurring';
+    const sScript = s.script_name || s.script || '';
+    const sInterval = s.interval_seconds || s.interval || 0;
+
+    const typeBadge = el('span', { class: `badge status-${sType === 'recurring' ? 'running' : 'upcoming'}` }, [sType]);
+    const timing = sType === 'oneshot'
       ? `Run at: ${fmt(s.run_at)}`
-      : `Every ${ms2str((s.interval || 0) * 1000)}`;
+      : `Every ${ms2str(sInterval * 1000)}`;
 
     const nextRun = s.next_run_at ? `Next: ${fmt(s.next_run_at)}` : '';
     const statusBadge = s.last_status
@@ -319,8 +328,8 @@ function renderScheduleList(container, schedules) {
     const toggleBtn = el('label', { class: 'toggle-switch' }, [
       el('input', {
         type: 'checkbox',
-        checked: s.enabled !== false,
-        onchange: () => toggleSchedule(s.id, !s.enabled)
+        checked: s.enabled !== false && s.enabled !== 0,
+        onchange: () => toggleSchedule(s.id, !(s.enabled !== false && s.enabled !== 0))
       }),
       el('span', { class: 'toggle-slider' }),
     ]);
@@ -331,7 +340,7 @@ function renderScheduleList(container, schedules) {
     container.appendChild(el('div', { class: 'card', 'data-schedule-id': s.id }, [
       el('div', { class: 'cardHeader' }, [
         el('div', { class: 'actionName' }, [
-          el('span', { class: 'chip', style: `--h:${hashHue(s.script || '')}` }, [s.script || '']),
+          el('span', { class: 'chip', style: `--h:${hashHue(sScript)}` }, [sScript]),
         ]),
         typeBadge,
         toggleBtn,
@@ -375,7 +384,10 @@ function editScheduleInline(s) {
 
   empty(card);
 
-  const isRecurring = s.type === 'recurring';
+  const sType = s.schedule_type || s.type || 'recurring';
+  const sScript = s.script_name || s.script || '';
+  const sInterval = s.interval_seconds || s.interval || 300;
+  const isRecurring = sType === 'recurring';
 
   card.appendChild(el('div', { class: 'schedules-form' }, [
     el('h3', {}, ['Edit Schedule']),
@@ -384,7 +396,7 @@ function editScheduleInline(s) {
       (() => {
         const sel = el('select', { id: `sched-edit-script-${s.id}` });
         populateScriptSelect(sel);
-        sel.value = s.script || '';
+        sel.value = sScript;
         return sel;
       })(),
     ]),
@@ -395,14 +407,14 @@ function editScheduleInline(s) {
           el('option', { value: 'recurring' }, ['Recurring']),
           el('option', { value: 'oneshot' }, ['One-shot']),
         ]);
-        sel.value = s.type || 'recurring';
+        sel.value = sType;
         return sel;
       })(),
     ]),
     isRecurring
       ? el('div', { class: 'form-row' }, [
           el('label', {}, ['Interval (seconds): ']),
-          el('input', { type: 'number', id: `sched-edit-interval-${s.id}`, value: String(s.interval || 300), min: '1', style: 'width:100px' }),
+          el('input', { type: 'number', id: `sched-edit-interval-${s.id}`, value: String(sInterval), min: '1', style: 'width:100px' }),
         ])
       : el('div', { class: 'form-row' }, [
           el('label', {}, ['Run at: ']),
@@ -416,12 +428,12 @@ function editScheduleInline(s) {
       el('button', { class: 'btn', onclick: async () => {
         const payload = {
           id: s.id,
-          script: $(`#sched-edit-script-${s.id}`)?.value,
-          type: $(`#sched-edit-type-${s.id}`)?.value,
+          script_name: $(`#sched-edit-script-${s.id}`)?.value,
+          schedule_type: $(`#sched-edit-type-${s.id}`)?.value,
           args: $(`#sched-edit-args-${s.id}`)?.value || '',
         };
-        if (payload.type === 'recurring') {
-          payload.interval = parseInt($(`#sched-edit-interval-${s.id}`)?.value || '300', 10);
+        if (payload.schedule_type === 'recurring') {
+          payload.interval_seconds = parseInt($(`#sched-edit-interval-${s.id}`)?.value || '300', 10);
         } else {
           payload.run_at = $(`#sched-edit-runat-${s.id}`)?.value || '';
         }
@@ -499,9 +511,10 @@ async function testTriggerConditions() {
 
   const conditions = getConditions(condContainer);
   try {
-    const data = await api.post('/api/triggers/test', { conditions });
-    resultEl.textContent = data?.result ? 'Result: TRUE' : 'Result: FALSE';
-    resultEl.style.color = data?.result ? 'var(--green, #0f0)' : 'var(--red, #f00)';
+    const resp = await api.post('/api/triggers/test', { conditions });
+    const result = resp?.data?.result;
+    resultEl.textContent = result ? 'Result: TRUE' : 'Result: FALSE';
+    resultEl.style.color = result ? 'var(--green, #0f0)' : 'var(--red, #f00)';
   } catch (e) {
     resultEl.textContent = 'Test failed: ' + e.message;
     resultEl.style.color = 'var(--red, #f00)';
@@ -520,7 +533,7 @@ async function createTrigger() {
   const args = $('#sched-tform-args')?.value || '';
 
   try {
-    await api.post('/api/triggers/create', { script, name, conditions, cooldown, args });
+    await api.post('/api/triggers/create', { script_name: script, trigger_name: name, conditions, cooldown_seconds: cooldown, args });
     toast('Trigger created');
     $('#sched-tform-name').value = '';
     refreshTriggerList();
@@ -538,8 +551,8 @@ async function refreshTriggerList() {
   if (sel && sel.children.length <= 1) populateScriptSelect(sel);
 
   try {
-    const data = await api.post('/api/triggers/list', {});
-    const triggers = Array.isArray(data) ? data : (data?.triggers || []);
+    const resp = await api.post('/api/triggers/list', {});
+    const triggers = Array.isArray(resp) ? resp : (resp?.data || []);
     renderTriggerList(container, triggers);
   } catch (e) {
     empty(container);
@@ -555,13 +568,21 @@ function renderTriggerList(container, triggers) {
   }
 
   triggers.forEach(trig => {
-    const condCount = Array.isArray(trig.conditions) ? trig.conditions.length : 0;
+    const tScript = trig.script_name || trig.script || '';
+    const tName = trig.trigger_name || trig.name || '';
+    const tCooldown = trig.cooldown_seconds || trig.cooldown || 0;
+    const tEnabled = trig.enabled !== false && trig.enabled !== 0;
+
+    // conditions may be a JSON string from DB
+    let conds = trig.conditions;
+    if (typeof conds === 'string') { try { conds = JSON.parse(conds); } catch { conds = null; } }
+    const condCount = conds && typeof conds === 'object' ? (Array.isArray(conds.conditions) ? conds.conditions.length : 1) : 0;
 
     const toggleBtn = el('label', { class: 'toggle-switch' }, [
       el('input', {
         type: 'checkbox',
-        checked: trig.enabled !== false,
-        onchange: () => toggleTrigger(trig.id, !trig.enabled)
+        checked: tEnabled,
+        onchange: () => toggleTrigger(trig.id, !tEnabled)
       }),
       el('span', { class: 'toggle-slider' }),
     ]);
@@ -571,15 +592,15 @@ function renderTriggerList(container, triggers) {
     container.appendChild(el('div', { class: 'card' }, [
       el('div', { class: 'cardHeader' }, [
         el('div', { class: 'actionName' }, [
-          el('strong', {}, [trig.name || '']),
+          el('strong', {}, [tName]),
           el('span', { style: 'margin-left:8px' }, [' \u2192 ']),
-          el('span', { class: 'chip', style: `--h:${hashHue(trig.script || '')}` }, [trig.script || '']),
+          el('span', { class: 'chip', style: `--h:${hashHue(tScript)}` }, [tScript]),
         ]),
         toggleBtn,
       ]),
       el('div', { class: 'meta' }, [
         el('span', {}, [`${condCount} condition${condCount !== 1 ? 's' : ''}`]),
-        el('span', {}, [`Cooldown: ${ms2str(( trig.cooldown || 0) * 1000)}`]),
+        el('span', {}, [`Cooldown: ${ms2str(tCooldown * 1000)}`]),
         el('span', {}, [`Fired: ${trig.fire_count || 0}`]),
         trig.last_fired_at ? el('span', {}, [`Last: ${fmt(trig.last_fired_at)}`]) : null,
       ].filter(Boolean)),
@@ -1149,14 +1170,19 @@ function showError(msg) {
 }
 
 /* ── icon resolution ── */
+const ICON_DEFAULT = '/actions/actions_icons/default.png';
+const ICON_PENDING = '__pending__';
+
 function resolveIconSync(name) {
-  if (iconCache.has(name)) return iconCache.get(name);
+  const cached = iconCache.get(name);
+  if (cached === ICON_PENDING) return ICON_DEFAULT;
+  if (cached) return cached;
+  iconCache.set(name, ICON_PENDING);
   resolveIconAsync(name);
-  return '/actions/actions_icons/default.png';
+  return ICON_DEFAULT;
 }
 
 async function resolveIconAsync(name) {
-  if (iconCache.has(name)) return;
   const candidates = [
     `/actions/actions_icons/${name}.png`,
     `/resources/images/status/${name}/${name}.bmp`,
@@ -1167,7 +1193,7 @@ async function resolveIconAsync(name) {
       if (r.ok) { iconCache.set(name, url); updateIconsInDOM(name, url); return; }
     } catch { /* next */ }
   }
-  iconCache.set(name, '/actions/actions_icons/default.png');
+  iconCache.set(name, ICON_DEFAULT);
 }
 
 function updateIconsInDOM(name, url) {

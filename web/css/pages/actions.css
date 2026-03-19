@@ -1,0 +1,688 @@
+/* ==========================================================================
+   ACTIONS LAUNCHER  (.actions-container)
+   Viewport-locked layout: sidebar + multi-console, no page-level scroll.
+   ========================================================================== */
+
+/* ── Root container ── */
+.actions-container.page-with-sidebar {
+  --page-sidebar-w: 280px;
+  height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 24px);
+  max-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 24px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Sidebar (locked to viewport, internally scrollable) ── */
+.actions-container .al-sidebar.page-sidebar {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.actions-container .sideheader {
+  padding: 8px 10px 6px;
+  border-bottom: 1px dashed var(--c-border);
+  flex-shrink: 0;
+}
+
+.actions-container .al-side-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.actions-container .al-side-meta .sidetitle {
+  color: var(--acid);
+  font-weight: 800;
+  letter-spacing: .05em;
+  font-size: 13px;
+}
+
+/* ── Sidebar tabs ── */
+.actions-container .tabs-container {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 0;
+  position: static;
+}
+
+.actions-container .tab-btn {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--c-pill-bg, color-mix(in oklab, var(--c-panel-2) 70%, transparent));
+  border: 1px solid var(--c-border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+
+.actions-container .tab-btn:hover {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--c-panel-2) 90%, transparent);
+}
+
+.actions-container .tab-btn.active {
+  color: var(--acid);
+  background: var(--grad-chip-selected, color-mix(in oklab, var(--acid) 14%, var(--c-panel-2)));
+  border-color: color-mix(in oklab, var(--acid) 45%, transparent);
+}
+
+/* ── Search ── */
+.actions-container .al-search {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px 8px;
+}
+
+.actions-container .al-input {
+  flex: 1;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border-strong);
+  color: var(--ink);
+  padding: 6px 10px;
+  border-radius: var(--control-r, 8px);
+  font: inherit;
+  font-size: 12px;
+}
+
+.actions-container .al-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--acid) 55%, transparent) inset;
+}
+
+/* ── Sidebar content (scrollable area) ── */
+.actions-container .sidecontent {
+  padding: 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  flex: 1;
+}
+
+.actions-container .sidebar-page {
+  display: block;
+}
+
+/* ── Actions list ── */
+.actions-container .al-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Action row (compact) ── */
+.actions-container .al-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--c-panel-2);
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .12s, border-color .12s;
+}
+
+.actions-container .al-row:hover {
+  background: color-mix(in oklab, var(--c-panel-2) 80%, var(--acid) 6%);
+  border-color: color-mix(in oklab, var(--acid) 18%, transparent);
+}
+
+.actions-container .al-row.selected {
+  border-color: color-mix(in oklab, var(--acid) 40%, transparent);
+  background: color-mix(in oklab, var(--c-panel-2) 70%, var(--acid) 8%);
+}
+
+.actions-container .al-row .ic {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--c-panel);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.actions-container .ic-img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  display: block;
+}
+
+.actions-container .al-row > div:nth-child(2) {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.actions-container .name {
+  font-weight: 700;
+  color: var(--acid-2, var(--acid));
+  font-size: 12px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions-container .desc {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Status chip (inside row) ── */
+.actions-container .al-row .chip {
+  position: static;
+  transform: none;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--c-border);
+  background: var(--c-chip-bg, color-mix(in oklab, var(--c-panel) 80%, transparent));
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.actions-container .chip.ok {
+  color: var(--ok, #22c55e);
+  border-color: color-mix(in oklab, var(--ok, #22c55e) 50%, transparent);
+}
+
+.actions-container .chip.err {
+  color: var(--danger, #ef4444);
+  border-color: color-mix(in oklab, var(--danger, #ef4444) 50%, transparent);
+}
+
+.actions-container .chip.run {
+  color: var(--acid);
+  border-color: color-mix(in oklab, var(--acid) 50%, transparent);
+}
+
+/* ── Format badge for custom scripts ── */
+.actions-container .al-row .format-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: color-mix(in oklab, var(--acid) 12%, transparent);
+  color: var(--acid);
+  border-color: color-mix(in oklab, var(--acid) 30%, transparent);
+}
+
+/* ── Section divider (Custom Scripts header) ── */
+.actions-container .al-section-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 4px 4px;
+  margin-top: 4px;
+}
+
+.actions-container .al-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.actions-container .al-upload-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+}
+
+.actions-container .al-delete-btn {
+  font-size: 12px;
+  padding: 2px 6px;
+  opacity: .5;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.actions-container .al-delete-btn:hover {
+  opacity: 1;
+  color: var(--danger, #ef4444);
+}
+
+/* ── Buttons (shared) ── */
+.actions-container .al-btn {
+  background: var(--c-btn, var(--c-panel));
+  color: var(--ink);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--control-r, 8px);
+  padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: .15s;
+  font: inherit;
+  font-size: 11px;
+}
+
+.actions-container .al-btn:hover {
+  background: color-mix(in oklab, var(--c-btn, var(--c-panel)) 85%, var(--acid) 15%);
+  border-color: color-mix(in oklab, var(--acid) 40%, var(--c-border-strong));
+}
+
+.actions-container .al-btn.warn {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--warning, #f59e0b) 22%, var(--c-btn, var(--c-panel))), var(--c-btn, var(--c-panel)));
+  color: var(--warning, #f59e0b);
+  border-color: color-mix(in oklab, var(--warning, #f59e0b) 45%, var(--c-border));
+}
+
+/* ── Main area + center panel (fills viewport remainder) ── */
+.actions-container #actionsLauncher {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.actions-container .panel {
+  background: var(--grad-card, var(--c-panel));
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius, 12px);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.actions-container .center {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+}
+
+/* ── Toolbar (split selector) ── */
+.actions-container .toolbar2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-panel);
+  flex-shrink: 0;
+}
+
+.actions-container .spacer {
+  flex: 1;
+}
+
+.actions-container .seg {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+}
+
+.actions-container .seg button {
+  background: var(--c-panel);
+  color: var(--muted);
+  padding: 4px 10px;
+  border: none;
+  border-right: 1px solid var(--c-border);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.actions-container .seg button:last-child {
+  border-right: none;
+}
+
+.actions-container .seg button.active {
+  color: var(--ink-invert, #000);
+  background: linear-gradient(90deg, var(--acid-2, var(--acid)), color-mix(in oklab, var(--acid-2, var(--acid)) 60%, white));
+}
+
+/* ── Multi-console grid (fills remaining height) ── */
+.actions-container .multiConsole {
+  flex: 1;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  grid-auto-flow: row;
+  grid-auto-rows: 1fr;
+  grid-template-rows: repeat(var(--rows, 1), 1fr);
+  overflow: hidden;
+}
+
+.actions-container .split-1 { grid-template-columns: 1fr; }
+.actions-container .split-2 { grid-template-columns: 1fr 1fr; }
+.actions-container .split-3 { grid-template-columns: 1fr 1fr 1fr; }
+.actions-container .split-4 { grid-template-columns: 1fr 1fr; }
+
+/* ── Console pane ── */
+.actions-container .pane {
+  position: relative;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--grad-console, var(--c-panel));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.actions-container .paneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--c-border);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--acid-2, var(--acid)) 6%, transparent), transparent);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.actions-container .paneTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.actions-container .paneTitle .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.actions-container .paneIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.actions-container .titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actions-container .titleLine strong {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.actions-container .metaLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.actions-container .metaLine .chip {
+  position: static;
+  transform: none;
+  border: 1px solid var(--c-border-strong);
+  background: var(--c-chip-bg, color-mix(in oklab, var(--c-panel) 80%, transparent));
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.actions-container .paneBtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.actions-container .paneBtns .al-btn {
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
+/* ── Log output ── */
+.actions-container .paneLog {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  min-height: 0;
+}
+
+.actions-container .logline {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 2px 4px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.actions-container .logline.info { color: #bfefff; }
+.actions-container .logline.ok   { color: #9ff7c5; }
+.actions-container .logline.warn { color: #ffd27a; }
+.actions-container .logline.err  { color: #ff99b3; }
+.actions-container .logline.dim  { color: #6a8596; }
+
+/* ── Pane drag highlight ── */
+.actions-container .paneHighlight {
+  box-shadow:
+    0 0 0 2px var(--acid-2, var(--acid)),
+    0 0 20px color-mix(in oklab, var(--acid-2, var(--acid)) 40%, transparent) inset;
+  animation: al-hi 700ms ease-out 1;
+}
+
+@keyframes al-hi {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.005); }
+  100% { transform: scale(1); }
+}
+
+/* ── Arguments tab ── */
+.actions-container .section {
+  padding: 10px;
+  border-bottom: 1px dashed var(--c-border);
+}
+
+.actions-container .h {
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: var(--acid-2, var(--acid));
+  font-size: 13px;
+}
+
+.actions-container .sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.actions-container .builder {
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.actions-container .field {
+  display: grid;
+  gap: 4px;
+}
+
+.actions-container .label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.actions-container .ctl,
+.actions-container .select,
+.actions-container .range {
+  background: var(--c-panel);
+  color: var(--ink);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--control-r, 8px);
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.actions-container .ctl:focus,
+.actions-container .select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--acid) 55%, transparent) inset;
+}
+
+.actions-container .chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+}
+
+.actions-container .chip2 {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--c-chip-bg, color-mix(in oklab, var(--c-panel) 80%, transparent));
+  border: 1px solid var(--c-border-hi, var(--c-border-strong));
+  cursor: pointer;
+  font-size: 11px;
+  transition: .15s;
+}
+
+.actions-container .chip2:hover {
+  border-color: color-mix(in oklab, var(--acid) 50%, var(--c-border));
+  color: var(--acid);
+}
+
+/* ── Mobile responsive ── */
+@media (max-width: 860px) {
+  .actions-container.page-with-sidebar {
+    height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 12px);
+    max-height: calc(100vh - var(--h-topbar, 56px) - var(--h-bottombar, 56px) - 12px);
+  }
+
+  .actions-container #actionsLauncher {
+    min-height: 0;
+  }
+
+  .actions-container .toolbar2 {
+    display: none !important;
+  }
+
+  .actions-container .paneHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .actions-container .paneBtns {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .actions-container .paneBtns .al-btn {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .actions-container .multiConsole {
+    padding: 6px;
+  }
+}
+
+/* ===== Per-Pane Focus ===== */
+.actions-container .pane.paneFocused {
+  border-color: color-mix(in oklab, var(--acid) 40%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--acid) 15%, transparent);
+}
+
+.args-pane-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--acid);
+  padding: 4px 0 6px;
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 6px;
+}
+
+/* ===== Custom Scripts Split Layout ===== */
+.actions-container #tab-actions.al-split-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.actions-container .al-builtins-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.actions-container .al-custom-section {
+  flex-shrink: 0;
+  max-height: 180px;
+  border-top: 1px dashed var(--c-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.actions-container .al-custom-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.actions-container .al-section-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: color-mix(in oklab, var(--c-panel-2, var(--c-panel)) 50%, transparent);
+  flex-shrink: 0;
+}
+
+.actions-container .al-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
